@@ -97,7 +97,7 @@ The full spec follows. It is identical to `SPEC.md` at handoff time; after hando
 
 # SPEC: Brawlcam (working name)
 
-Last change: 2026-10-24 6:10 PM CDT. Dropped the hardware wristband and the Best Hardware track, because it needs the user's physical work. The implementation agent now finds and downloads its own test clips (section 6). Real-person footage of the user is no longer required. Added section 9 (testing): every user path, plus UFC fighter clips playing each other online. 6:50 PM: added verified Tiger Data and Vultr details to section 4. When this file changes after handoff, add a dated note at the top saying what changed. A dated note here overrides the implementation prompt.
+Last change: 2026-10-24 6:10 PM CDT. Dropped the hardware wristband and the Best Hardware track, because it needs the user's physical work. The implementation agent now finds and downloads its own test clips (section 6). Real-person footage of the user is no longer required. Added section 9 (testing): every user path, plus UFC fighter clips playing each other online. 6:50 PM: added verified Tiger Data and Vultr details to section 4. 7:00 PM: verified Gemini model IDs (section 2). When this file changes after handoff, add a dated note at the top saying what changed. A dated note here overrides the implementation prompt.
 
 ## 1. Product
 
@@ -124,7 +124,7 @@ Non-MLH tracks (maximum 3). Best Overall and Best Pitch are entered automaticall
 
 MLH tracks (no limit; each must do real work that is visible in the demo):
 
-- **Gemini API**: the live fight commentator. During a match, batched game events (hits, blocks, combos, health) go to a Gemini Flash model every 3 to 4 seconds, which returns one short hype line. The line is spoken with Gemini TTS, falling back to the browser's speechSynthesis. Docs: https://ai.google.dev/gemini-api/docs. Use a free-tier model; the research found "Gemini 3.8 Flash" recommended on the pricing page, so verify the current model ID.
+- **Gemini API**: the live fight commentator. During a match, batched game events (hits, blocks, combos, health) go to a Gemini Flash model every 3 to 4 seconds, which returns one short hype line. The line is spoken with Gemini TTS, falling back to the browser's speechSynthesis. Docs: https://ai.google.dev/gemini-api/docs. The planner verified on 2026-10-24 at 7:00 PM CDT that the provided key, on the free tier with no billing, returns text from `gemini-3.8-flash` via `POST /v1beta/models/gemini-3.8-flash:generateContent`. The key's model list also includes `gemini-3.8-flash-tts` and `gemini-3.8-flash-lite-tts` for speech. Free-tier rate limits were not checked; batch or cache commentary in automated tests so test runs do not exhaust them.
 - **Tiger Data**: the stats backend.
   - A `match_events` hypertable stores every hit, block, and super with a timestamp.
   - A `pose_samples` hypertable stores opt-in landmark frames.
