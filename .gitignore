@@ -6,3 +6,5 @@ dist/
 *.y4m
 *.mp4
 clips/
+test-results/
+playwright-report/
