@@ -29,6 +29,8 @@ API keys are in an environment file on this server. The user was asked to put it
 - `ELEVENLABS_API_KEY` (optional, for video voiceover)
 - `SOLANA_DEVNET_SECRET` (optional)
 
+If `ELEVENLABS_API_KEY` is empty, the user says an ElevenLabs key already exists somewhere on this server from earlier projects. You may look for it, for example in other projects' `.env` files, and copy it into `~/hacktx26/.env`. Do not print key values in logs, `STATUS.md`, or commits.
+
 Some may be missing. Build so that each integration fails soft: the game must still run without it. Never commit keys; the repo is public. Keys stay server-side behind the API server.
 
 **Headless constraints:**
