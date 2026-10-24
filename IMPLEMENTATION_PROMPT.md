@@ -97,7 +97,7 @@ The full spec follows. It is identical to `SPEC.md` at handoff time; after hando
 
 # SPEC: Brawlcam (working name)
 
-Last change: 2026-10-24 6:10 PM CDT. Dropped the hardware wristband and the Best Hardware track, because it needs the user's physical work. The implementation agent now finds and downloads its own test clips (section 6). Real-person footage of the user is no longer required. Added section 9 (testing): every user path, plus UFC fighter clips playing each other online. When this file changes after handoff, add a dated note at the top saying what changed. A dated note here overrides the implementation prompt.
+Last change: 2026-10-24 6:10 PM CDT. Dropped the hardware wristband and the Best Hardware track, because it needs the user's physical work. The implementation agent now finds and downloads its own test clips (section 6). Real-person footage of the user is no longer required. Added section 9 (testing): every user path, plus UFC fighter clips playing each other online. 6:50 PM: added verified Tiger Data and Vultr details to section 4. When this file changes after handoff, add a dated note at the top saying what changed. A dated note here overrides the implementation prompt.
 
 ## 1. Product
 
@@ -174,7 +174,12 @@ Library versions below were checked on the npm registry on 2026-10-24. Re-check 
 - **Gesture recognition**: rule-based. Compute per-landmark velocities in world coordinates over a short window. Apply thresholds, cooldowns, and a calibration step: a 3-second "stand in a guard pose" at match start that sets the player's arm length and shoulder width. Use no ML classifier unless the rules fail.
 - **Multiplayer**: a small Node server using the `ws` package with room codes, running on a Vultr VM behind Caddy for automatic HTTPS. Use a WebSocket relay rather than peer-to-peer WebRTC, because WebRTC with STUN alone often fails between phones on cellular networks. Phones require HTTPS for camera access.
 - **API server**: on the same VM, it proxies calls to Gemini, the Meta Model API, and Tiger Data so that no API keys reach the browser.
-- **Database**: Tiger Data (Postgres plus TimescaleDB).
+- **Database**: Tiger Data (Postgres plus TimescaleDB). The planner connected on 2026-10-24 at 6:45 PM CDT:
+  - **Versions:** PostgreSQL 18.6; extensions `timescaledb` 2.31.0 and `timescaledb_toolkit` 1.26.0.
+  - **TLS:** the server certificate is issued by Timescale's own certificate authority (`O=Timescale Inc, CN=ca.timescale.com`). With `sslmode=require` in the URL, node-postgres (`pg` 8.13) fails with "self-signed certificate in certificate chain". Two fixes:
+    - **Preferred:** pass Timescale's CA certificate as `ssl.ca`. Look up where Tiger's docs publish it.
+    - **Fallback:** add `uselibpqcompat=true&sslmode=require` to the connection string. This encrypts the connection without verifying the certificate authority, and it is what the planner's test used.
+- **Vultr**: the account has the $100 MLH credit applied. The API key works. Its IP allowlist contains only the home server's current public IPv4 (check yours with `curl -4 ifconfig.me`) and one IPv6 range. If the server's public IP changes, API calls will fail; write a request under "Requests for planner" in `STATUS.md` to update the allowlist.
 
 ```
 players(id uuid pk, nickname text, elo int default 1000, created_at timestamptz)
