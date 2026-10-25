@@ -550,3 +550,13 @@ The user asked whether grab detection was ever tested on real video, and whether
    - **Shoulder Throw:** the attacker turns their back; the target arcs over the attacker's shoulder, lands on their back on the mat, then gets up. Show the slam, dust, and shake, with the "SHOULDER THROW!" call.
    - Capture a **10 to 15 s clip of each** through the section 11 loop (clip-driven, real renderer). Publish them on the live site, for example `https://throwhands.tech/media/review/clinch.mp4` and `throw.mp4`, and link them in STATUS.md so the user can watch them.
 4. **Default on only after** real-clip recall reaches about 70% or more for grab and throw, with no added jab or blast misfires, and after the user has watched the clips. Until then it stays behind `?grapple=1`, and the demo video must not show grappling.
+
+### 4:13 AM: the user's real-webcam test of `?grapple=1`: "grappling doesn't work for me", "it keeps registering as a punch"
+This confirms the 4:10 AM item 2 problem on a real person: the reach is taken as a jab, so the grab never completes. **Make item 2 (the two-arm reach hold before jabs) the first grappling task**, then re-test on real clips.
+
+Also add a **gesture debug overlay** at `?debug=1`, small and in a corner, so the user and the agent can see what the detector sees live:
+- per arm: extension (%), elbow angle, and wrist speed
+- reach and pull state: "reach L ✓ R ✓ → waiting for pull (0.32 s left)", "pull too slow", "arms held >0.5 s → blast", "target out of range (1.9 m > 1.4 m)", "grab on cooldown"
+- the last 5 detected actions with timestamps, plus any grab-cancel reasons from the sim (`grab_cancel` hit, miss, or iron)
+
+This turns "it doesn't work" into a specific failure step. Add GRAB and SHOULDER THROW prompts to drill mode when `&grapple=1` is set, so the user can record labeled attempts.
