@@ -39,7 +39,7 @@ export class LocalSession implements Session {
     private botLevel = 1,
     /** Humans that are actually autopilot bots (demo mode without a camera). */
     autopilot: number[] = [],
-    simOverrides: { roundSeconds?: number; meterStart?: number } = {},
+    simOverrides: { roundSeconds?: number; meterStart?: number; grapple?: boolean } = {},
   ) {
     this.sim = new Sim({ mode, ...simOverrides }, (Math.random() * 1e9) | 0);
     humans.forEach((h, i) => {

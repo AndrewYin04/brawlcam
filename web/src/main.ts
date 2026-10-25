@@ -14,6 +14,8 @@ import type { SimEvent } from '../../shared/sim';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const params = new URLSearchParams(location.search);
+/** Grappling beta (grab, clinch, Shoulder Throw) for local modes: ?grapple=1. Online rooms keep it off. */
+const GRAPPLE = params.has('grapple') && !['0', 'false', 'off'].includes(params.get('grapple') ?? '');
 const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
 if (params.has('clean')) document.body.classList.add('clean');
 
@@ -237,7 +239,8 @@ export async function startMode(mode: string) {
   }
   const me = { name: nickname(), color: myColor() };
   // Test/tuning overrides: ?roundsecs=20&meter=100&botlevel=-1|0|1|2|3
-  const over: { roundSeconds?: number; meterStart?: number } = {};
+  const over: { roundSeconds?: number; meterStart?: number; grapple?: boolean } = {};
+  if (GRAPPLE) over.grapple = true;
   if (params.has('roundsecs')) over.roundSeconds = Math.max(5, Math.min(120, Number(params.get('roundsecs'))));
   if (params.has('meter')) over.meterStart = Math.max(0, Math.min(100, Number(params.get('meter'))));
   if (mode === 'practice' || demo) {
@@ -398,8 +401,11 @@ function runMoveTutorial(end: () => void) {
     const gs = $('tut-guard');
     gs.classList.remove('hidden');
     card.querySelector('h2')!.textContent = 'Now defend';
-    const gEls: Record<string, HTMLElement> = { guard: gs.querySelector('[data-dir="guard"]')!, xshield: gs.querySelector('[data-dir="xshield"]')! };
-    const gHeld: Record<string, number> = { guard: 0, xshield: 0 };
+    const gEls: Record<string, HTMLElement> = { guard: gs.querySelector('[data-dir="guard"]')!, xshield: gs.querySelector('[data-dir="xshield"]')!, grab: gs.querySelector('[data-dir="grab"]')! };
+    const gHeld: Record<string, number> = { guard: 0, xshield: 0, grab: 0 };
+    // Grappling beta: one detected grab completes the Grab tile (it is a motion, not a held pose).
+    const gKeys = GRAPPLE ? ['guard', 'xshield', 'grab'] : ['guard', 'xshield'];
+    gEls.grab.classList.toggle('hidden', !GRAPPLE);
     const g0 = performance.now();
     let gl = g0;
     pose!.onUpdate = () => {
@@ -407,18 +413,18 @@ function runMoveTutorial(end: () => void) {
       const dt = Math.min(0.2, (now - gl) / 1000);
       gl = now;
       const o = pose!.latest[0];
-      const on: Record<string, boolean> = { guard: !!o?.blocking, xshield: !!o?.xshield };
-      for (const k of ['guard', 'xshield']) {
+      const on: Record<string, boolean> = { guard: !!o?.blocking, xshield: !!o?.xshield, grab: !!o?.actions.some((a) => a.kind === 'grab') };
+      for (const k of gKeys) {
         gEls[k].classList.toggle('active', on[k]);
         if (on[k] && gHeld[k] < NEED) {
-          gHeld[k] += dt;
+          gHeld[k] += k === 'grab' ? NEED : dt;
           if (gHeld[k] >= NEED) { gEls[k].classList.add('done'); hooks.tutorial.done.push(k); }
         }
         (gEls[k].querySelector('.tut-bar i') as HTMLElement).style.width = `${Math.min(100, (gHeld[k] / NEED) * 100)}%`;
       }
-      const left = Math.max(0, 10 - (now - g0) / 1000);
+      const left = Math.max(0, (GRAPPLE ? 15 : 10) - (now - g0) / 1000);
       $('tut-time').textContent = String(Math.ceil(left));
-      if (gHeld.guard >= NEED && gHeld.xshield >= NEED) setTimeout(() => stop(moveOutcome), 400);
+      if (gKeys.every((k) => gHeld[k] >= NEED)) setTimeout(() => stop(moveOutcome), 400);
       else if (left <= 0) stop(moveOutcome === 'completed' ? 'guard-timeout' : 'timeout');
     };
   };

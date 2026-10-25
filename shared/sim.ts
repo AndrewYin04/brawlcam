@@ -2,7 +2,8 @@
 // Handles any number of fighters; 1v1 is just a room with two fighters.
 
 export type Mode = 'duel' | 'brawl';
-export type ActionKind = 'jab' | 'hook' | 'uppercut' | 'kick' | 'palm' | 'xshield';
+/** grab / throw: grappling (only used when SimConfig.grapple is on; ignored otherwise). */
+export type ActionKind = 'jab' | 'hook' | 'uppercut' | 'kick' | 'palm' | 'xshield' | 'grab' | 'throw';
 export type Hand = 'L' | 'R' | 'B';
 
 export interface Action {
@@ -78,6 +79,12 @@ export interface Fighter extends FighterInit {
   comboAt: number;
   comboTarget: number | null;
   lastFwdInputAt?: number;
+  /** Grappling (SimConfig.grapple only; always null / -1 otherwise). Grab ('g') or shoulder throw ('t') startup in progress. */
+  grapple: { k: 'g' | 't'; target: number; until: number } | null;
+  /** Clinch: who you are locked with, whether you are the holder (grabber), and when it breaks on its own. */
+  clinch: { with: number; holder: boolean; until: number } | null;
+  /** Held fighter: when the hard lean / step back (forward input < TUNING.escapeBackInput) started, -1 if not leaning back. */
+  backSince: number;
 }
 
 export interface Projectile {
@@ -92,7 +99,7 @@ export interface Projectile {
   ttl: number;
 }
 
-export type SuperKind = 'uppercut' | 'ironwall' | 'blast';
+export type SuperKind = 'uppercut' | 'ironwall' | 'blast' | 'throw';
 
 export type SimEvent =
   /** blocked: hit a normal guard (10% damage, guard drained). shielded: hit an Iron Wall (0 damage). guard: target's guard meter after the hit. */
@@ -110,7 +117,19 @@ export type SimEvent =
   | { type: 'round_start'; n: number }
   | { type: 'round_end'; n: number; winner: number | null; reason: 'ko' | 'time' }
   | { type: 'match_over'; winner: number | null; reason: string }
-  | { type: 'fight' };
+  | { type: 'fight' }
+  // ---- grappling (SimConfig.grapple only) ----
+  /** `id` started a grab on `target` (startup TUNING.grabStartup; a strike landing on `id` meanwhile cancels it). */
+  | { type: 'grab'; id: number; target: number }
+  /** A grab ('g') or Shoulder Throw ('t') startup failed. hit: a strike landed on `id` during the startup. miss: the target
+   * left grab range, is already clinched, or is respawn-protected. iron: the target's Iron Wall is up (immune to grabs).
+   * A cancelled throw's meter is not refunded. */
+  | { type: 'grab_cancel'; id: number; k: 'g' | 't'; reason: 'hit' | 'miss' | 'iron' }
+  | { type: 'clinch_start'; holder: number; held: number }
+  /** escape: palm frame, hard lean back, or an Iron Wall going up. hit: a third fighter hit one of them, or a KO. */
+  | { type: 'clinch_end'; holder: number; held: number; reason: 'escape' | 'timeout' | 'throw' | 'hit' }
+  /** Shoulder Throw landed: `target` now lies at x/y/z (TUNING.throwLand behind the thrower), launched with vy TUNING.throwVy. */
+  | { type: 'throw'; id: number; target: number; damage: number; x: number; y: number; z: number };
 
 export interface SimConfig {
   mode: Mode;
@@ -121,6 +140,8 @@ export interface SimConfig {
   countdownSeconds: number;
   arenaRadius: number;
   respawnSeconds: number;
+  /** Grappling beta (grab, clinch, Shoulder Throw). Off: 'grab' / 'throw' actions are ignored and nothing else changes. */
+  grapple: boolean;
 }
 
 export const DUEL_DEFAULTS: SimConfig = {
@@ -132,6 +153,7 @@ export const DUEL_DEFAULTS: SimConfig = {
   countdownSeconds: 3,
   arenaRadius: 4.0, // octagon corner radius: 8 m across, 7.4 m between walls
   respawnSeconds: 3,
+  grapple: false,
 };
 
 export const BRAWL_DEFAULTS: SimConfig = {
@@ -143,6 +165,7 @@ export const BRAWL_DEFAULTS: SimConfig = {
   countdownSeconds: 3,
   arenaRadius: 4.9, // about 9.8 m across, like UFC's large octagon
   respawnSeconds: 3,
+  grapple: false,
 };
 
 export const TUNING = {
@@ -151,7 +174,7 @@ export const TUNING = {
   engageDist: 1.25, // arm's length plus a step between 1.8 m fighters: strikes have room to extend (and step in)
   assistIdle: 1.5, // s without forward/back input before the duel assist walks you back into range
   minDist: 0.95, // bodies (with guards up) never overlap
-  reach: { jab: 1.5, hook: 1.4, uppercut: 1.4, kick: 1.7, palm: 0, xshield: 0 } as Record<ActionKind, number>,
+  reach: { jab: 1.5, hook: 1.4, uppercut: 1.4, kick: 1.7, palm: 0, xshield: 0, grab: 0, throw: 0 } as Record<ActionKind, number>,
   speedMin: 1.5, // m/s, maps to 5 HP
   speedMax: 6.0, // m/s, maps to 15 HP
   // Guard (block gesture). Blocked hits deal blockFactor of the damage and drain the guard meter.
@@ -175,7 +198,7 @@ export const TUNING = {
   meterPerTaken: 8,
   handCooldown: 0.28,
   kickCooldown: 0.6,
-  superCooldown: { uppercut: 6, ironwall: 10, blast: 6 } as Record<SuperKind, number>,
+  superCooldown: { uppercut: 6, ironwall: 10, blast: 6, throw: 6 } as Record<SuperKind, number>,
   superUppercutDamage: 25,
   superUppercutLunge: 3.2,
   blastDamage: 20,
@@ -195,6 +218,24 @@ export const TUNING = {
   bodyRadius: 0.32,
   cageBounceMin: 1.2, // m/s into the fence before it counts as a slam
   cageRestitution: 0.15, // the fence absorbs most of a slam: you drop at its base, not bounce back across the cage
+  // ---- grappling (planner spec 2026-10-25 2:50 AM section B; SimConfig.grapple only) ----
+  grabRange: 1.4, // m (arm reach at the 1.25 m fighting distance): target must be this close (and in front) when the grab starts
+  grabStartup: 0.3, // s: a strike landing on the grabber meanwhile cancels it (strike beats grab)
+  grabSlack: 0.25, // m: extra range allowed when a startup resolves (the target may drift a little)
+  grabCooldown: 1.0, // s before the same fighter can grab again (after starting one, or after its clinch ends)
+  clinchDist: 0.6, // m between the locked fighters
+  clinchSeconds: 3, // the clinch breaks on its own after this
+  kneeDamage: 8, // holder's knee (the knee-lift / kick gesture) in the clinch
+  escapeBackInput: -0.6, // held fighter's forward input below this ...
+  escapeBackHold: 0.3, // ... for this long escapes
+  escapePush: 2.5, // m/s apart when the held fighter escapes
+  throwRange: 1.35, // m (or from the clinch)
+  throwStartup: 0.3, // s: a strike landing on the thrower meanwhile cancels it (the meter is not refunded)
+  throwDamage: 25, // unblockable by the guard; the Iron Wall stops it (0 damage + its counter)
+  throwLand: 1.0, // m behind the thrower (along the thrower's facing) where the target lands
+  throwVy: 4, // m/s upward: a short airborne arc for clients to animate
+  throwStun: 0.8, // s the thrown fighter is stunned (airborne, then getting up)
+  slowmoThrow: 0.4, // real s of slow motion when a throw lands
 };
 
 const NO_INPUT: FighterInput = { move: [0, 0], blocking: false, xshield: false, turn: 0, present: false };
@@ -278,6 +319,9 @@ export class Sim {
       combo: 0,
       comboAt: -9,
       comboTarget: null,
+      grapple: null,
+      clinch: null,
+      backSince: -1,
     };
     this.fighters.push(f);
     this.placeAll();
@@ -285,7 +329,10 @@ export class Sim {
   }
 
   removeFighter(id: number) {
+    const gone = this.get(id);
+    if (gone?.clinch) this.clearClinch(gone);
     this.fighters = this.fighters.filter((f) => f.id !== id);
+    for (const f of this.fighters) if (f.grapple?.target === id) f.grapple = null;
     for (const f of this.fighters) if (f.target === id) f.target = null;
     if (this.cfg.mode === 'duel' && this.fighters.length < 2 && (this.phase === 'fight' || this.phase === 'countdown')) {
       // Opponent left mid-match: remaining fighter wins.
@@ -381,6 +428,10 @@ export class Sim {
   }
 
   private resetDefense(f: Fighter) {
+    // Grappling state goes with the defense state (round start, KO, respawn). A partner left clinched is released.
+    if (f.clinch) this.clearClinch(f);
+    f.grapple = null;
+    f.backSince = -1;
     f.blocking = false;
     f.guard = TUNING.guardMax;
     f.guardUpAt = -9;
@@ -415,9 +466,11 @@ export class Sim {
     const actions = this.actions;
     this.actions = [];
     if (fighting) for (const { id, a } of actions) this.resolveAction(id, a);
+    if (fighting && this.cfg.grapple) this.resolveGrapples();
 
     for (const f of this.fighters) this.updateFighter(f, dt, fighting);
     if (fighting) this.updateProjectiles(dt);
+    if (this.cfg.grapple) this.updateClinches(fighting);
     this.separate();
 
     if (fighting) {
@@ -469,7 +522,9 @@ export class Sim {
     if (fighting && inp.present && inp.xshield && !dizzy && f.meter >= 100 && this.cdReady(f, 'ironwall')) this.trySuper(f, 'ironwall');
     // Guard: the block gesture (or an X without a full meter, which reads as a block). The Iron Wall replaces it while active.
     const wantGuard = inp.blocking || (inp.xshield && f.meter < 100);
-    f.blocking = fighting && inp.present && !stunned && !dizzy && this.t >= f.ironWallUntil && wantGuard && f.guard > 0;
+    // Grappling: no guard while held in a clinch (grab beats guard) or while your own grab / throw is starting.
+    const tiedUp = (f.clinch !== null && !f.clinch.holder) || f.grapple !== null;
+    f.blocking = fighting && inp.present && !stunned && !dizzy && this.t >= f.ironWallUntil && wantGuard && f.guard > 0 && !tiedUp;
     if (f.blocking) {
       f.guard -= TUNING.guardDrainPerSec * dt;
       f.guardUpAt = this.t;
@@ -478,7 +533,7 @@ export class Sim {
       f.guard = Math.min(TUNING.guardMax, f.guard + TUNING.guardRefillPerSec * dt);
     }
 
-    if (fighting && inp.present && !stunned && f.y === 0) {
+    if (fighting && inp.present && !stunned && f.y === 0 && f.clinch === null) {
       let [strafe, fwd] = inp.move;
       const tgt = f.target != null ? this.get(f.target) : undefined;
       if (tgt) {
@@ -572,6 +627,11 @@ export class Sim {
     f.alive = false;
     f.hp = 0;
     f.deaths++;
+    if (f.clinch) {
+      const o = this.get(f.clinch.with);
+      if (o && f.clinch.holder) this.endClinch(f, o, 'hit');
+      else if (o) this.endClinch(o, f, 'hit');
+    }
     this.resetDefense(f); // no dizzy / Iron Wall / half-empty guard carried into the KO or the respawn
     const killer = by != null ? this.get(by) : undefined;
     if (killer && killer.id !== f.id) killer.kos++;
@@ -647,6 +707,36 @@ export class Sim {
     if (!f || !f.alive || !f.input.present) return;
     if (this.t < f.stunUntil) return;
     if (f.dizzyUntil > 0) return; // guard-broken: no attacks, no supers, no Iron Wall
+
+    if (a.kind === 'grab' || a.kind === 'throw') {
+      if (this.cfg.grapple) this.startGrapple(f, a.kind);
+      return;
+    }
+    if (this.cfg.grapple && (f.grapple || f.clinch)) {
+      // Committed to a grab / throw startup: other actions are ignored.
+      if (f.grapple) return;
+      const c = f.clinch!;
+      if (!c.holder) {
+        // Held: pushing both palms forward is a frame that escapes (it does not fire the energy blast). The X with a
+        // full meter is still the Iron Wall (which breaks the clinch in updateClinches). Strikes are tied up.
+        if (a.kind === 'palm') {
+          const holder = this.get(c.with);
+          if (holder) this.endClinch(holder, f, 'escape');
+        }
+        if (a.kind === 'xshield' && f.meter >= 100) this.trySuper(f, 'ironwall');
+        return;
+      }
+      // Holder: knees (the knee-lift / kick gesture) and short hooks. Jabs, uppercuts and palms are smothered.
+      if (a.kind === 'kick') {
+        const held = this.get(c.with);
+        if (!held || !this.cdReady(f, 'kick')) return;
+        f.cd.kick = this.t + TUNING.kickCooldown;
+        f.atk = { k: 'kick', h: a.hand, t: this.t };
+        this.applyHit(f, held, TUNING.kneeDamage, 'knee', false, a.speed);
+        return;
+      }
+      if (a.kind !== 'hook' && a.kind !== 'xshield') return;
+    }
 
     if (a.kind === 'palm') return this.trySuper(f, 'blast');
     if (a.kind === 'xshield') {
@@ -756,12 +846,27 @@ export class Sim {
     this.emit({ type: 'guard_break', id: f.id, attacker: by, x: +f.x.toFixed(3), y: +(1.35 + f.y).toFixed(3), z: +f.z.toFixed(3) });
   }
 
-  private applyHit(att: Fighter, tgt: Fighter, base: number, kind: string, isSuper: boolean, speed: number) {
+  private applyHit(att: Fighter, tgt: Fighter, base: number, kind: string, isSuper: boolean, speed: number, unblockable = false) {
     if (this.t < tgt.invulnUntil) return;
     // Iron Wall: unbreakable, 0 damage, no guard drain.
     const shielded = this.t < tgt.ironWallUntil;
     // A normal guard blocks everything, supers included (10% damage); heavy hits just drain more guard.
-    const blocked = !shielded && tgt.blocking;
+    // (The Shoulder Throw is the exception: the guard cannot block it.)
+    const blocked = !shielded && tgt.blocking && !unblockable;
+    if (this.cfg.grapple && !shielded) {
+      // Strike beats grab: a hit landing during a grab / throw startup cancels it.
+      if (tgt.grapple) {
+        this.emit({ type: 'grab_cancel', id: tgt.id, k: tgt.grapple.k, reason: 'hit' });
+        tgt.grapple = null;
+      }
+      // A third fighter hitting either clinched fighter breaks the clinch.
+      if (tgt.clinch && tgt.clinch.with !== att.id) {
+        const other = this.get(tgt.clinch.with);
+        if (!other) this.clearClinch(tgt);
+        else if (tgt.clinch.holder) this.endClinch(tgt, other, 'hit');
+        else this.endClinch(other, tgt, 'hit');
+      }
+    }
     let dmg = shielded ? 0 : blocked ? Math.max(1, Math.round(base * TUNING.blockFactor)) : base;
     dmg = Math.min(dmg, tgt.hp);
     tgt.hp -= dmg;
@@ -875,6 +980,195 @@ export class Sim {
     this.projectiles = keep;
   }
 
+  // ---------- grappling (SimConfig.grapple only) ----------
+
+  /** Start a grab or Shoulder Throw startup (a strike landing on `f` during it cancels it). */
+  private startGrapple(f: Fighter, k: 'grab' | 'throw') {
+    if (k === 'grab') {
+      if (f.clinch || f.grapple || !this.cdReady(f, 'grab')) return;
+      f.cd.grab = this.t + TUNING.grabCooldown;
+      const tgt = this.strikeTarget(f, TUNING.grabRange);
+      if (!tgt) {
+        this.emit({ type: 'whiff', attacker: f.id, kind: 'grab', hand: 'B' });
+        return;
+      }
+      f.grapple = { k: 'g', target: tgt.id, until: this.t + TUNING.grabStartup };
+      this.emit({ type: 'grab', id: f.id, target: tgt.id });
+      return;
+    }
+    // Shoulder Throw: full meter, from the clinch (either fighter) or within throwRange. It can replace your own grab startup.
+    if (f.grapple?.k === 't') return;
+    if (f.meter < 100) {
+      this.emit({ type: 'super_denied', id: f.id, kind: 'throw', reason: 'meter' });
+      return;
+    }
+    if (!this.cdReady(f, 'throw')) {
+      this.emit({ type: 'super_denied', id: f.id, kind: 'throw', reason: 'cooldown' });
+      return;
+    }
+    const partner = f.clinch ? this.get(f.clinch.with) : f.grapple ? this.get(f.grapple.target) : undefined;
+    const tgt = partner && partner.alive ? partner : this.strikeTarget(f, TUNING.throwRange);
+    if (!tgt) {
+      this.emit({ type: 'whiff', attacker: f.id, kind: 'throw', hand: 'B' }); // nobody in range: the meter is kept
+      return;
+    }
+    f.meter = 0;
+    f.cd.throw = this.t + TUNING.superCooldown.throw;
+    f.grapple = { k: 't', target: tgt.id, until: this.t + TUNING.throwStartup };
+    this.emit({ type: 'super', id: f.id, kind: 'throw' });
+  }
+
+  /** Resolve grab / throw startups that have run their course. */
+  private resolveGrapples() {
+    for (const f of this.fighters) {
+      const g = f.grapple;
+      if (!g || this.t < g.until) continue;
+      f.grapple = null;
+      if (!f.alive) continue;
+      const tgt = this.get(g.target);
+      const d = tgt ? Math.hypot(tgt.x - f.x, tgt.z - f.z) : Infinity;
+      if (g.k === 'g') {
+        if (!tgt || !tgt.alive || tgt.clinch || f.clinch || this.t < tgt.invulnUntil || d > TUNING.grabRange + TUNING.grabSlack) {
+          this.emit({ type: 'grab_cancel', id: f.id, k: 'g', reason: 'miss' });
+          continue;
+        }
+        if (this.t < tgt.ironWallUntil) {
+          this.emit({ type: 'grab_cancel', id: f.id, k: 'g', reason: 'iron' }); // the Iron Wall is immune to grabs
+          continue;
+        }
+        // Grab beats guard: the target's guard simply drops.
+        const until = this.t + TUNING.clinchSeconds;
+        f.clinch = { with: tgt.id, holder: true, until };
+        tgt.clinch = { with: f.id, holder: false, until };
+        tgt.blocking = false;
+        tgt.backSince = -1;
+        f.target = tgt.id;
+        tgt.target = f.id;
+        f.vx = f.vz = tgt.vx = tgt.vz = 0;
+        this.emit({ type: 'clinch_start', holder: f.id, held: tgt.id });
+        continue;
+      }
+      // Shoulder Throw
+      const inClinch = f.clinch?.with === g.target;
+      if (!tgt || !tgt.alive || (!inClinch && d > TUNING.throwRange + TUNING.grabSlack)) {
+        this.emit({ type: 'whiff', attacker: f.id, kind: 'throw', hand: 'B' });
+        continue;
+      }
+      if (this.t < tgt.ironWallUntil) {
+        // The Iron Wall stops it: a shielded 0-damage hit, countered like any attack on the wall.
+        this.applyHit(f, tgt, TUNING.throwDamage, 'throw', true, 0, true);
+        continue;
+      }
+      if (f.clinch) {
+        const o = this.get(f.clinch.with);
+        if (!o) this.clearClinch(f);
+        else if (f.clinch.holder) this.endClinch(f, o, 'throw');
+        else this.endClinch(o, f, 'throw');
+      }
+      const hpBefore = tgt.hp;
+      this.applyHit(f, tgt, TUNING.throwDamage, 'throw', true, 0, true);
+      const dealt = hpBefore - tgt.hp;
+      // Over the shoulder: the target lands on the far side of the thrower, along the thrower's facing, in a short arc.
+      let lx = f.x - Math.sin(f.yaw) * TUNING.throwLand;
+      let lz = f.z - Math.cos(f.yaw) * TUNING.throwLand;
+      const A = octagonApothem(this.cfg.arenaRadius) - TUNING.bodyRadius;
+      const r = Math.hypot(lx, lz);
+      if (r > A) {
+        lx *= A / r;
+        lz *= A / r;
+      }
+      tgt.x = lx;
+      tgt.z = lz;
+      tgt.y = 0;
+      tgt.vx = tgt.vz = 0;
+      tgt.vy = TUNING.throwVy;
+      if (tgt.alive) tgt.stunUntil = Math.max(tgt.stunUntil, this.t + TUNING.throwStun);
+      this.slowmoUntil = Math.max(this.slowmoUntil, this.realT + TUNING.slowmoThrow);
+      this.emit({ type: 'throw', id: f.id, target: tgt.id, damage: dealt, x: +lx.toFixed(3), y: 0, z: +lz.toFixed(3) });
+    }
+  }
+
+  /** Clinch upkeep: timeout, escapes, Iron Wall, and the clinchDist lock. */
+  private updateClinches(fighting: boolean) {
+    for (const f of this.fighters) {
+      const c = f.clinch;
+      if (!c || !c.holder) continue;
+      const p = this.get(c.with);
+      if (!p || !p.alive || !f.alive) {
+        if (p) this.endClinch(f, p, 'hit');
+        else this.clearClinch(f);
+        continue;
+      }
+      if (!fighting) {
+        this.clearClinch(f);
+        continue;
+      }
+      if (this.t >= c.until) {
+        this.endClinch(f, p, 'timeout');
+        continue;
+      }
+      if (this.t < p.ironWallUntil || this.t < f.ironWallUntil) {
+        this.endClinch(f, p, 'escape');
+        continue;
+      }
+      // Held fighter steps / leans back hard for escapeBackHold.
+      if (p.input.present && p.input.move[1] < TUNING.escapeBackInput) {
+        if (p.backSince < 0) p.backSince = this.t;
+        if (this.t - p.backSince >= TUNING.escapeBackHold - 1e-9) {
+          this.endClinch(f, p, 'escape');
+          continue;
+        }
+      } else p.backSince = -1;
+      // Lock both at clinchDist about their midpoint.
+      let dx = p.x - f.x;
+      let dz = p.z - f.z;
+      let d = Math.hypot(dx, dz);
+      if (d < 1e-6) {
+        dx = Math.sin(f.yaw);
+        dz = Math.cos(f.yaw);
+        d = 1;
+      }
+      const mx = (f.x + p.x) / 2;
+      const mz = (f.z + p.z) / 2;
+      const h = TUNING.clinchDist / 2;
+      f.x = mx - (dx / d) * h;
+      f.z = mz - (dz / d) * h;
+      p.x = mx + (dx / d) * h;
+      p.z = mz + (dz / d) * h;
+      f.vx = f.vz = p.vx = p.vz = 0;
+    }
+  }
+
+  private endClinch(holder: Fighter, held: Fighter, reason: 'escape' | 'timeout' | 'throw' | 'hit') {
+    if (!holder.clinch || holder.clinch.with !== held.id) return;
+    holder.clinch = null;
+    held.clinch = null;
+    held.backSince = -1;
+    holder.cd.grab = Math.max(holder.cd.grab ?? 0, this.t + TUNING.grabCooldown);
+    if (reason === 'escape') {
+      const dx = held.x - holder.x;
+      const dz = held.z - holder.z;
+      const d = Math.hypot(dx, dz) || 1;
+      held.vx += (dx / d) * TUNING.escapePush;
+      held.vz += (dz / d) * TUNING.escapePush;
+      holder.vx -= (dx / d) * TUNING.escapePush * 0.5;
+      holder.vz -= (dz / d) * TUNING.escapePush * 0.5;
+    }
+    this.emit({ type: 'clinch_end', holder: holder.id, held: held.id, reason });
+  }
+
+  /** Drop a clinch without an event (round reset, KO bookkeeping, a fighter leaving). */
+  private clearClinch(f: Fighter) {
+    const c = f.clinch;
+    if (!c) return;
+    f.clinch = null;
+    const o = this.get(c.with);
+    if (o && o.clinch?.with === f.id) {
+      o.clinch = null;
+      o.backSince = -1;
+    }
+  }
+
   /** Keep fighters from overlapping. */
   private separate() {
     const fs = this.fighters.filter((f) => f.alive);
@@ -882,6 +1176,7 @@ export class Sim {
       for (let j = i + 1; j < fs.length; j++) {
         const a = fs[i];
         const b = fs[j];
+        if (a.clinch && a.clinch.with === b.id) continue; // locked closer than minDist on purpose
         const dx = b.x - a.x;
         const dz = b.z - a.z;
         const d = Math.hypot(dx, dz);
@@ -972,6 +1267,10 @@ export class Sim {
         gd: Math.round(f.guard), // guard meter 0..100
         dz: f.dizzyUntil > 0 ? +Math.max(0, f.dizzyUntil - this.t).toFixed(2) : 0, // guard-break dizzy: s left, 0 = not dizzy
         iw: +Math.max(0, f.ironWallUntil - this.t).toFixed(2), // Iron Wall: s left, 0 = inactive
+        // Grappling (only present while active, so snapshots without grappling are unchanged):
+        // cl = id of the fighter you are clinched with, ch = 1 if you are the holder, gr = 'g' grab / 't' throw startup.
+        ...(f.clinch ? { cl: f.clinch.with, ...(f.clinch.holder ? { ch: 1 as const } : {}) } : {}),
+        ...(f.grapple ? { gr: f.grapple.k } : {}),
         kb: Math.round(f.kb),
         kos: f.kos,
         deaths: f.deaths,
