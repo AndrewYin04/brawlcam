@@ -47,7 +47,7 @@ for (let t = 0; t < tEnd; t += dt) {
     buf = [];
     const r = await fetch(BASE + '/api/commentary', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ summary, voice: false }) }).then((x) => x.json()).catch(() => null);
     if (r?.text) lines.push({ t: +t.toFixed(1), summary, text: r.text, source: r.source });
-    await new Promise((res) => setTimeout(res, 1500));
+    await new Promise((res) => setTimeout(res, Number(process.env.GAP_MS ?? 15000))); // free-tier per-minute limits
   }
 }
 console.log(JSON.stringify(lines, null, 1));

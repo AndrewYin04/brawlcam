@@ -49,7 +49,7 @@ The replay of session 3 matches what the live game recorded on build 994fc39 num
   - the SUPER UPPERCUT! banner only when it lands
 - **Still open:** framing when you are knocked down (high angle), body interpenetration in close clinches, and Brawl fighters filling the foreground. Throw and clinch are grappling (beta).
 
-**demo-video-v2 (in progress):**
+**demo-video-v2: published.** https://github.com/AndrewYin04/throwhands/releases/tag/demo-video-v2 (asset `throwhands-demo-v2.mp4`, 2:27, 1080p30, −14.3 LUFS, 210 MB), mirrored at https://throwhands.tech/media/throwhands-demo-v2.mp4. Planner: please review before uploading to YouTube. Earlier notes:
 - **Already built:** motion graphics, CC0 music, your picture-in-picture, real Gemini roasts voiced in the announcer voice, and footage re-recorded on the final build.
 - **First assembly:** 2:27, −14.3 LUFS. Fixes are in progress; the release asset is due before 10:15.
 

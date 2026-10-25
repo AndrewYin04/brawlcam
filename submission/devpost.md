@@ -4,6 +4,8 @@
 
 Play it: https://throwhands.tech (backup: https://144-202-71-213.sslip.io)
 
+Demo video (2:27): https://github.com/AndrewYin04/throwhands/releases/tag/demo-video-v2 (also at https://throwhands.tech/media/throwhands-demo-v2.mp4)
+
 ## Inspiration
 
 Our best game nights were the loud ones: friends, trash talk, and endless rematches. Motion games capture that, but need a console, an accessory, and everyone in one room.
@@ -100,7 +102,7 @@ More fighters and arenas, then three revenue lines:
 - WebAudio API (all sound effects synthesized in code)
 - undici (IPv4-pinned HTTP client)
 - esbuild
-- ElevenLabs (`eleven_v3`: the in-game announcer's pre-rendered calls and the demo video voiceover)
+- ElevenLabs (`eleven_v3`: the in-game announcer's pre-rendered calls and roasts, and the demo video voiceover)
 - ffmpeg (demo video assembly)
 - throwhands.tech (.Tech domain)
 
