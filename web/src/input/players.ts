@@ -80,6 +80,25 @@ export class PoseInput {
       c.height = 240;
     }
     ctx.clearRect(0, 0, c.width, c.height);
+    // Home marker: the spot you calibrated on (step back onto it to stop strafing).
+    this.recognizers.forEach((r, i) => {
+      if (i >= this.players || r.calib.imgHipX == null) return;
+      const x = r.calib.imgHipX * c.width;
+      ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+      ctx.setLineDash([6, 6]);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x, c.height * 0.15);
+      ctx.lineTo(x, c.height);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = 'rgba(255,255,255,0.35)';
+      ctx.beginPath();
+      ctx.moveTo(x - 7, c.height - 2);
+      ctx.lineTo(x + 7, c.height - 2);
+      ctx.lineTo(x, c.height - 12);
+      ctx.fill();
+    });
     people.forEach((p, i) => {
       if (!p) return;
       ctx.strokeStyle = COLORS[i % 2];

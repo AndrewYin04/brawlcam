@@ -43,7 +43,8 @@ test('movement tutorial: each direction lights up and fills, then the match star
   await shot('start');
   const cam = (f: string, v: number) => page.evaluate(([f, v]) => (window as any).__cam[f](v), [f, v] as const);
   // Advance: get bigger in the frame (step/lean toward the camera); retreat: smaller; strafe: lean the upper body sideways.
-  const steps: [string, string, number][] = [['fwd', 'zoom', 1.3], ['back', 'zoom', 0.78], ['left', 'skew', -0.22], ['right', 'skew', 0.22]];
+  // Left/right by stepping sideways (whole body shifts in the raw image; +x is the player's own left).
+  const steps: [string, string, number][] = [['fwd', 'zoom', 1.3], ['back', 'zoom', 0.78], ['left', 'offset', 70], ['right', 'offset', -70]];
   for (const [dir, f, v] of steps) {
     await cam(f, v);
     await page.waitForFunction((d) => (window as any).__brawl.tutorial?.done.includes(d), dir, { timeout: 6_000 }).catch(() => {});
@@ -61,5 +62,18 @@ test('movement tutorial: each direction lights up and fills, then the match star
   await shot('hud-fwd');
   await cam('zoom', 1);
   expect(tut.done.sort()).toEqual(['back', 'fwd', 'left', 'right']);
+  await b.close();
+});
+
+test('lean sideways also strafes (tutorial left/right by leaning)', async () => {
+  const b = await chromium.launch({ args: GL_ARGS });
+  const { page } = await openPage(b, `/?mode=practice&${TQ.replace('&notut', '')}`, {}, async (ctx) => injectCamera(ctx, 'guard_02'));
+  await page.waitForSelector('#tut:not(.hidden)', { timeout: 90_000 });
+  for (const [dir, k] of [['left', -0.22], ['right', 0.22]] as const) {
+    await page.evaluate((k) => (window as any).__cam.skew(k), k);
+    await page.waitForFunction((d) => (window as any).__brawl.tutorial?.done.includes(d), dir, { timeout: 6_000 });
+    await page.evaluate(() => (window as any).__cam.skew(0));
+    await page.waitForTimeout(400);
+  }
   await b.close();
 });

@@ -17,6 +17,7 @@ export interface Calibration {
   armLen: number; // meters (world), shoulder->elbow->wrist
   imgShoulderW: number; // normalized image units
   imgCenterX: number;
+  imgHipX?: number; // hip center x in the image (fraction of width) at the calibrated spot; learned if missing
   leanZ?: number; // meters: shoulders ahead of hips (toward the camera) in the guard stance; learned if missing
 }
 
@@ -75,6 +76,10 @@ export const GESTURE_CFG = {
   leanFull: 0.1,
   stepDead: 0.1, // fraction of calibrated shoulder width in image (rotation-corrected)
   stepFull: 0.22,
+  // Strafe by stepping sideways: hip center x in the image vs the calibrated spot, in calibrated shoulder widths.
+  sideStepDead: 0.3,
+  sideStepFull: 0.9,
+  edgeMargin: 0.1, // fraction of image width: closer to the edge than this stops increasing the strafe that way
   // Forward/back by leaning the torso toward/away from the camera (shoulders vs hips, against the calibrated stance).
   leanFwdDead: 0.055, // m
   leanFwdFull: 0.12,
@@ -100,6 +105,8 @@ export interface GestureOutput {
   legs: boolean;
   joints: Joints | null; // smoothed avatar-space joints for rendering
   calibrating?: { progress: number; guidance: string | null; done: boolean };
+  /** Player's hip center is near the frame edge: 'left' / 'right' is the side of the player's own body. */
+  edge?: 'left' | 'right' | null;
   debug?: Record<string, number>;
 }
 
@@ -142,12 +149,14 @@ export class GestureRecognizer {
   private turnSince = -1;
   private turnLatched = 0;
   private lastSeen = -9;
-  private calibFrames: { sw: number; arm: number; isw: number; cx: number; lz: number }[] = [];
+  private calibFrames: { sw: number; arm: number; isw: number; cx: number; lz: number; hx: number }[] = [];
   private calibStart = -1;
   private standingAnkleY: [number, number] | null = null;
   private legsBusyUntil = -9;
   private pointSince: Record<string, number | null> = {};
   private leanZSamples: number[] = [];
+  private hipXSamples: number[] = [];
+  private hipXS = -1;
   private moveQuietUntil = -9;
   private lastMoveT = -1;
   private ratioS = 0;
@@ -165,11 +174,14 @@ export class GestureRecognizer {
   skipCalibration(c?: Partial<Calibration>) {
     this.calib = { ...this.calib, ...c };
     if (c?.leanZ == null) this.calib.leanZ = undefined;
+    if (c?.imgHipX == null) this.calib.imgHipX = undefined;
     this.leanZSamples = [];
+    this.hipXSamples = [];
     this.calibrated = true;
   }
 
   reset() {
+    this.hipXS = -1;
     this.hist = [];
     this.feat = { L: [], R: [] };
     this.renderFilter.reset();
@@ -458,7 +470,22 @@ export class GestureRecognizer {
     // ---- movement ----
     const midHip = mid(P[J.lHip], P[J.rHip]);
     const lean = MS[0] - midHip[0]; // + = leaning to the person's left
-    const strafe = deadzone(lean, this.cfg.leanDead, this.cfg.leanFull);
+    const leanStrafe = deadzone(lean, this.cfg.leanDead, this.cfg.leanFull);
+    // Step sideways: the hip center (shoulder center when the hips are out of frame) moves across the image.
+    // Raw (unmirrored) image +x is the player's own left, which is strafe +1 (the fighter's own left on screen).
+    const hipVis = Math.min(frame.image[23][3], frame.image[24][3]);
+    const hipXRaw = hipVis > 0.5 && frame.image[23][1] < 0.98 ? (frame.image[23][0] + frame.image[24][0]) / 2 : imgCX;
+    const kHip = this.hipXS < 0 || this.lastMoveT < 0 ? 1 : Math.min(1, (t - this.lastMoveT) / this.cfg.moveSmooth);
+    this.hipXS += (hipXRaw - this.hipXS) * kHip;
+    if (this.calib.imgHipX == null) {
+      this.hipXSamples.push(hipXRaw);
+      if (this.hipXSamples.length >= 15) this.calib.imgHipX = [...this.hipXSamples].sort((a, b) => a - b)[7];
+    }
+    const m = this.cfg.edgeMargin;
+    out.edge = this.hipXS > 1 - m ? 'left' : this.hipXS < m ? 'right' : null;
+    const hipX = Math.min(1 - m, Math.max(m, this.hipXS));
+    const stepStrafe = this.calib.imgHipX == null ? 0 : deadzone((hipX - this.calib.imgHipX) / this.calib.imgShoulderW, this.cfg.sideStepDead, this.cfg.sideStepFull);
+    const strafe = Math.max(-1, Math.min(1, stepStrafe + leanStrafe));
     // Shoulder width in the image, corrected for torso rotation (turning for a hook narrows the shoulders
     // in the image; that is not a step back).
     const yawNow = Math.atan2(-(lS[2] - rS[2]), lS[0] - rS[0]);
@@ -561,14 +588,15 @@ export class GestureRecognizer {
     if (this.calibStart < 0) this.calibStart = t;
     const arm = (len(sub(lS, P[J.lEl])) + len(sub(P[J.lEl], lW)) + len(sub(rS, P[J.rEl])) + len(sub(P[J.rEl], rW))) / 2;
     const hipM = mid(P[J.lHip], P[J.rHip]);
-    this.calibFrames.push({ sw: len(sub(lS, rS)), arm, isw: imgSW, cx: imgCX, lz: MS[2] - hipM[2] });
+    const hv = Math.min(frame.image[23][3], frame.image[24][3]) > 0.5 && frame.image[23][1] < 0.98;
+    this.calibFrames.push({ sw: len(sub(lS, rS)), arm, isw: imgSW, cx: imgCX, lz: MS[2] - hipM[2], hx: hv ? (frame.image[23][0] + frame.image[24][0]) / 2 : imgCX });
     const progress = Math.min(1, (t - this.calibStart) / 3);
     if (progress >= 1 && this.calibFrames.length >= 10) {
-      const med = (k: 'sw' | 'arm' | 'isw' | 'cx' | 'lz') => {
+      const med = (k: 'sw' | 'arm' | 'isw' | 'cx' | 'lz' | 'hx') => {
         const a = this.calibFrames.map((f) => f[k]).sort((x, y) => x - y);
         return a[Math.floor(a.length / 2)];
       };
-      this.calib = { shoulderW: med('sw'), armLen: Math.max(0.4, med('arm')), imgShoulderW: med('isw'), imgCenterX: med('cx'), leanZ: med('lz') };
+      this.calib = { shoulderW: med('sw'), armLen: Math.max(0.4, med('arm')), imgShoulderW: med('isw'), imgCenterX: med('cx'), leanZ: med('lz'), imgHipX: med('hx') };
       this.calibrated = true;
       return { progress: 1, guidance: null, done: true };
     }

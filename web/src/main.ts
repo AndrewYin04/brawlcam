@@ -326,6 +326,7 @@ function runCalibration(done: () => void) {
 // Movement tutorial (spec: teach movement in calibration). Each direction fills while the player does it;
 // it ends when all four have been done once, after 15 s, or on Skip.
 let tutorialDone = false;
+let lastEdgeHint = 0;
 function runMoveTutorial(end: () => void) {
   $('calib').querySelector('.calib-card')!.classList.add('hidden');
   const card = $('tut');
@@ -504,6 +505,12 @@ function startLoop() {
           session!.input(i, g, acts);
         });
         hooks.lastGesture = pose.latest.map((g) => ({ present: g.present, blocking: g.blocking, xshield: g.xshield, move: g.move, legs: g.legs }));
+        // Near the frame edge: steer the player back toward their home spot.
+        const edge = pose.latest[0]?.edge;
+        if (edge && view && performance.now() - lastEdgeHint > 2500) {
+          lastEdgeHint = performance.now();
+          view.hint('Step back to the center');
+        }
         // HUD movement indicator: light the arrows for the movement input detected right now (player 1).
         const mv = pose.latest[0]?.move ?? [0, 0];
         const ind = { fwd: mv[1] > 0.15, back: mv[1] < -0.15, left: mv[0] > 0.15, right: mv[0] < -0.15 } as Record<string, boolean>;

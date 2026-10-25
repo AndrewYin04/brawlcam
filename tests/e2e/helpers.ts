@@ -52,6 +52,8 @@ export async function injectCamera(ctx: BrowserContext, clip: string | null, fai
         zoom: (z: number) => (state.zoom = z),
         // Horizontal skew pivoting at hip height: the upper body shifts sideways over the hips (a sideways lean).
         skew: (k: number) => (state.skew = k),
+        // Shift the whole picture sideways (px of 640): the player stepping left/right in front of the camera.
+        offset: (px: number) => (state.offsetX = px),
         blank: (b: boolean) => (state.blank = b),
         fail: (f: string | null) => (state.fail = f),
         freeze: (t: number | null) => {
