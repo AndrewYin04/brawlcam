@@ -147,7 +147,8 @@ export async function commentaryLine(summary: string): Promise<{ text: string; s
           contents: [{ role: 'user', parts: [{ text: summary.slice(0, 1500) }] }],
           generationConfig: { maxOutputTokens: 120, temperature: 1.0 },
         };
-        if (model.startsWith('gemini-3.8')) body.generationConfig.thinkingConfig = { thinkingLevel: 'minimal' };
+        // Gemini 3.x flash models think by default and the thinking eats the 120-token budget (lines came back cut off).
+        if (model.startsWith('gemini-3.') && !model.includes('lite')) body.generationConfig.thinkingConfig = { thinkingLevel: 'minimal' };
         const { status, json } = await fetchJson(`${GEMINI_BASE}/${model}:generateContent`, { method: 'POST', headers: { 'x-goog-api-key': key, 'content-type': 'application/json' }, body: JSON.stringify(body) }, 4000);
         aiState.geminiCalls++;
         if (status === 429) {
