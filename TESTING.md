@@ -220,12 +220,14 @@ is not met**: throw 4% on real drills, grab unmeasured. `?grapple=1` stays opt-i
 
 | Prompted (both sessions) | Reps detected before → after | jab fired before → after | hook fired before → after | uppercut fired before → after | palm fired before → after | grab fired before → after | throw fired before → after |
 |---|---|---|---|---|---|---|---|
-| straight_big | 4/8 → 4/8 | 5 → 5 | 3 → 3 | 3 → 3 | 1 → 0 | 0 → 0 | 0 → 0 |
-| hook_L_big | 3/8 → 4/8 | 7 → 6 | 3 → 5 | 0 → 0 | 0 → 0 | 0 → 0 | 0 → 0 |
-| hook_R_big | 3/8 → 4/8 | 6 → 5 | 5 → 7 | 2 → 2 | 1 → 0 | 0 → 0 | 0 → 0 |
-| uppercut_big | 2/6 → 5/6 | 7 → 7 | 5 → 2 | 2 → 5 | 0 → 0 | 0 → 0 | 0 → 0 |
-| grab | 0/4 → 3/4 | 8 → 4 | 0 → 0 | 1 → 0 | 0 → 0 | 0 → 3 | 0 → 0 |
-| throw | 0/4 → 0/4 | 4 → 1 | 4 → 4 | 1 → 0 | 0 → 0 | 0 → 1 | 0 → 0 |
+| straight_big | 3/8 → 3/8 | 4 → 4 | 3 → 4 | 5 → 5 | 0 → 0 | 0 → 0 | 0 → 0 |
+| hook_L_big | 2/8 → 4/8 | 6 → 6 | 2 → 4 | 1 → 1 | 0 → 0 | 0 → 0 | 0 → 0 |
+| hook_R_big | 2/8 → 5/8 | 7 → 7 | 5 → 8 | 2 → 2 | 0 → 0 | 0 → 0 | 0 → 0 |
+| uppercut_big | 1/6 → 4/6 | 7 → 7 | 4 → 3 | 1 → 4 | 0 → 0 | 0 → 0 | 0 → 0 |
+| grab | 0/4 → 3/4 | 11 → 3 | 0 → 0 | 0 → 0 | 0 → 0 | 0 → 3 | 0 → 0 |
+| throw | 0/4 → 0/4 | 5 → 2 | 4 → 4 | 1 → 0 | 0 → 0 | 0 → 1 | 0 → 0 |
+
+  These were replayed on the uploaded JSONL capture times. The "before" column matches the live numbers in REVIEW.md (session 2: right hooks 0/4, uppercuts 0/3, grabs 0/4). Video ground truth for session 2 is in STATUS.md.
 
 - **Boundaries were tuned on these sessions plus the 37 shadowboxing clips:**
   - big uppercut: wrist rise ≥ 0.4 m and ≥ 0.75 × the sweep

@@ -1,14 +1,66 @@
 # Status (written by the implementation agent)
 
-Last update: Sun Oct 25, 5:10 AM CDT. Deploy in progress (see the end of this section for the deployed commit).
+Last update: Sun Oct 25, 5:40 AM CDT.
 
 ## Since 4:35 AM: the user's drill sessions (REVIEW.md 4:25 AM and 4:35 AM), reproduced, fixed, re-measured
-**How these numbers were made.** Both sessions were exported from Tiger `research_frames` and replayed frame by frame through the real `GestureRecognizer`, with the same live guard calibration the game ran (`tests/tools/export-research.ts`, `tests/tools/drill-replay.ts`; the landmark fixtures stay local in `clips/research/`).
+**How these numbers were made.** Both sessions are replayed from your uploaded research JSONL files (exact capture times; Tiger lost them, see item 4), frame by frame through the real `GestureRecognizer` with the same live guard calibration the game ran (`tests/tools/research-jsonl.ts`, `tests/tools/drill-replay.ts`). They were first exported from Tiger `research_frames` and replayed frame by frame through the real `GestureRecognizer`, with the same live guard calibration the game ran (`tests/tools/export-research.ts`, `tests/tools/drill-replay.ts`; the landmark fixtures stay local in `clips/research/`).
 - **Replay fidelity:** the old code replayed gives the recorded live numbers, for example lean_back +0.63 (recorded +0.66) and step_back +0.50 (recorded +0.40).
 - **Rep scoring:** each rep is scored on a fixed 3 s window from its prompt, like the drill's timeout. The live run ended reps early; its forward bias "detected" forward reps before you moved, so labeled frames alone missed the motion.
 - **Before** = the code you ran; **after** = now. "fwd" and "strafe" are the mean input over the rep windows.
 
 
+**Session fda75d56**
+
+| Drill | Expected | fwd before → after | strafe before → after | Reps detected before → after | Actions in reps (after) |
+|---|---|---|---|---|---|
+| still | none | +0.28 → +0.13 | +0.00 → +0.00 | - | - |
+| straight_big | jab, fwd 0 | +0.22 → -0.17 | +0.00 → +0.00 | 0/4 → 0/4 | uppercutR×5 hookL×2 hookR×1 |
+| hook_L_big | hook_L, fwd 0 | +0.55 → +0.14 | +0.00 → +0.00 | 1/4 → 2/4 | jabL×3 hookL×2 jabR×1 |
+| uppercut_big | uppercut, fwd 0 | +0.24 → -0.01 | +0.00 → +0.00 | 1/3 → 1/3 | jabL×3 hookL×2 hookR×1 |
+| hook_R_big | hook_R, fwd 0 | +0.47 → +0.00 | +0.00 → +0.00 | 2/4 → 2/4 | jabL×2 hookL×2 hookR×2 |
+| step_right | strafe − | +0.65 → +0.00 | -0.12 → -0.12 | 2/3 → 2/3 | - |
+| step_left | strafe + | +0.55 → +0.20 | +0.17 → +0.17 | 2/3 → 2/3 | - |
+| lean_left | strafe + | +0.40 → -0.27 | -0.04 → -0.04 | 3/3 → 3/3 | - |
+| lean_fwd | fwd + | +0.62 → +0.19 | +0.25 → +0.25 | 3/3 → 2/3 | - |
+| lean_right | strafe − | +0.52 → +0.07 | -0.21 → -0.21 | 3/3 → 3/3 | - |
+| lean_back | fwd − | +0.66 → -0.25 | -0.15 → -0.15 | 0/3 → 2/3 | - |
+| step_fwd | fwd + | +0.63 → -0.12 | +0.20 → +0.20 | 3/3 → 0/3 | - |
+| step_back | fwd − | +0.40 → -0.05 | +0.01 → +0.01 | 0/3 → 1/3 | - |
+
+**Session 2dd3adbd**
+
+| Drill | Expected | fwd before → after | strafe before → after | Reps detected before → after | Actions in reps (after) |
+|---|---|---|---|---|---|
+| still | none | +0.00 → +0.00 | +0.00 → +0.00 | - | - |
+| hook_R_big | hook_R, fwd 0 | +0.02 → +0.00 | +0.00 → +0.00 | 0/4 → 3/4 | jabR×4 hookR×3 jabL×1 |
+| uppercut_big | uppercut, fwd 0 | +0.00 → +0.01 | +0.00 → +0.00 | 0/3 → 3/3 | jabR×4 uppercutR×3 |
+| straight_big | jab, fwd 0 | +0.03 → +0.00 | +0.00 → +0.00 | 3/4 → 3/4 | jabR×2 jabL×2 hookL×1 |
+| hook_L_big | hook_L, fwd 0 | +0.13 → +0.00 | +0.00 → +0.00 | 1/4 → 2/4 | hookL×2 jabL×1 uppercutR×1 |
+| grab | grab | +0.42 → -0.00 | +0.00 → +0.00 | 0/4 → 3/4 | grab×3 jabR×2 jabL×1 |
+| throw | throw | +0.23 → -0.00 | +0.00 → +0.00 | 0/4 → 0/4 | jabL×2 hookR×2 hookL×2 |
+| lean_back | fwd − | -0.05 → -0.28 | -0.13 → -0.13 | 2/3 → 2/3 | - |
+| step_left | strafe + | -0.04 → -0.19 | +0.25 → +0.25 | 3/3 → 3/3 | - |
+| lean_right | strafe − | +0.35 → +0.12 | -0.17 → -0.17 | 3/3 → 3/3 | - |
+| step_fwd | fwd + | +0.44 → +0.22 | -0.20 → -0.20 | 3/3 → 2/3 | - |
+| step_back | fwd − | +0.20 → -0.42 | -0.07 → -0.07 | 1/3 → 2/3 | - |
+| lean_left | strafe + | +0.46 → +0.26 | +0.44 → +0.44 | 3/3 → 3/3 | - |
+| lean_fwd | fwd + | +0.02 → +0.06 | +0.15 → +0.15 | 1/3 → 2/3 | - |
+| step_right | strafe − | +0.40 → +0.27 | -0.05 → -0.05 | 2/3 → 2/3 | - |
+
+**Checked against your video (session 2, the uploaded recording).** What you actually did, rep by rep:
+- **Right hooks 1, 3, 5:** clear wide swings; rep 5 was late, at 2.4–2.8 s. Detected: 1 and 3 (rep 5 is still missed).
+- **Right hook 11:** your left arm swung first, then the right; detected.
+- **Left hooks 10 and 12:** clear, both detected.
+- **Left hooks 13 and 14:** no left hook was thrown. Not detecting them is correct.
+- **Straights:** rep 8 had no punch. The other three were detected.
+- **Uppercuts:** all three clear, all three detected.
+- **Grabs 1, 4, 6:** open-hand reaches toward the camera, then back to the chest, all detected. Grab 7 was a small motion and is missed.
+- **Throws:** all four are real attempts (reach, turn sideways, bend). None detected yet.
+- **Wind-up jabs:** every big right hook and uppercut still fires one jab first, from the wind-up.
+
+Session 1 has no video, so its strike reps can't be checked this way. Its straights fire small bent-elbow uppercuts, before and after these changes.
+
+**Your camera sits low and looks up** (the ceiling is in view). A punch or reach toward it rises in camera space, and the measured arm extension barely changes. The grab detector now also accepts a wrist rise as the reach. With a camera at eye level, grabs fall back to the original pull-to-the-chest rule.
 
 **What was wrong, and what changed:**
 1. **Moving backward read as forward.**
@@ -26,12 +78,18 @@ Last update: Sun Oct 25, 5:10 AM CDT. Deploy in progress (see the end of this se
      - uppercut: wrist rise ≥ 0.4 m and ≥ 0.75 × the sweep
      - hook: sweep ≥ 0.45 m, or a 35° torso turn (wrapped) with ≥ 0.3 m sweep
    - **Why 0.45 m:** crosses thrown from a bladed stance sweep 0.29–0.41 m, both in your session 1 straights and on the shadowboxing clips. Small strikes keep their old kinds.
+   - **Your exact timing** showed two more losses, both fixed:
+     - the follow-through carries your arms across your face, which read as a block or X forming and held the hook back
+     - the hook lands within 0.32 s of the wind-up jab, inside the same-hand refractory
+
+     Now a big swing faster than 3 m/s fires without waiting on the defensive pose, and may follow a jab inside the refractory.
    - **Labeled clips:** no regression (eval-gestures jab 6 TP, 86% precision; hook 3/3, 0 false). All 13 labeled jabs still fire on the same frame.
 3. **Grab 0/4.** Merged the 4:10 AM jab hold and blast hold (the parallel agent's work). Your real reps still failed for two reasons:
    - **Reach:** your low guard sits at arm extension 0.78, right at the reach threshold. So one arm stayed "reached" from an old rise and never lined up with the other.
    - **Pull:** your grab reaches both hands **up** (wrists +0.39–0.54 m) and pulls down to your guard (extension ~0.65–0.75). It never reaches the chest pose (0.45).
    - **Now, reach:** a fresh rise re-arms an arm.
    - **Now, pull:** after a reach where both arms rose within 0.12 s and both wrists went up ≥ 0.25 m, bringing both arms back ≥ 0.15 to your guard counts as the pull. Both wrists rising together no longer fires a single jab, hook or uppercut.
+   - **Your exact timing:** an arm also counts as reaching when its wrist rises ≥ 0.25 m. A reach is not replaced by the same arm flickering past the threshold. A wrist dropping back counts as coming back.
    - **Result:** grab **0/4 → 3/4**, and false grabs on all 37 real clips stay **0**. Throw is still 0/4 (real-clip throw recall 4%), so grappling stays behind `?grapple=1`.
 4. **Research upload bug:** the server clamped each frame's time to its own clock, and your laptop clock runs ahead, so up to 9 frames shared one millisecond in Tiger. Frames now also store their capture time (`ft`).
 
