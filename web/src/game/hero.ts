@@ -218,6 +218,8 @@ export class HeroFighter {
   /** true when this fighter's arms follow a live pose (local or networked human). */
   livePose = false;
   edgeDist = 99;
+  /** Grappling (behind ?grapple=1): clinched with whom (and holding or held), or reaching for a grab/throw. */
+  grapple: { with: HeroFighter | null; holder: boolean; reaching: HeroFighter | null } = { with: null, holder: false, reaching: null };
   /** Not drawn at all (e.g. the drills' stand-in opponent). */
   hidden = false;
   modelName: HeroModel;
@@ -651,6 +653,8 @@ export class HeroFighter {
 
     // ---- strike: lunge + IK onto the target, contact measurement ----
     this.updateStrike(dt);
+    // ---- grappling: arms onto the other fighter (clinch), or a two-handed reach (grab/throw startup) ----
+    this.applyGrapple(opts.alive && !fullBody);
 
     // ---- body offsets: airborne height, tumble, flinch, lunge ----
     this.flinch = Math.max(0, this.flinch - dt * 3.5);
@@ -754,6 +758,27 @@ export class HeroFighter {
       }
     }
     this.lungeNow = s && s.target ? lungeWant : this.lungeNow * Math.exp(-dt * 10);
+  }
+
+  private grappleW = 0;
+  private applyGrapple(on: boolean) {
+    const g = this.grapple;
+    const other = g.with ?? g.reaching;
+    this.grappleW += ((on && other ? 1 : 0) - this.grappleW) * 0.25;
+    if (this.grappleW < 0.02 || !other) return;
+    const ob = other.bones;
+    for (const side of ['l', 'r'] as const) {
+      const ua = this.bones['upperarm_' + side], la = this.bones['lowerarm_' + side], hd = this.bones['hand_' + side];
+      const anchor = g.with ? (g.holder ? ob.neck_01 : ob.spine_03) : ob.spine_03;
+      if (!ua || !la || !hd || !anchor) continue;
+      const goal = anchor.getWorldPosition(new THREE.Vector3());
+      // Hands either side of the neck / chest, a little toward this fighter.
+      const sideV = new THREE.Vector3(side === 'l' ? 0.13 : -0.13, 0, 0).applyQuaternion(other.root.quaternion);
+      goal.add(sideV);
+      goal.addScaledVector(this.root.getWorldPosition(new THREE.Vector3()).sub(goal).setY(0).normalize(), 0.08);
+      const pole = this.root.localToWorld(new THREE.Vector3(side === 'l' ? 0.6 : -0.6, 0.5, -0.2));
+      twoBoneIK(ua, la, hd, goal, pole, this.grappleW, this.len['ua' + side], this.len['la' + side], 0.07);
+    }
   }
 
   /** Bots/remote fighters without a live pose: forearms up in front of the face. */

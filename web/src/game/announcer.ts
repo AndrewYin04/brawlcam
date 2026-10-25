@@ -115,6 +115,13 @@ export class Announcer {
         if (e.kind === 'ironwall') this.say('ironwall');
         else if (e.kind === 'blast') this.say('blast');
         break;
+      case 'clinch_start' as any:
+        this.say('clinch');
+        break;
+      case 'throw' as any:
+        this.say('throw');
+        sfx.crowdRoar(1);
+        break;
       case 'iron_counter':
         this.say('counter');
         sfx.crowdRoar(0.7);

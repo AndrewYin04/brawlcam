@@ -163,6 +163,17 @@ export class MatchView {
           sfx.sfxPunch(Math.min(1, strength));
           break;
         }
+        case 'throw' as any: {
+          // Shoulder Throw lands: slam on the mat, dust, shake, banner (the announcer calls it).
+          const ev = e as any;
+          const p = new THREE.Vector3(ev.x ?? 0, 0.1, ev.z ?? 0);
+          this.vfx.burst(p, 0xc9b79c, 16, 3, 0.06);
+          this.vfx.groundRing(p, 0xffc53d, 1.0);
+          this.arena.shake = Math.min(1.5, this.arena.shake + 1.0);
+          this.showBanner('SHOULDER THROW!', 1100, true);
+          sfx.sfxPunch(1);
+          break;
+        }
         case 'whiff':
           sfx.sfxWhoosh();
           break;
@@ -170,7 +181,10 @@ export class MatchView {
           const s = this.slots.get(e.id);
           if (!s) break;
           const col = s.snap.color;
-          if (e.kind === 'ironwall') {
+          if ((e.kind as string) === 'throw') {
+            s.avatar.glowBoost = 1.2; // the throw's banner and slam come with the 'throw' event
+            break;
+          } else if (e.kind === 'ironwall') {
             this.vfx.shockwave(s.pos.clone().setY(1), 0xffc53d, 2);
             this.showBanner('IRON WALL!', 900, true);
           } else if (e.kind === 'uppercut') {
@@ -345,6 +359,9 @@ export class MatchView {
             slot.avatar.attack(f.atk.k, f.atk.h, `${f.atk.k}${f.atk.h}${(s.t - f.atk.age).toFixed(2)}`, null);
           }
           const fa = f as any;
+          const clA = fa.cl ? this.slots.get(fa.cl)?.avatar : undefined;
+          const tgA = fa.gr && f.tg != null ? this.slots.get(f.tg)?.avatar : undefined;
+          slot.avatar.grapple = { with: clA instanceof HeroFighter ? clA : null, holder: !!fa.ch, reaching: fa.gr && tgA instanceof HeroFighter ? tgA : null };
           slot.avatar.update(animDt, this.time, { shield: 0, meterFull: f.meter >= 100, airborne: awaitingHit ? 0 : f.y, alive: !!f.alive || awaitingHit, blocking: !!f.b, guard: fa.gd ?? 100, dizzy: (fa.dz ?? 0) > 0, ironWall: (fa.iw ?? 0) > 0 });
         } else {
           slot.avatar.setJoints(joints);
