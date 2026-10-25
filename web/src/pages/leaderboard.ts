@@ -41,7 +41,7 @@ export async function showLeaderboard() {
   players.forEach((p: any, i: number) => {
     const tr = document.createElement('tr');
     if (p.id === me) tr.style.color = 'var(--gold)';
-    for (const v of [String(i + 1), p.nickname, String(p.elo), `${p.wins}-${p.losses}`, String(p.kos), p.fastest_punch ? `${Number(p.fastest_punch).toFixed(1)} m/s` : '-', String(p.dmg_per_min)]) {
+    for (const v of [String(i + 1), p.tag ? `${p.nickname} ${p.tag}` : p.nickname, String(p.elo), `${p.wins}-${p.losses}`, String(p.kos), p.fastest_punch ? `${Number(p.fastest_punch).toFixed(1)} m/s` : '-', String(p.dmg_per_min)]) {
       const td = document.createElement('td');
       td.textContent = v;
       tr.appendChild(td);

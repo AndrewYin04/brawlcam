@@ -137,15 +137,18 @@ export async function flushEvents() {
 setInterval(() => void flushEvents(), 2000).unref();
 
 export async function leaderboard(limit = 25) {
-  return q(
+  // Players have no accounts: identity is a per-browser id, so nicknames can repeat. Shared names get a short tag.
+  const rows = await q(
     `SELECT p.id, p.nickname, p.elo, p.wins, p.losses,
        coalesce(max(l.fastest_punch), 0) AS fastest_punch,
        coalesce(sum(l.kos), 0)::int AS kos,
        CASE WHEN coalesce(sum(l.fight_seconds), 0) > 0 THEN round((sum(l.damage) / (sum(l.fight_seconds) / 60.0))::numeric, 1) ELSE 0 END AS dmg_per_min
+     , count(*) OVER (PARTITION BY lower(p.nickname)) AS name_count
      FROM players p LEFT JOIN leaderboard_daily l ON l.actor = p.id
      GROUP BY p.id ORDER BY p.elo DESC, p.wins DESC LIMIT $1`,
     [limit],
   );
+  return rows?.map((r: any) => ({ ...r, name_count: undefined, tag: Number(r.name_count) > 1 ? '#' + String(r.id).slice(0, 4) : null })) ?? null;
 }
 
 export async function getPlayer(id: string) {
