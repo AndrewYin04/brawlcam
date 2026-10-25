@@ -20,7 +20,9 @@ import { execFileSync } from 'child_process';
 const ROOT = path.resolve(import.meta.dirname, '../..');
 const V = path.join(ROOT, 'video/out');
 const PUB = path.join(V, 'v2pub.mp4'); // the published demo-video-v2 release asset
-const OUT = path.join(V, 'v4');
+// V5=1 (REVIEW.md 10:54 AM): the same build with only the Shoulder Throw shot re-recorded with the new animation.
+const V5 = !!process.env.V5;
+const OUT = path.join(V, V5 ? 'v5' : 'v4');
 fs.mkdirSync(path.join(OUT, 'seg'), { recursive: true });
 const ff = (args: string[]) => execFileSync('ffmpeg', ['-loglevel', 'error', '-y', ...args], { stdio: ['ignore', 'inherit', 'inherit'] });
 const dur = (f: string) => Number(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', f]).toString().trim());
@@ -53,7 +55,7 @@ const WEBCAM = path.join(V, 'research-s2/s2.mp4');
 const insert = [
   { src: 'v3_kick', ss: 0.8, d: 2.6, callout: 'callout_kick.mov', at: 0.2 },
   { src: 'v3_grab', ss: 0.6, d: 3.4, callout: 'callout_grabknee.mov', at: 0.3, pip: W0('user_grab') },
-  { src: 'v3_throw', ss: 1.2, d: +(M - 6.0).toFixed(3), callout: 'callout_throw.mov', at: 0.2 },
+  { src: V5 ? 'v5_throw' : 'v3_throw', ss: 1.2, d: +(M - 6.0).toFixed(3), callout: 'callout_throw.mov', at: 0.2 },
 ];
 const TOTAL = dur(PUB);
 const outT = (pubT: number) => (pubT >= INS_AT - 0.001 ? pubT + INS : pubT); // published time -> v4 time (pub < 49.9 unchanged)
@@ -139,7 +141,7 @@ if (GRAPPLE_BETA) out.push(`Dialogue: 1,${ts(CUT_FROM + 2.6)},${ts(CUT_FROM + M)
 const assV3 = path.join(OUT, 'captions-replaced.ass');
 fs.writeFileSync(assV3, out.join('\n'));
 
-const final = path.join(OUT, 'throwhands-demo-v4.mp4');
+const final = path.join(OUT, V5 ? 'throwhands-demo-v5.mp4' : 'throwhands-demo-v4.mp4');
 ff(['-i', silent, '-i', path.join(V, 'v2/audio-v4.m4a'), '-vf', `subtitles=${assV3}`, '-map', '0:v', '-map', '1:a', '-c:v', 'libx264', '-preset', 'medium', '-crf', '19', '-pix_fmt', 'yuv420p', '-c:a', 'copy', '-movflags', '+faststart', '-shortest', final]);
 fs.writeFileSync(path.join(OUT, 'replaced.json'), JSON.stringify(reps.map((r) => ({ from: +r.start.toFixed(2), to: +r.end.toFixed(2), what: r.what, source: r.file ? path.basename(r.file) : `${r.src} from ${r.ss}s` })), null, 1));
 console.log('wrote', final, dur(final).toFixed(2) + ' s; replaced:', reps.map((r) => `${r.start.toFixed(2)}-${r.end.toFixed(2)}`).join(', '));

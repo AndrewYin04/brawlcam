@@ -6,6 +6,5 @@ const params = new URLSearchParams(typeof location !== 'undefined' ? location.se
  * rooms keep it off. It turns on both the sim's grappling (SimConfig.grapple) and the recognizer's grapple-only strike
  * rules (GestureRecognizer.grappleEnabled). To turn grappling on by default, make the absent parameter mean on here.
  */
-// Opt-in (?grapple=1). The 8:15–10:08 AM default-on trial was rolled back: the full e2e suite did not fully pass on the
-// live default build (REVIEW.md 7:45 AM condition 3; the 8-browser brawl sync p95 133 ms > 100, see STATUS.md).
-export const GRAPPLE = params.has('grapple') && !['0', 'false', 'off'].includes(params.get('grapple') ?? '');
+// On by default since Oct 25 11:08 AM (REVIEW.md 10:59 AM, the user's call); ?grapple=0 turns it off.
+export const GRAPPLE = !['0', 'false', 'off'].includes(params.get('grapple') ?? '');
