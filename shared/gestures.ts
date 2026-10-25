@@ -108,9 +108,10 @@ export const GESTURE_CFG = {
 };
 
 /**
- * Grappling gestures (planner spec 2026-10-25 2:50 AM, section B). Detected independently of every other move: the
- * detector only reads features and appends 'grab' / 'throw' actions after all other detection has run, so it cannot
- * change any existing action, guard, X, movement or turn output. The sim ignores both actions unless SimConfig.grapple.
+ * Grappling gestures (planner spec 2026-10-25 2:50 AM, section B). The detector only reads features and its 'grab' /
+ * 'throw' actions are appended after all other detection. The sim ignores both actions unless SimConfig.grapple.
+ * Its reach state also feeds two strike rules (jab hold, energy-blast hold; see jabHold* / blastHold* below) that keep a
+ * two-arm reach from firing a jab or a blast; those apply with or without SimConfig.grapple.
  */
 export const GRAPPLE_CFG = {
   // Reach: both arms extend forward together.
@@ -133,6 +134,30 @@ export const GRAPPLE_CFG = {
   throwSquareDeg: 40, // the reach starts squared up to the opponent (|yaw| within this): untwisting is not a throw
   throwHold: 0.06, // s the twisted-and-hinged pose must persist
   throwRefractory: 1.2, // s between throws
+  // Keeping a grab's reach from reading as a jab or an energy blast (planner direction 2026-10-25, item 2). These two
+  // rules apply whether or not SimConfig.grapple is on: they change only what the recognizer emits for two-arm motions.
+  // Jab hold: a jab is one arm. If, when a jab would fire, the jab arm is out at reach length and the OTHER arm is past
+  // jabHoldProgress of the way to qualifying as a reaching arm and still extending, the jab is held for up to reachSync.
+  // It fires as soon as the second arm stops short, the jab arm comes back, or the window ends; it is dropped if the two
+  // arms form a reach. Single-arm jabs (other arm not extending) are not held, so their latency is unchanged.
+  jabHoldProgress: 0.5, // fraction of the way from the arm's recent low to max(reachExt, low + reachRise)
+  jabHoldRate: 1.5, // extension per second the other arm must exceed to be "still rising" (GESTURE_CFG.extRate). A rate
+  // of 0 also held real single jabs whose rear hand drifts forward (shadow_fighterD, ufc_03/05/07: +33-133 ms); at 1.5 no
+  // retained jab on any clip is delayed. The synchronous reach (second arm already at full extension) is reachElbowMin's job.
+  // The other arm's elbow must be open at least this much (GESTURE_CFG.elbowOpenMin, what a jab needs) for it to count
+  // as extending; held palms also keep both elbows at least this open. Measured: on jab_01 the rear hand drifts forward during the jab
+  // (extension 0.68 -> 0.80, enough to pass the reach extension test) with its elbow bent at ~100 deg.
+  holdElbowMin: 105,
+  // Both arms out together in a fresh reach (GrappleDetector reach, both elbows at least this straight) when a jab would
+  // fire: the jab is part of a two-arm move and fires nothing (it may still become a held energy blast). 140 dropped
+  // real one-twos on shadow_fighterF (elbows 142/145); the synthetic reach is ~180/180.
+  reachElbowMin: 150,
+  // Energy blast hold: the palms must stay out (both extensions >= blastHoldExt, elbows >= holdElbowMin, wrists forward
+  // by blastHoldFwd) for blastHold before the blast fires; a pending blast is cancelled by the pull-in pose
+  // (pullExt / pullGap) or as soon as the palms are not held out.
+  blastHold: 0.3, // s
+  blastHoldExt: 0.75, // a held palm push measures ~0.85-0.9 on palmpush_02; the guard sits ~0.65-0.75
+  blastHoldFwd: 0.7, // wrists in front of their shoulders by this fraction of arm length (held push ~0.8, guard ~0.6)
 };
 
 export interface GrappleFeatures {
@@ -163,6 +188,31 @@ export class GrappleDetector {
     this.wasReach = { L: false, R: false };
     this.hist = [];
     this.reach = null;
+  }
+
+  /**
+   * Arm h (current extension ext, extension rate per second) is past jabHoldProgress of the way to qualifying as a
+   * reaching arm and still extending. Reads the history of the latest update() (call update() for this frame first).
+   */
+  armRising(h: 'L' | 'R', ext: number, rate: number): boolean {
+    const c = this.cfg;
+    if (!(rate > c.jabHoldRate)) return false;
+    let lo = ext;
+    for (const x of this.hist) lo = Math.min(lo, x[h]);
+    const target = Math.max(c.reachExt, lo + c.reachRise);
+    return (ext - lo) / Math.max(1e-3, target - lo) >= c.jabHoldProgress;
+  }
+
+  /** The two arms formed a reach at or after time t0 and are both still out. */
+  reachSince(t0: number): boolean {
+    return !!this.reach && this.reach.t >= t0 && this.reach.releasedAt < 0;
+  }
+
+  /** Extension arm h must pass to count as reaching (given its recent low). */
+  reachTarget(h: 'L' | 'R', ext: number): number {
+    let lo = ext;
+    for (const x of this.hist) lo = Math.min(lo, x[h]);
+    return Math.max(this.cfg.reachExt, lo + this.cfg.reachRise);
   }
 
   update(f: GrappleFeatures): ('grab' | 'throw')[] {
@@ -273,6 +323,10 @@ export class GestureRecognizer {
   private lastStrike: Record<string, number> = { L: -9, R: -9, kickL: -9, kickR: -9 };
   private lastCandidate: Record<string, number> = {};
   private pending: { hand: 'L' | 'R'; a: Action; t: number } | null = null;
+  /** A jab held while the other arm may be joining it in a two-arm reach (GRAPPLE_CFG.jabHold*). t = when held. */
+  private jabHold: { hand: 'L' | 'R'; a: Action & { t: number }; t: number } | null = null;
+  /** A two-palm push waiting to be held out for GRAPPLE_CFG.blastHold before it fires the energy blast. */
+  private blastPending: { a: Action & { t: number }; since: number } | null = null;
   private blockOnAt = -1;
   private blockOffAt = -1;
   private blocking = false;
@@ -336,6 +390,8 @@ export class GestureRecognizer {
     this.renderFilter.reset();
     this.gestFilter.reset();
     this.pending = null;
+    this.jabHold = null;
+    this.blastPending = null;
     this.blocking = false;
     this.xshield = false;
     this.xHigh = false;
@@ -572,21 +628,74 @@ export class GestureRecognizer {
     const suppressAll = this.blocking || this.xshield || t < this.legsBusyUntil;
     if (this.debugLog && byHand.size) this.debugLog.push(`${t.toFixed(2)} byHand ${[...byHand.values()].map((c) => c.kind + c.hand).join(',')} suppress=${suppressAll} (block ${this.blocking} x ${this.xshield} legs ${t < this.legsBusyUntil}) defensiveEnd=${defensiveEnd} pending=${!!this.pending}`);
     const otherSpeed = (h: 'L' | 'R') => handInfo.find((x) => x.h !== h)!.speed;
+    const info = (h: 'L' | 'R') => (h === 'L' ? handInfo[0] : handInfo[1]);
+    const gc = this.grapple.cfg;
+    // Grapple features are read here so the jab / blast rules below see this frame's reach state. The detector only reads
+    // features, so running it before strike emission does not change its output; its actions are appended at the end.
+    const midHipG = mid(P[J.lHip], P[J.rHip]);
+    const yawG = Math.atan2(-(lS[2] - rS[2]), lS[0] - rS[0]);
+    const grappleActs = this.grapple.update({ t, extL: hL.ext, extR: hR.ext, gap: len(sub(lW, rW)), sw: SW, yaw: yawG, shH: MS[1] - midHipG[1], torso: len(sub(MS, midHipG)) });
+    const nBefore = out.actions.length;
+    const held: (Action & { t: number })[] = []; // strikes taken out of the stream this frame (they keep the hand refractory)
+    const palmShape = () => wristsGap < this.cfg.palmMaxGap && ry(lW) < noseY - 0.05 && ry(rW) < noseY - 0.05;
+    // Both arms are out together, straight, in a reach that formed at or after t0: a two-arm move, not a jab.
+    const bothOut = (t0: number) => this.grapple.reachSince(t0) && Math.min(hL.elbow, hR.elbow) >= gc.reachElbowMin;
+    // A jab turned out to be one arm of a two-arm reach: fire nothing for it. If the arms are in the palm-push shape, it
+    // may still become the energy blast, which must then be held out for blastHold (and is cancelled by a pull-in).
+    const twoArm = (a: Action & { t: number }, why: string) => {
+      if (this.debugLog) this.debugLog.push(`${t.toFixed(2)} jab${a.hand} dropped: ${why} (elbows ${hL.elbow.toFixed(0)}/${hR.elbow.toFixed(0)})`);
+      this.lastStrike.L = this.lastStrike.R = t;
+      if (!defensiveEnd && palmShape() && !this.blastPending) this.blastPending = { a: { kind: 'palm', hand: 'B', speed: a.speed, t }, since: t };
+    };
+    // A single-hand strike is about to fire. A jab is one arm: if its arm is out at reach length while the other arm is
+    // past jabHoldProgress of a reach and still extending, hold it (resolved below); if both arms are already out
+    // together in a fresh reach, it is part of that reach.
+    const emitSingle = (a: Action & { t: number }) => {
+      if (a.kind === 'jab' && (a.hand === 'L' || a.hand === 'R')) {
+        const o = a.hand === 'L' ? 'R' : 'L';
+        if (bothOut(t - gc.reachSync)) return twoArm(a, 'both arms out in a reach');
+        if (info(a.hand).ext >= gc.reachExt && info(o).elbow >= gc.holdElbowMin && this.grapple.armRising(o, info(o).ext, info(o).extRate)) {
+          if (this.debugLog) this.debugLog.push(`${t.toFixed(2)} jab${a.hand} held: other arm rising (ext ${info(o).ext.toFixed(2)} rate ${info(o).extRate.toFixed(2)})`);
+          this.jabHold = { hand: a.hand, a, t };
+          held.push(a);
+          return;
+        }
+      }
+      out.actions.push(a);
+    };
     const decideBilateral = (a: (typeof candidates)[number], b: { hand: 'L' | 'R'; a: Action; t: number } | (typeof candidates)[number]) => {
       const bAction: Action = 'a' in b ? b.a : { kind: b.kind, hand: b.hand, speed: b.speed };
       if (defensiveEnd) return; // raising both arms into a block or X
       if (a.kind === 'jab' && bAction.kind === 'jab' && wristsGap < this.cfg.palmMaxGap && ry(lW) < noseY - 0.05 && ry(rW) < noseY - 0.05) {
-        out.actions.push({ kind: 'palm', hand: 'B', speed: Math.max(a.speed, bAction.speed), t });
+        // Two palms pushed out: the energy blast fires only once they have been held out for blastHold.
+        const palm = { kind: 'palm' as const, hand: 'B' as Hand, speed: Math.max(a.speed, bAction.speed), t };
+        this.blastPending = { a: palm, since: t };
+        held.push(palm);
         return;
       }
       // Two different strikes at once: keep the stronger one.
       const keep = a.speed >= bAction.speed ? { kind: a.kind, hand: a.hand as Hand, speed: a.speed } : bAction;
-      out.actions.push({ ...keep, t });
+      emitSingle({ ...keep, t });
     };
     const cands = [...byHand.values()];
     // Any candidate blocks the same hand briefly (one motion, one decision); the full refractory starts only when a strike is emitted.
     for (const c of cands) this.lastCandidate[c.hand] = c.t;
-    const nBefore = out.actions.length;
+    // ---- held jab: resolve before this frame's candidates ----
+    if (this.jabHold) {
+      const jh = this.jabHold;
+      const o = jh.hand === 'L' ? 'R' : 'L';
+      if (suppressAll) this.jabHold = null;
+      else if (bothOut(jh.t - gc.reachSync)) {
+        // The second arm followed into a reach: fire nothing.
+        this.jabHold = null;
+        twoArm(jh.a, 'held jab became a reach');
+      } else if (t - jh.t >= gc.reachSync || info(jh.hand).ext < gc.reachExt || (info(o).extRate <= 0 && info(o).ext < this.grapple.reachTarget(o, info(o).ext))) {
+        // Window over, the jab arm came back, or the other arm stopped short: it was a one-arm jab.
+        if (this.debugLog) this.debugLog.push(`${t.toFixed(2)} held jab${jh.hand} fired`);
+        this.jabHold = null;
+        out.actions.push(jh.a);
+      }
+    }
     if (suppressAll) {
       this.pending = null;
     } else if (cands.length === 2) {
@@ -594,7 +703,12 @@ export class GestureRecognizer {
       decideBilateral(cands[0], cands[1]);
     } else if (cands.length === 1) {
       const c = cands[0];
-      if (this.pending && this.pending.hand !== c.hand && t - this.pending.t <= this.cfg.palmPairWindow) {
+      if (this.jabHold && this.jabHold.hand !== c.hand) {
+        // The other arm struck too while the jab was held: decide them together.
+        const jh = this.jabHold;
+        this.jabHold = null;
+        decideBilateral(c, { hand: jh.hand, a: jh.a, t: jh.t });
+      } else if (this.pending && this.pending.hand !== c.hand && t - this.pending.t <= this.cfg.palmPairWindow) {
         const p = this.pending;
         this.pending = null;
         decideBilateral(c, p);
@@ -602,15 +716,29 @@ export class GestureRecognizer {
         // The other hand is moving too: wait briefly to see if this is a two-handed move.
         this.pending = { hand: c.hand, a: { kind: c.kind, hand: c.hand, speed: c.speed }, t };
       } else {
-        out.actions.push({ kind: c.kind, hand: c.hand, speed: c.speed, t: c.t });
+        emitSingle({ kind: c.kind, hand: c.hand, speed: c.speed, t: c.t });
       }
     }
     if (this.pending && t - this.pending.t > this.cfg.palmPairWindow) {
       // Window passed with no partner: emit unless the arms ended in a defensive pose.
-      if (!defensiveEnd && !this.blocking && !this.xshield) out.actions.push({ ...this.pending.a, t: this.pending.t });
+      const p = this.pending;
       this.pending = null;
+      if (!defensiveEnd && !this.blocking && !this.xshield) emitSingle({ ...p.a, t: p.t });
     }
-    for (const a of out.actions.slice(nBefore)) {
+    // ---- pending energy blast ----
+    if (this.blastPending) {
+      const bp = this.blastPending;
+      const pulledIn = hL.ext < gc.pullExt && hR.ext < gc.pullExt && len(sub(lW, rW)) < gc.pullGap * SW;
+      const fwd = Math.min(hL.W[2] - hL.S[2], hR.W[2] - hR.S[2]) / this.calib.armLen;
+      if (suppressAll || pulledIn || Math.min(hL.ext, hR.ext) < gc.blastHoldExt || Math.min(hL.elbow, hR.elbow) < gc.holdElbowMin || fwd < gc.blastHoldFwd) {
+        if (this.debugLog) this.debugLog.push(`${t.toFixed(2)} blast cancelled: ${pulledIn ? 'pull-in pose' : suppressAll ? 'suppressed' : `palms not held out (ext ${Math.min(hL.ext, hR.ext).toFixed(2)} elbow ${Math.min(hL.elbow, hR.elbow).toFixed(0)} fwd ${fwd.toFixed(2)})`}`);
+        this.blastPending = null;
+      } else if (t - bp.since >= gc.blastHold) {
+        this.blastPending = null;
+        out.actions.push(bp.a);
+      }
+    }
+    for (const a of [...held, ...out.actions.slice(nBefore)]) {
       if (a.hand === 'L' || a.hand === 'R') this.lastStrike[a.hand] = a.t;
       else if (a.hand === 'B') this.lastStrike.L = this.lastStrike.R = a.t;
     }
@@ -776,10 +904,8 @@ export class GestureRecognizer {
       this.turnSince = -1;
     }
 
-    // ---- grappling (after everything else, so it cannot affect any other output) ----
-    for (const k of this.grapple.update({ t, extL: handInfo[0].ext, extR: handInfo[1].ext, gap: len(sub(lW, rW)), sw: SW, yaw, shH: MS[1] - midHip[1], torso: len(sub(MS, midHip)) })) {
-      out.actions.push({ kind: k, hand: 'B', speed: 0, t });
-    }
+    // ---- grappling: detected before strike emission (grappleActs), appended last ----
+    for (const k of grappleActs) out.actions.push({ kind: k, hand: 'B', speed: 0, t });
 
     out.debug = { yaw, lean, ratio, stepFwd, leanFwd, leanZ: leanZ - (this.calib.leanZ ?? 0), size: this.sizeS, spot: this.sizeBase ?? 0, quiet: t < this.moveQuietUntil ? 1 : 0, fwdRaw: fwd, strafeRaw: strafe, torso: torsoImgDbg, lExt: handInfo[0].ext, rExt: handInfo[1].ext, lEl: handInfo[0].elbow, rEl: handInfo[1].elbow, lSp: handInfo[0].speed, rSp: handInfo[1].speed };
     return out;
@@ -789,6 +915,12 @@ export class GestureRecognizer {
     if (this.pending && (force || t - this.pending.t > this.cfg.palmPairWindow)) {
       out.actions.push({ ...this.pending.a, t: this.pending.t });
       this.pending = null;
+    }
+    if (force) {
+      // Tracking lost: a held jab fires like a pending strike; a blast that was not held out for long enough does not.
+      if (this.jabHold) out.actions.push(this.jabHold.a);
+      this.jabHold = null;
+      this.blastPending = null;
     }
   }
 
