@@ -2,8 +2,9 @@
 // with the same live guard calibration as the game, and scores every drill rep the way drills.ts does:
 //   movement rep ✓ = move held past ±0.3 in the prompted direction for 0.3 s; strike rep ✓ = the prompted kind/hand fired.
 // Prints per-label signed means (fwd, strafe), the share of frames with the right sign, and reps detected.
-// Usage: npx tsx tests/tools/drill-replay.ts [session ...] [--recorded] [--json out.json]
+// Usage: npx tsx tests/tools/drill-replay.ts [session ...] [--recorded] [--grapple] [--reps] [--json out.json]
 //   --recorded  score the move/actions the live game recorded instead of replaying (fidelity check).
+//   --grapple   replay with GestureRecognizer.grappleEnabled (the game with ?grapple=1); default off, like the default build.
 import fs from 'fs';
 import path from 'path';
 import { GestureRecognizer, type LM } from '../../shared/gestures';
@@ -101,10 +102,11 @@ export function table(r: ReturnType<typeof replay>) {
 if (import.meta.url === `file://${process.argv[1]}`) {
   const args = process.argv.slice(2);
   const recorded = args.includes('--recorded');
+  const grapple = args.includes('--grapple');
   const jsonOut = args.includes('--json') ? args[args.indexOf('--json') + 1] : null;
   const names = args.filter((a, i) => !a.startsWith('--') && args[i - 1] !== '--json');
   const files = (names.length ? names : fs.readdirSync(path.join(ROOT, 'clips/research')).map((f) => f.replace('.json', ''))).map((n) => path.join(ROOT, 'clips/research', n.endsWith('.json') ? n : n + '.json'));
-  const all = files.map((f) => replay(f, { recorded }));
+  const all = files.map((f) => replay(f, { recorded, configure: grapple ? (r) => (r.grappleEnabled = true) : undefined }));
   for (const r of all) console.log(table(r) + '\n');
   if (args.includes('--reps')) for (const r of all) for (const st of r.stats) if (st.perRep.length && st.perRep.some((x) => x.got.length || !x.ok)) console.log(r.name.slice(0, 8), st.label.padEnd(13), st.perRep.map((x) => `r${x.rep}${x.ok ? '✓' : '✗'}[${x.got.join(' ')}]`).join('  '));
   if (jsonOut) fs.writeFileSync(jsonOut, JSON.stringify(all, null, 1));

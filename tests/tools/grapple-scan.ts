@@ -1,8 +1,10 @@
 // Runs the real GestureRecognizer over every clips/landmarks/*.json (first tracked person, calibrated from the clip like
 // eval-gestures.ts) and reports grab / throw detections. None of the clips contains a deliberate grab or shoulder throw,
 // so every detection on a single-person clip is a false trigger. The ufc_* / duo_* clips are real two-person footage
-// and may contain genuine clinches; they are reported separately.
-// Usage: npx tsx tests/tools/grapple-scan.ts [--verbose] [--json]
+// and may contain genuine clinches; they are reported separately. Clips cut from the user's grab drill reps (name contains
+// "grab", e.g. user_grab from session 2dd3adbd for the v3 video) are deliberate grabs, also reported separately.
+// Usage: npx tsx tests/tools/grapple-scan.ts [--verbose] [--json] [--grapple]
+//   --grapple  run with GestureRecognizer.grappleEnabled (the game with ?grapple=1); default off.
 import fs from 'fs';
 import path from 'path';
 import { GestureRecognizer, type LM } from '../../shared/gestures';
@@ -13,9 +15,13 @@ const verbose = process.argv.includes('--verbose');
 
 export interface ScanRow { clip: string; people: number; frames: number; grab: number[]; throw: number[]; palm: number[] }
 
-export function scanClip(file: string): ScanRow {
+/** A clip of deliberate grab reps (not a false-trigger check). */
+export const isGrabClip = (clip: string) => /grab/i.test(clip);
+
+export function scanClip(file: string, grapple = false): ScanRow {
   const data = JSON.parse(fs.readFileSync(file, 'utf8')) as { frames: { t: number; people: { image: LM[]; world: LM[] }[] }[] };
   const rec = new GestureRecognizer();
+  rec.grappleEnabled = grapple;
   const sw: number[] = [];
   const arm: number[] = [];
   const isw: number[] = [];
@@ -45,21 +51,23 @@ export function scanClip(file: string): ScanRow {
   return row;
 }
 
-export function scanAll(): ScanRow[] {
-  return fs.readdirSync(DIR).filter((f) => f.endsWith('.json')).sort().map((f) => scanClip(path.join(DIR, f)));
+export function scanAll(grapple = false): ScanRow[] {
+  return fs.readdirSync(DIR).filter((f) => f.endsWith('.json')).sort().map((f) => scanClip(path.join(DIR, f), grapple));
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(import.meta.filename)) {
-  const rows = scanAll();
+  const rows = scanAll(process.argv.includes('--grapple'));
   let single = { grab: 0, throw: 0 };
   let multi = { grab: 0, throw: 0 };
+  let deliberate = { grab: 0, throw: 0 };
   for (const r of rows) {
-    const bucket = r.people > 1 ? multi : single;
+    const bucket = isGrabClip(r.clip) ? deliberate : r.people > 1 ? multi : single;
     bucket.grab += r.grab.length;
     bucket.throw += r.throw.length;
     if (verbose || r.grab.length || r.throw.length)
       console.log(`${r.clip.padEnd(16)} people ${r.people} frames ${String(r.frames).padStart(4)}  grab ${r.grab.length}${r.grab.length ? ' @' + r.grab.join(',') : ''}  throw ${r.throw.length}${r.throw.length ? ' @' + r.throw.join(',') : ''}`);
   }
-  console.log(`\n${rows.length} clips. Single-person clips (all are false triggers): grab ${single.grab}, throw ${single.throw}. Two-person clips (may be real clinches): grab ${multi.grab}, throw ${multi.throw}.`);
+  const nGrab = rows.filter((r) => isGrabClip(r.clip)).length;
+  console.log(`\n${rows.length - nGrab} clips. Single-person clips (all are false triggers): grab ${single.grab}, throw ${single.throw}. Two-person clips (may be real clinches): grab ${multi.grab}, throw ${multi.throw}.${nGrab ? ` Deliberate grab clips (${nGrab}, not false triggers): grab ${deliberate.grab}, throw ${deliberate.throw}.` : ''}`);
   if (process.argv.includes('--json')) console.log(JSON.stringify(rows));
 }

@@ -255,6 +255,39 @@ is not met**: throw 4% on real drills, grab unmeasured. `?grapple=1` stays opt-i
   - **Energy blast** failed 2 of 2 runs, a stale test. A probe of 60 s on production: the scripted blocker was guard-broken 6 times and KO'd, and the one blast landed unguarded. The e2e now checks that the blast fires, travels and lands. Blocked-blast damage (10%) and guard drain (50) stay asserted in `tests/unit/guard-meter.ts`.
   - **Commentator mute:** the e2e now drives the volume panel (the sound button opens it since the audio work); PASS on production.
 
+## Grab tuning loop, grapple-only strike rules (REVIEW.md 6:35 / 6:40 AM, Sun Oct 25 8:50 AM)
+
+`GestureRecognizer.grappleEnabled` (default false; the app sets it from `?grapple=1` via `web/src/flags.ts` for local
+modes, online forces it off). With it off nothing new runs: `eval-gestures`, `jab-latency`, `grapple-scan` (per-clip
+detections) and `drill-replay --reps` on all three sessions are **byte-identical** to HEAD a3758c1 (diffed against a
+`git archive` copy of HEAD run on the same data). Every tool takes `--grapple` to replay with it on. Scorer:
+`tests/tools/grab-score.ts` (each grab rep = grab / strike-instead / nothing, plus "clean" = no strike in the rep window).
+
+Tuning session **ea6e2541**; **2dd3adbd held out** (also scored once mid-loop; no parameter was chosen from it). Neither
+is a truly fresh session: the 05:20 and 06:11 grab tuning used both. 4 grab reps each, too few for a % target.
+
+| iteration | change (grapple on only) | ea6e2541 grab / strike-instead / nothing; clean | 2dd3adbd (held out) | side effects |
+|---|---|---|---|---|
+| 0 (HEAD) | - | 3/4 / 1 / 0; clean 1/4 | 4/4 / 0 / 0; clean 2/4 | - |
+| 1 | drop a strike 0.6 s after a grab; drop a strike when both arms rose into a reach within 0.12 s and are still out (other elbow >= 105) | 3/4 / 1 / 0; clean 1/4 | 4/4; clean 3/4 | big hooks lost: 2dd3adbd hook_R 3/4 -> 1/4, hook_L 2/4 -> 1/4; ea6e2541 hook_L 4/4 -> 3/4 |
+| 2 | the sync-reach rule only when the torso turned < 35 deg in the strike window (big hooks turn 70-120) | same | same | hook reps back to HEAD |
+| 2b | 50 deg instead of 35 (to drop ea6e2541 grab 1's hook R, 43 deg turn) | same | - | ea6e2541 hook_L rep 14 lost: reverted |
+| 3 | a dropped strike still counts as arm activity for movement | same | same | - |
+
+Final per grab rep (grapple on): ea6e2541 r1 grab + jabR hookR before it (R arm alone, then a 43 deg turning lunge that
+reads as a hook), r3 strike-instead (uppercutR jabL; strikes 4 -> 2; the user's grab came 3.3-3.5 s after the prompt,
+after the window), r4 grab + jabL 1.5 s later (reach sync 0.20 s, outside 0.12), r8 clean. 2dd3adbd r1, r4, r7 clean
+(r7's post-grab jabR gone), r6 grab + jabL 0.19 s into the rep (small two-arm lift, other elbow 99 < 105; its post-grab
+jabR gone). Grab detected **ea6e2541 3/4 (75%)**, **2dd3adbd 4/4 (100%)**; strike instead 1/4 and 0/4; nothing 0/4
+and 0/4. The >= 90% / <= 5% target is **not met on ea6e2541** (with 4 reps, 90% needs 4/4).
+
+False grabs: 0 on the 37 clips and the 9 user clips, grappling off and on; drill negatives 1/117 (fda75d56 hook_R_big
+r10, as at HEAD). `clips/landmarks/user_grab.json` (cut from 2dd3adbd's grab reps for the v3 video, added 07:59) holds
+deliberate grabs; grapple-scan and `tests/unit/grapple-gestures.ts` now report it separately, not as a false trigger.
+Grapple on vs HEAD: eval-gestures TP/FN unchanged for every move, jab FP 1 -> 0 (walkout_01); labeled jab latency
+unchanged (n 13, mean 46 ms); 9 unlabeled jabs dropped (3 in user_grab); drill strike reps unchanged except
+fda75d56 straight_big r14's wrong uppercutR hookR (still a miss) and a 0.11 strafe blip after it.
+
 ## Bugs found by these tests (reproduced first, fixed, re-run)
 
 | Bug | Repro | Root cause | Fix | Regression test |

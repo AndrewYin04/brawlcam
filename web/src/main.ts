@@ -12,11 +12,10 @@ import { research } from './research';
 import * as sfx from './game/audio';
 import { Commentator, setMuted, isMuted, commentaryLog, setVoiceGate, setRoastPlayer } from './game/commentary';
 import type { SimEvent } from '../../shared/sim';
+import { GRAPPLE } from './flags';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const params = new URLSearchParams(location.search);
-/** Grappling beta (grab, clinch, Shoulder Throw) for local modes: ?grapple=1. Online rooms keep it off. */
-const GRAPPLE = params.has('grapple') && !['0', 'false', 'off'].includes(params.get('grapple') ?? '');
 const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
 if (params.has('clean')) document.body.classList.add('clean');
 
@@ -50,6 +49,8 @@ export const hooks = {
   turns: 0,
   projLog: [] as number[][],
   roster: null as any,
+  /** GestureRecognizer.grappleEnabled per local player (the recognizer's grapple-only rules follow ?grapple=1). */
+  grappleEnabled: () => pose?.recognizers.map((r) => r.grappleEnabled) ?? null,
 };
 (window as any).__brawl = hooks;
 window.addEventListener('error', (e) => hooks.errors.push(String(e.message)));
@@ -249,6 +250,8 @@ export async function startMode(mode: string) {
   if (!demo) {
     pendingStart = () => startMode(mode);
     if (!(await ensureCamera(players))) return;
+    // Local modes: the recognizer's grapple-only rules follow the sim's grappling (SimConfig.grapple, set below).
+    pose?.setGrapple(GRAPPLE);
   }
   const me = { name: nickname(), color: myColor() };
   // Test/tuning overrides: ?roundsecs=20&meter=100&botlevel=-1|0|1|2|3

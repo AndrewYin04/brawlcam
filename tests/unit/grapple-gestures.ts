@@ -11,7 +11,7 @@
 import fs from 'fs';
 import path from 'path';
 import { GestureRecognizer, GRAPPLE_CFG, type LM } from '../../shared/gestures';
-import { scanAll } from '../tools/grapple-scan';
+import { scanAll, isGrabClip } from '../tools/grapple-scan';
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
 let fail = false;
@@ -20,9 +20,10 @@ const check = (ok: boolean, msg: string) => {
   if (!ok) fail = true;
 };
 
-// ---------- 1. every real clip: zero grab / throw ----------
-{
-  const rows = scanAll();
+// ---------- 1. every real clip: zero grab / throw (with grappling off, and on: GestureRecognizer.grappleEnabled) ----------
+// Clips cut from the user's grab drill reps (isGrabClip, e.g. user_grab) contain deliberate grabs and are skipped here.
+for (const grapple of [false, true]) {
+  const rows = scanAll(grapple).filter((r) => !isGrabClip(r.clip));
   let grabs = 0;
   let throws = 0;
   for (const r of rows) {
@@ -31,10 +32,11 @@ const check = (ok: boolean, msg: string) => {
     if (r.grab.length || r.throw.length) console.log(`     ${r.clip}: grab @${r.grab.join(',') || '-'} throw @${r.throw.join(',') || '-'}`);
   }
   const palmClips = rows.filter((r) => r.clip.startsWith('palmpush')).map((r) => `${r.clip} palm x${r.palm.length}`);
-  check(rows.length >= 30, `scanned ${rows.length} landmark clips`);
-  check(grabs === 0, `no grab false triggers on real clips (got ${grabs})`);
-  check(throws === 0, `no throw false triggers on real clips (got ${throws})`);
-  console.log(`     (recognizer palm detections on the energy-blast clips: ${palmClips.join(', ')})`);
+  const tag = grapple ? ' (grappleEnabled)' : '';
+  check(rows.length >= 30, `scanned ${rows.length} landmark clips${tag}`);
+  check(grabs === 0, `no grab false triggers on real clips${tag} (got ${grabs})`);
+  check(throws === 0, `no throw false triggers on real clips${tag} (got ${throws})`);
+  console.log(`     (recognizer palm detections on the energy-blast clips${tag}: ${palmClips.join(', ')})`);
 }
 
 // ---------- synthetic sequences from a real guard clip ----------

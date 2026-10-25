@@ -1,6 +1,7 @@
 // Replays dumped clip landmarks through the real GestureRecognizer and scores it against
 // clips/groundtruth.json (events within ±300 ms). Prints per-move precision and recall.
-// Usage: npx tsx tests/tools/eval-gestures.ts [--verbose] [name ...]
+// Usage: npx tsx tests/tools/eval-gestures.ts [--verbose] [--grapple] [name ...]
+//   --grapple  run with GestureRecognizer.grappleEnabled (the game with ?grapple=1); default off, like the default build.
 import fs from 'fs';
 import path from 'path';
 import { GestureRecognizer, type LM } from '../../shared/gestures';
@@ -10,6 +11,7 @@ const CLIPS = path.join(ROOT, 'clips');
 const TOL = 0.3;
 const args = process.argv.slice(2);
 const verbose = args.includes('--verbose');
+const grapple = args.includes('--grapple');
 const only = args.filter((a) => !a.startsWith('--'));
 
 interface GtEvent { t?: number; start?: number; end?: number; kind: string; hand?: string; uncertain?: boolean }
@@ -30,6 +32,7 @@ export function runClip(name: string) {
   if (!fs.existsSync(file)) return null;
   const data = JSON.parse(fs.readFileSync(file, 'utf8')) as { frames: { t: number; people: { image: LM[]; world: LM[] }[] }[] };
   const rec = new GestureRecognizer();
+  rec.grappleEnabled = grapple;
   // Calibrate from the clip itself (median body size), since clips do not start with a guard hold.
   const sw: number[] = [];
   const arm: number[] = [];
@@ -153,4 +156,4 @@ for (const [k, s] of Object.entries(stats)) {
   console.log(`${k.padEnd(10)} ${String(s.tp).padStart(3)} ${String(s.fp).padStart(3)} ${String(s.fn).padStart(3)}  ${isNaN(p) ? '  -  ' : (p * 100).toFixed(0).padStart(5) + '%'}     ${isNaN(r) ? '  -' : (r * 100).toFixed(0).padStart(4) + '%'}`);
 }
 fs.mkdirSync(path.join(ROOT, 'test-results'), { recursive: true });
-fs.writeFileSync(path.join(ROOT, 'test-results', 'gesture-eval.json'), JSON.stringify({ at: new Date().toISOString(), summary }, null, 1));
+fs.writeFileSync(path.join(ROOT, 'test-results', grapple ? 'gesture-eval-grapple.json' : 'gesture-eval.json'), JSON.stringify({ at: new Date().toISOString(), summary }, null, 1));
