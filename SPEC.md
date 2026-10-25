@@ -1,6 +1,6 @@
 # SPEC: Brawlcam (working name)
 
-Last change: 2026-10-24 6:10 PM CDT. Dropped the hardware wristband and the Best Hardware track, because it needs the user's physical work. The implementation agent now finds and downloads its own test clips (section 6). Real-person footage of the user is no longer required. Added section 9 (testing): every user path, plus UFC fighter clips playing each other online. 6:50 PM: added verified Tiger Data and Vultr details to section 4. 7:00 PM: verified Gemini model IDs (section 2). When this file changes after handoff, add a dated note at the top saying what changed. A dated note here overrides the implementation prompt.
+Last change: 2026-10-24 6:10 PM CDT. Dropped the hardware wristband and the Best Hardware track, because it needs the user's physical work. The implementation agent now finds and downloads its own test clips (section 6). Real-person footage of the user is no longer required. Added section 9 (testing): every user path, plus UFC fighter clips playing each other online. 6:50 PM: added verified Tiger Data and Vultr details to section 4. 7:00 PM: verified Gemini model IDs (section 2). 7:10 PM: verified Meta API details, Meta track weights and video structure (section 2), and added cost limits (section 10). When this file changes after handoff, add a dated note at the top saying what changed. A dated note here overrides the implementation prompt.
 
 ## 1. Product
 
@@ -23,7 +23,20 @@ Non-MLH tracks (maximum 3). Best Overall and Best Pitch are entered automaticall
   - online 1v1 with friends anywhere, using a room code or link
   - Fighter Forge: Muse Spark writes your fighter's name, backstory, and move names from a prompt, and Muse Image generates the fighter card art
   - a shareable rivalry card after each match, generated with Muse Image, to send to the friend you fought
-  - Meta Model API docs: https://dev.meta.ai/products/meta-model-api/. It is OpenAI-SDK compatible with a different base URL. Check the docs for the base URL and model names.
+  - **Meta Model API, verified by the planner on 2026-10-24 at 7:05 PM CDT.**
+    - Base URL `https://api.meta.ai/v1`, OpenAI-compatible (`POST /chat/completions`), bearer auth with `META_API_KEY`.
+    - Model IDs: `muse-spark-1.3` for text and `muse-image-1.0` for images. Docs: https://dev.meta.ai/docs/
+    - A test call to `muse-spark-1.3` returned HTTP 200, but with `max_tokens: 40`, 38 tokens went to hidden reasoning and the reply text was empty. Give it a much larger `max_tokens` (for example 1,000) and check the docs for a reasoning-effort setting.
+  - **Meta's track PDF** (posted in Discord #ask-meta by Meta staff) weights judging as follows: human connection 30%, how essential and well-integrated AI is 25%, originality 20%, technical execution and working demo 20%.
+    - **AI counts in general.** A Meta staff member answered in Discord that this criterion means "use of AI in general! You do not have to use Muse", and teams may use their own ML models. The pose-tracking model counts.
+    - **Human connection is the largest weight.** The pitch and video must lead with friends fighting each other remotely or side by side, the rivalry card, and rematches.
+    - **Meta's required video structure, 2 to 3 minutes:**
+      1. what problem the project solves and how it brings people closer together with AI (about 30 s)
+      2. working demo of key features (about 90 s)
+      3. how AI plays a role and is integrated (about 30 s)
+      4. the tools, harnesses, and models used and how they helped the build (about 30 s)
+
+      Use this structure for the single Devpost video, because it also covers the general judging criteria.
 
 MLH tracks (no limit; each must do real work that is visible in the demo):
 
@@ -147,6 +160,22 @@ The clips are for local testing only. They stay out of the public repo (`clips/`
 | 11:00 AM | Final Devpost submission | Planner |
 
 Cut rule: if a milestone slips by more than one hour, cut P2 features first, then P1 features from the bottom of the table upward. Write each cut in `STATUS.md`.
+
+## 10. Cost limits (the user's cards are on file for Vultr and Meta)
+
+Neither Vultr nor Meta documents a self-serve hard spending cap. Vultr spends its $100 credit first and Meta its $50 credit first, then both charge the card. Stay far below the credits:
+
+- **Vultr:**
+  - Create exactly one instance, on the cheapest plan that runs Node and Caddy. Check `GET /v2/plans` for the monthly price before creating it, and write the plan ID, price, and instance ID in `STATUS.md`.
+  - Do not create GPU instances, managed databases, load balancers, object storage, Kubernetes clusters, or any second instance.
+  - Before creating anything else on Vultr, ask the planner in `STATUS.md`.
+- **Meta:**
+  - Keep a server-side running estimate of Meta spend from token usage and image counts, using the prices on https://dev.meta.ai/docs/pricing-rate-limits ($0.01 per image; Muse Spark $1.25 per million input tokens and $4.25 per million output tokens).
+  - When the estimate reaches $20, stop calling Meta and fall back to Gemini or to defaults. Log it in `STATUS.md`.
+  - Cache Fighter Forge results by prompt.
+  - Automated tests must use recorded Meta responses (fixtures), except at most 20 live smoke calls per full test run.
+- **Gemini:** free tier only. Never attach a billing account to the key's Google Cloud project.
+- **After the event:** the planner deletes the Vultr instance and the Meta and Vultr API keys once judging ends.
 
 ## 9. Testing
 
