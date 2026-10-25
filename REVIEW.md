@@ -889,3 +889,18 @@ The user: "kicks + grabs; grabs actually work pretty well now; throw also works 
 If any fails, keep `?grapple=1` and have the video caption say "Grappling (beta)".
 
 Update `submission/devpost.md` and the README so their move lists match what ships.
+
+### 7:58 AM: "it's still saying 'what a fight' after every player wins" (the user). Do it right after your current work
+The 6:08 AM call-variety item hasn't been built (`calls.json` still has `match_over` ×2). The planner found why it sounds like "what a fight" every time:
+- `match_over` = "WHAT A FIGHT!" / "WE HAVE A WINNER!" (picked at random, so about 50%)
+- `filler_3` = "WHAT A FIGHT WE HAVE!" also plays during matches
+- `ko_3` = "AND THAT'S THE FIGHT!" plays 1.2 s before the match-end call on a KO (`announcer.ts:134` and `:143`), so endings can stack two "fight" lines
+
+Fix:
+- **Build the 6:08 AM context-aware endings now** (dominant, comeback, close, flawless, generic, plus the rematch prompt), with about 8 to 10 lines and none of them containing the word "fight". Use a no-repeat memory (the last 3 per key) persisted in `localStorage`.
+- **Retire or reword** `filler_3` ("WHAT A FIGHT WE HAVE!") and drop "WHAT A FIGHT!" from the generic pool, or keep it as one of 10 at most.
+- **On a KO that ends the match**, play only one call. Either skip the separate `ko` call and let the context ending carry it, or pick a KO line that doesn't repeat the ending's words.
+- **Generation:** same voice, transcript-checked; log the characters (about 400 to 500).
+- **Test:** 10 simulated match ends produce at least 6 distinct endings, never the same ending twice in a row, and at most one "fight" word per match ending.
+
+This is a bug fix and polish to the default build, which is allowed after the freeze. Verify on the live site with a real match, and post the evidence.
