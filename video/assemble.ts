@@ -92,15 +92,16 @@ for (const seg of script.segments) {
     const off = seg.offset ?? 0;
     const calls: { t: number; id: string }[] = fs.existsSync(cf) ? JSON.parse(fs.readFileSync(cf, 'utf8')) : [];
     for (const c of calls.filter((c) => c.t >= off && c.t < off + length - 0.6)) {
-      const k = inputs.length / 2;
+      const k = inputs.filter((x) => x === '-i').length;
       inputs.push('-i', path.join(ROOT, 'web/public/calls', c.id + '.mp3'));
       const ms = Math.round((c.t - off) * 1000);
       mixes.push(`[${k}:a]volume=0.55,adelay=${ms}|${ms},apad,atrim=0:${length}[c${k}]`);
       labels.push(`[c${k}]`);
     }
-    inputs.push('-f', 'lavfi', '-i', `anoisesrc=color=brown:amplitude=0.5:d=${length}`);
-    const k = inputs.length / 2 - 1;
-    mixes.push(`[${k}:a]bandpass=f=650:width_type=o:w=1.5,volume=0.22,afade=t=in:d=0.4,afade=t=out:st=${(length - 0.4).toFixed(2)}:d=0.4[crowd]`);
+    // The game's own crowd recording (ElevenLabs sound effect, /crowd/bed.mp3), looped under the segment.
+    inputs.push('-stream_loop', '-1', '-i', path.join(ROOT, 'web/public/crowd/bed.mp3'));
+    const k = inputs.filter((x) => x === '-i').length - 1;
+    mixes.push(`[${k}:a]atrim=0:${length},volume=0.5,afade=t=in:d=0.4,afade=t=out:st=${(length - 0.4).toFixed(2)}:d=0.4[crowd]`);
     labels.push('[crowd]');
   }
   const amix = labels.length > 1 ? `${mixes.join(';')};${labels.join('')}amix=inputs=${labels.length}:duration=first:normalize=0[a]` : `${mixes[0].replace('[vo]', '[a]')}`;

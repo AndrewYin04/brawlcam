@@ -171,9 +171,9 @@ export const BRAWL_DEFAULTS: SimConfig = {
 export const TUNING = {
   hpMax: 100,
   moveSpeed: 2.4,
-  engageDist: 1.25, // arm's length plus a step between 1.8 m fighters: strikes have room to extend (and step in)
+  engageDist: 1.3, // arm's length plus a step between 1.8 m fighters: strikes have room to extend (and step in)
   assistIdle: 1.5, // s without forward/back input before the duel assist walks you back into range
-  minDist: 0.95, // bodies (with guards up) never overlap
+  minDist: 1.0, // bodies (with guards up) never overlap
   reach: { jab: 1.5, hook: 1.4, uppercut: 1.4, kick: 1.7, palm: 0, xshield: 0, grab: 0, throw: 0 } as Record<ActionKind, number>,
   speedMin: 1.5, // m/s, maps to 5 HP
   speedMax: 6.0, // m/s, maps to 15 HP

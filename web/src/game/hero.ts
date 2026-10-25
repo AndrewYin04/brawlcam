@@ -486,7 +486,7 @@ export class HeroFighter {
     // snaps on quickly; authored clips reach full extension later.
     let contactT = 0.16;
     if (kind === 'kick') contactT = 0.24;
-    else if (this.livePose) contactT = 0.07;
+    else if (this.livePose && kind !== 'super_uppercut') contactT = 0.07; // the super uppercut always plays its rising strike
     else if (kind === 'jab') {
       this.play('jab', 0.05, 1, 1, 1.25);
       contactT = 0.15;
@@ -669,7 +669,9 @@ export class HeroFighter {
     this.body.position.x = local.x * this.flinch * 0.12;
     this.body.position.z = this.lungeNow + local.z * this.flinch * 0.12;
     // Tumble pivots around the hips (1 m up), not the feet.
-    const th = airborne ? Math.min(this.tumble, Math.PI * 1.6) : 0;
+    // Near the fence the tumble is limited so the body never swings through the chain-link or over the rail.
+    const room = THREE.MathUtils.clamp((this.edgeDist - 0.25) / 0.9, 0.15, 1);
+    const th = airborne ? Math.min(this.tumble, Math.PI * 1.6 * room) : 0;
     this.body.rotation.x = -th;
     this.body.position.y = opts.airborne + 1.0 * (1 - Math.cos(th));
     this.body.position.z += 1.0 * Math.sin(th);
