@@ -40,9 +40,9 @@ test('grab-only drill: 8 GRAB prompts, grappleEnabled recognizer, summary and fi
   await b.close();
 });
 
-test('without ?grapple=1: no Grab drill button', async () => {
+test('grappling off (?grapple=0): no Grab drill button', async () => {
   const b = await chromium.launch({ args: GL_ARGS });
-  const { page } = await openPage(b, `/?research=1&drills=grab&${TQ}`, {}, (ctx) => injectCamera(ctx, 'guard_02'));
+  const { page } = await openPage(b, `/?research=1&drills=grab&grapple=0&${TQ}`, {}, (ctx) => injectCamera(ctx, 'guard_02'));
   await expect(page.locator('.research-consent')).toBeVisible({ timeout: 60_000 });
   await expect(page.locator('#rc-drills')).toBeVisible();
   expect(await page.locator('#rc-grab').count()).toBe(0);
