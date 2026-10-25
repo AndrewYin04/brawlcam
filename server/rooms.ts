@@ -188,9 +188,11 @@ export class Room {
 
   // ---------- match flow ----------
 
-  start(by: string, mode: RoomMode, botFill?: number) {
+  roundSeconds: number | undefined;
+  start(by: string, mode: RoomMode, botFill?: number, roundSeconds?: number) {
     if (by !== this.host) return this.sendTo(by, { type: 'error', code: 'not_host', message: 'Only the host can start.' });
     this.mode = mode;
+    this.roundSeconds = roundSeconds;
     this.startMatch(botFill);
   }
 
@@ -199,7 +201,7 @@ export class Room {
     if (this.nextMatchTimer) clearTimeout(this.nextMatchTimer);
     const people = this.people.filter((p) => p.connected || Date.now() - p.disconnectedAt < RECONNECT_GRACE_MS);
     const simMode: Mode = this.mode === 'brawl' ? 'brawl' : 'duel';
-    const sim = new Sim({ mode: simMode }, (Math.random() * 1e9) | 0);
+    const sim = new Sim({ mode: simMode, ...(this.roundSeconds ? { roundSeconds: this.roundSeconds } : {}) }, (Math.random() * 1e9) | 0);
     this.bots = [];
     this.fighters = [];
     let chosen: Client[];
@@ -389,7 +391,7 @@ export class Room {
         break;
       }
       case 'start':
-        this.start(clientId, ['duel', 'brawl', 'wso'].includes(msg.mode) ? msg.mode : 'duel', typeof msg.bots === 'number' ? Math.max(1, Math.min(8, msg.bots)) : undefined);
+        this.start(clientId, ['duel', 'brawl', 'wso'].includes(msg.mode) ? msg.mode : 'duel', typeof msg.bots === 'number' ? Math.max(1, Math.min(8, msg.bots)) : undefined, typeof msg.roundSeconds === 'number' ? Math.max(10, Math.min(120, msg.roundSeconds)) : undefined);
         break;
       case 'rematch':
         this.rematch(clientId);

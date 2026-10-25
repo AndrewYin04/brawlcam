@@ -189,12 +189,16 @@ export async function startMode(mode: string) {
     if (!(await ensureCamera(players))) return;
   }
   const me = { name: nickname(), color: myColor() };
+  // Test/tuning overrides: ?roundsecs=20&meter=100&botlevel=-1|0|1|2|3
+  const over: { roundSeconds?: number; meterStart?: number } = {};
+  if (params.has('roundsecs')) over.roundSeconds = Math.max(5, Math.min(120, Number(params.get('roundsecs'))));
+  if (params.has('meter')) over.meterStart = Math.max(0, Math.min(100, Number(params.get('meter'))));
   if (mode === 'practice' || demo) {
-    beginLocal(new LocalSession('duel', [demo ? { ...me, name: 'Demo Fighter' } : me], 1, Number(params.get('botlevel') ?? 1), demo ? [0] : []), demo ? 'side' : 'behind', mode);
+    beginLocal(new LocalSession('duel', [demo ? { ...me, name: 'Demo Fighter' } : me], 1, Number(params.get('botlevel') ?? 1), demo ? [0] : [], over), demo ? 'side' : 'behind', mode);
   } else if (mode === 'local2p') {
-    beginLocal(new LocalSession('duel', [{ name: 'Player 1', color: FIGHTER_COLORS[0] }, { name: 'Player 2', color: FIGHTER_COLORS[1] }], 0), 'side', mode);
+    beginLocal(new LocalSession('duel', [{ name: 'Player 1', color: FIGHTER_COLORS[0] }, { name: 'Player 2', color: FIGHTER_COLORS[1] }], 0, 1, [], over), 'side', mode);
   } else if (mode === 'brawl') {
-    beginLocal(new LocalSession('brawl', [me], Number(params.get('bots') ?? 5), 1), 'wide', mode);
+    beginLocal(new LocalSession('brawl', [me], Number(params.get('bots') ?? 5), Number(params.get('botlevel') ?? 1), [], over), 'wide', mode);
   }
 }
 

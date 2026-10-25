@@ -39,8 +39,9 @@ export class LocalSession implements Session {
     private botLevel = 1,
     /** Humans that are actually autopilot bots (demo mode without a camera). */
     autopilot: number[] = [],
+    simOverrides: { roundSeconds?: number; meterStart?: number } = {},
   ) {
-    this.sim = new Sim({ mode }, (Math.random() * 1e9) | 0);
+    this.sim = new Sim({ mode, ...simOverrides }, (Math.random() * 1e9) | 0);
     humans.forEach((h, i) => {
       const f = this.sim.addFighter({ ...h, id: i + 1, bot: autopilot.includes(i) });
       if (autopilot.includes(i)) this.bots.push(new Bot(f.id, { level: 1, seed: 99 + i }));

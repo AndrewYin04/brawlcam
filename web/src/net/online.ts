@@ -116,7 +116,11 @@ class Conn {
         this.slot = m.you.slot;
         this.host = m.you.host;
         hooks.online = { room: m.room, slot: m.you.slot };
-        history.replaceState(null, '', `/?room=${m.room}`);
+        {
+          const u = new URL(location.href);
+          u.searchParams.set('room', m.room);
+          history.replaceState(null, '', u.pathname + u.search);
+        }
         break;
       case 'roster':
         this.roster = m;
@@ -209,7 +213,11 @@ export function leaveRoom() {
     conn.close();
     conn = null;
     hooks.online = null;
-    if (location.search.includes('room=')) history.replaceState(null, '', '/');
+    if (location.search.includes('room=')) {
+      const u = new URL(location.href);
+      u.searchParams.delete('room');
+      history.replaceState(null, '', u.pathname + u.search);
+    }
   }
 }
 
@@ -248,7 +256,8 @@ function renderLobby() {
 
 $('lobby-start').onclick = () => {
   const mode = (document.querySelector<HTMLInputElement>('input[name=mode]:checked')?.value ?? 'duel') as 'duel' | 'brawl' | 'wso';
-  conn?.send({ type: 'start', mode });
+  const q = new URLSearchParams(location.search);
+  conn?.send({ type: 'start', mode, ...(q.has('roundsecs') ? { roundSeconds: Number(q.get('roundsecs')) } : {}), ...(q.has('bots') ? { bots: Number(q.get('bots')) } : {}) });
 };
 $('lobby-leave').onclick = () => backToMenu();
 $('lobby-copy').onclick = async () => {

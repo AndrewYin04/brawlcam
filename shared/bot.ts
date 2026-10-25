@@ -67,9 +67,10 @@ export class Bot {
         const r = Math.hypot(me.x, me.z);
         if (r > sim.cfg.arenaRadius * 0.8) fwd = Math.max(fwd, 0.6);
       }
-      blocking = t < this.blockUntil;
+      blocking = this.level >= 0 && t < this.blockUntil;
 
-      if (t >= this.nextAttackAt && dist < 2.2 && t >= me.stunUntil) {
+      // Level -1: passive training dummy (never attacks), used by tests and as an option.
+      if (this.level >= 0 && t >= this.nextAttackAt && dist < 2.2 && t >= me.stunUntil) {
         const roll = this.rng();
         let a: Action;
         if (me.meter >= 100 && roll < 0.45) {
@@ -81,7 +82,7 @@ export class Bot {
         else if (roll < 0.92) a = { kind: 'uppercut', hand: 'R', speed: 2.5 + this.rng() * 2 };
         else a = { kind: 'kick', hand: 'R', speed: 3 + this.rng() * 2 };
         if (!blocking) sim.pushAction(this.id, a);
-        const base = [1.6, 1.15, 0.8][Math.max(0, Math.min(2, this.level))];
+        const base = [1.6, 1.15, 0.8, 0.35][Math.max(0, Math.min(3, this.level))];
         this.nextAttackAt = t + base * (0.6 + this.rng() * 0.9);
       }
     }
