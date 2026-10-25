@@ -97,8 +97,9 @@ test('1 human + 7 bots and 3 humans + 5 bots; a fighter disconnects (replaced by
   await solo.page.waitForFunction(() => (window as any).__brawl.snapshot?.f?.length === 8 && (window as any).__brawl.snapshot.phase === 'fight', null, { timeout: 30_000 });
   const s1 = await hooks(solo.page);
   expect(s1.snapshot.f.filter((f: any) => f.bot).length).toBe(7);
-  // Ring-outs and respawns (bots knock each other around).
-  await solo.page.waitForFunction(() => { const e = (window as any).__brawl.events; return e.some((x: any) => x.type === 'ko' && x.ringout) && e.some((x: any) => x.type === 'respawn'); }, null, { timeout: 60_000 });
+  // Octagon rules: HP KOs and 3 s respawns (no ring-outs; bots slam each other into the cage).
+  await solo.page.waitForFunction(() => { const e = (window as any).__brawl.events; return e.some((x: any) => x.type === 'ko' && !x.ringout) && e.some((x: any) => x.type === 'respawn'); }, null, { timeout: 90_000 });
+  expect((await hooks(solo.page)).events.some((e: any) => e.type === 'ko' && e.ringout)).toBe(false);
   const kofeed = await solo.page.locator('#kofeed div').count();
   console.log('BRAWL_BOTS', JSON.stringify({ kos: (await hooks(solo.page)).events.filter((e: any) => e.type === 'ko').length, kofeed }));
   expect(kofeed).toBeGreaterThan(0);
