@@ -20,6 +20,16 @@ export async function showMotion() {
     <div class="row"><button class="btn" id="mexport">Export JSON sample</button><button class="btn ghost" data-action="menu">Back</button></div>`;
   show('page');
   const samplePromise: Promise<any> = fetch('/api/motion/sample').then((r) => (r.ok ? r.json() : null)).catch(() => null);
+  // The export button works from the moment the page shows: a click waits for the sample instead of doing nothing
+  // while the stats requests are still in flight (e2e "Motion data" clicked within 0.1 s and got no download).
+  $('mexport').onclick = async () => {
+    const rowsNow = (await samplePromise)?.frames ?? [];
+    const blob = new Blob([JSON.stringify({ format: 'MediaPipe Pose world landmarks, meters, hip-centered; [x,y,z,visibility] x 33 per frame', sequences: rowsNow.map((r: any) => ({ label: r.label, time: r.time, frames: r.landmarks })) }, null, 1)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'throwhands-motion-sample.json';
+    a.click();
+  };
   const stats = $('mstats');
   try {
     const r = await fetch('/api/motion/stats');
@@ -69,16 +79,6 @@ export async function showMotion() {
   } catch {
     $('sstats').textContent = 'Stats are unavailable right now.';
   }
-  // The export button works from the moment the page shows: a click waits for the sample instead of doing nothing
-  // while the stats requests are still in flight (e2e "Motion data" clicked within 0.1 s and got no download).
-  $('mexport').onclick = async () => {
-    const rowsNow = (await samplePromise)?.frames ?? [];
-    const blob = new Blob([JSON.stringify({ format: 'MediaPipe Pose world landmarks, meters, hip-centered; [x,y,z,visibility] x 33 per frame', sequences: rowsNow.map((r: any) => ({ label: r.label, time: r.time, frames: r.landmarks })) }, null, 1)], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'throwhands-motion-sample.json';
-    a.click();
-  };
   const sample: any = await samplePromise;
   const rows = sample?.frames ?? [];
   if (!rows.length) {

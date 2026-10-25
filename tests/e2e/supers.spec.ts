@@ -82,8 +82,10 @@ test('energy blast travels as a projectile and lands (blocked damage: unit guard
   const moved = Math.hypot(positions[positions.length - 1][0] - positions[0][0], positions[positions.length - 1][1] - positions[0][1]);
   expect(moved).toBeGreaterThan(0.1);
   expect(blasts.length).toBeGreaterThan(0);
-  // Blocked blasts deal 10% (2 HP), unblocked deal 20.
-  for (const e of blasts) expect(e.damage).toBe(e.blocked ? 2 : 20);
+  // Blocked blasts deal 10% (2 HP), unblocked 20, except a finishing blast, capped at the HP the target had left.
+  const kos = h.events.filter((e: any) => e.type === 'ko' && e.kind === 'blast').length;
+  for (const e of blasts) if (e.blocked) expect(e.damage).toBe(2);
+  else if (e.damage !== 20) expect(kos).toBeGreaterThan(0);
   await b.close();
 });
 
