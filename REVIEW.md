@@ -732,3 +732,21 @@ Throw reps 2 and 5 never reach both arms above 0.75; reps 6 and 7 do, then fire 
 4. Also: the straight regression (3/4 to 1/4); lean_back still produces forward input; lean left and right produce backward input; and step_fwd leaks strafe.
 
 **Order:** grab items 1 to 3 (the user tested grappling three times and it never worked), then the straight regression, then the lean axes. Grappling stays behind `?grapple=1` and out of the video unless drill grabs reach at least 3/4. Freeze 7:30 AM: if grab isn't at 3/4 or better by then, leave it flagged and say so in STATUS.md.
+
+### 6:08 AM: more variety in the match-end and round calls (the user's request)
+The user: instead of "what a fight" the same way every match, there should be a few variations. Today `calls.json` has `match_over` ×2 ("WHAT A FIGHT!", "WE HAVE A WINNER!"), round1/2/3 ×1 each, draw ×1, time ×1. The announcer picks at random, avoiding only the immediately previous call.
+
+- **Match end, about 8 to 10 lines chosen by how the match went** (the sim has HP, rounds, and damage):
+  - dominant win (2–0, winner above 60% HP): "TOTAL DOMINATION!", "THAT WASN'T EVEN CLOSE!"
+  - comeback (the winner lost round 1, or was below 25% HP): "WHAT A COMEBACK!", "FROM THE BRINK!"
+  - close (decided in round 3, or by under 10% HP): "BY A HAIR!", "THAT ONE COULD'VE GONE EITHER WAY!"
+  - flawless (the winner took 0 damage in a round): "FLAWLESS!"
+  - generic: keep "WHAT A FIGHT!" and "WE HAVE A WINNER!", and add 2 or 3 more
+  - a rematch prompt after the result: "RUN IT BACK?", "REMATCH?"
+- **Round starts:** 2 or 3 variants each (for example "ROUND TWO... LET'S GO!", "HERE WE GO, ROUND TWO!"), plus "FIGHT!" variants.
+- **Draw and time:** 2 variants each.
+- **No repeats:** avoid any of the last 3 lines used for the same key, persisted in `localStorage` so consecutive matches differ.
+- **Generation:** same voice (Charlie, eleven_v3), same transcript check (0 extra words), and log the character cost; it should be about 400 to 500 characters. Keep total ElevenLabs use inside the 50% rule, and update the quota in STATUS.md.
+- **Tests:** a unit test that the context picks the right category, and that 5 consecutive simulated match ends produce at least 4 distinct lines.
+
+**Priority:** after the grab fixes (6:00 AM). It's small and makes every match feel less repetitive, so do it before the 7:30 AM freeze if possible.
