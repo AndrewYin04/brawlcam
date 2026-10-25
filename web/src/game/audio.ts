@@ -159,3 +159,28 @@ export function sfxBeep(high = false) {
   o.start(t);
   o.stop(t + 0.6);
 }
+
+/** Guard break: glass shattering (bright filtered noise burst plus a few high pings). */
+export function sfxGlass() {
+  if (!ctx || !master || muted) return;
+  const t = ctx.currentTime;
+  const n = noise(0.6);
+  const hp = ctx.createBiquadFilter();
+  hp.type = 'highpass';
+  hp.frequency.value = 2500;
+  const g = ctx.createGain();
+  env(g, t, 0.003, 0.5, 0.45);
+  n.connect(hp).connect(g).connect(master);
+  n.start(t);
+  for (let i = 0; i < 6; i++) {
+    const o = ctx.createOscillator();
+    o.type = 'sine';
+    o.frequency.value = 2800 + Math.random() * 3200;
+    const og = ctx.createGain();
+    const st = t + Math.random() * 0.25;
+    env(og, st, 0.002, 0.12, 0.18);
+    o.connect(og).connect(master);
+    o.start(st);
+    o.stop(st + 0.25);
+  }
+}

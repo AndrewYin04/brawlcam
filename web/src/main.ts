@@ -347,6 +347,9 @@ function runMoveTutorial(end: () => void) {
     hooks.tutorial.active = false;
     hooks.tutorial.outcome = outcome;
     card.classList.add('hidden');
+    card.querySelector('.tut-grid')!.classList.remove('hidden');
+    $('tut-guard').classList.add('hidden');
+    card.querySelector('h2')!.textContent = 'Now try moving';
     $('calib').querySelector('.calib-card')!.classList.remove('hidden');
     pose!.onUpdate = null;
     end();
@@ -370,8 +373,42 @@ function runMoveTutorial(end: () => void) {
     }
     const left = Math.max(0, 15 - (now - t0) / 1000);
     $('tut-time').textContent = String(Math.ceil(left));
-    if (dirs.every((d) => held[d] >= NEED)) setTimeout(() => stop('completed'), 400);
-    else if (left <= 0) stop('timeout');
+    if (dirs.every((d) => held[d] >= NEED) || left <= 0) {
+      const moved = dirs.every((d) => held[d] >= NEED);
+      pose!.onUpdate = null;
+      setTimeout(() => guardStage(moved ? 'completed' : 'timeout'), moved ? 400 : 0);
+    }
+  };
+  // Stage 2: guard and Iron Wall poses (10 s).
+  const guardStage = (moveOutcome: string) => {
+    if (finished) return;
+    card.querySelector('.tut-grid')!.classList.add('hidden');
+    const gs = $('tut-guard');
+    gs.classList.remove('hidden');
+    card.querySelector('h2')!.textContent = 'Now defend';
+    const gEls: Record<string, HTMLElement> = { guard: gs.querySelector('[data-dir="guard"]')!, xshield: gs.querySelector('[data-dir="xshield"]')! };
+    const gHeld: Record<string, number> = { guard: 0, xshield: 0 };
+    const g0 = performance.now();
+    let gl = g0;
+    pose!.onUpdate = () => {
+      const now = performance.now();
+      const dt = Math.min(0.2, (now - gl) / 1000);
+      gl = now;
+      const o = pose!.latest[0];
+      const on: Record<string, boolean> = { guard: !!o?.blocking, xshield: !!o?.xshield };
+      for (const k of ['guard', 'xshield']) {
+        gEls[k].classList.toggle('active', on[k]);
+        if (on[k] && gHeld[k] < NEED) {
+          gHeld[k] += dt;
+          if (gHeld[k] >= NEED) { gEls[k].classList.add('done'); hooks.tutorial.done.push(k); }
+        }
+        (gEls[k].querySelector('.tut-bar i') as HTMLElement).style.width = `${Math.min(100, (gHeld[k] / NEED) * 100)}%`;
+      }
+      const left = Math.max(0, 10 - (now - g0) / 1000);
+      $('tut-time').textContent = String(Math.ceil(left));
+      if (gHeld.guard >= NEED && gHeld.xshield >= NEED) setTimeout(() => stop(moveOutcome), 400);
+      else if (left <= 0) stop(moveOutcome === 'completed' ? 'guard-timeout' : 'timeout');
+    };
   };
 }
 

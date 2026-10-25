@@ -1,4 +1,4 @@
-// Repro: in Brawl, a human whose movement input drifts toward the edge walks out of the ring by themselves.
+// Repro (kept for the octagon): in Brawl, a human whose movement input drifts toward the edge must never KO themselves.
 import { Sim } from '../../shared/sim';
 const sim = new Sim({ mode: 'brawl' }, 7);
 sim.addFighter({ id: 1, name: 'Human', color: '#f00' });
@@ -13,5 +13,5 @@ for (let i = 0; i < 30 * 20; i++) {
   sim.step(1 / 30);
   for (const e of sim.drainEvents()) if (e.type === 'ko' && e.target === 1 && e.attacker == null) selfOuts++;
 }
-console.log('self ring-outs in 20 s with no hits:', selfOuts);
+console.log('self KOs from walking in 20 s with no hits:', selfOuts);
 process.exitCode = selfOuts > 0 ? 1 : 0;

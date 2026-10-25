@@ -52,6 +52,15 @@ test('movement tutorial: each direction lights up and fills, then the match star
     await cam(f, f === 'zoom' ? 1 : 0);
     await page.waitForTimeout(500);
   }
+  // Stage 2: guard (forearms up) and the Iron Wall X, from real clips of people doing them.
+  await expect(page.locator('#tut-guard')).toBeVisible({ timeout: 5_000 });
+  await shot('guard-stage');
+  await page.evaluate(() => (window as any).__cam.set('block_01'));
+  await page.waitForFunction(() => (window as any).__brawl.tutorial?.done.includes('guard'), null, { timeout: 12_000 }).catch(() => {});
+  await page.evaluate(() => (window as any).__cam.set('xshield_01'));
+  await page.waitForFunction(() => (window as any).__brawl.tutorial?.done.includes('xshield'), null, { timeout: 12_000 }).catch(() => {});
+  await shot('guard-done');
+  await page.evaluate(() => (window as any).__cam.set('guard_02'));
   const tut = await page.evaluate(() => (window as any).__brawl.tutorial);
   console.log('TUTORIAL', JSON.stringify(tut));
   await page.waitForFunction(() => (window as any).__brawl.tutorial?.active === false, null, { timeout: 20_000 });
@@ -61,7 +70,8 @@ test('movement tutorial: each direction lights up and fills, then the match star
   await expect(page.locator('#move-ind i[data-d="fwd"].on')).toBeVisible({ timeout: 5_000 });
   await shot('hud-fwd');
   await cam('zoom', 1);
-  expect(tut.done.sort()).toEqual(['back', 'fwd', 'left', 'right']);
+  expect(tut.done.filter((d: string) => ['fwd', 'back', 'left', 'right'].includes(d)).sort()).toEqual(['back', 'fwd', 'left', 'right']);
+  expect(tut.done).toContain('guard');
   await b.close();
 });
 

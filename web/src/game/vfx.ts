@@ -137,13 +137,13 @@ export class VFX {
     if (shielded) {
       this.burst(pos, 0x66ccff, 14, 3, 0.04);
       this.shockwave(pos, 0x66ccff, 0.8);
-      this.label(pos, 'SHIELD', 'fx-block');
+      if (!SPRITE_SPARKS.on) this.label(pos, 'SHIELD', 'fx-block'); // hero mode: the gold bubble shows it
       return;
     }
     if (blocked) {
       this.burst(pos, 0xffffff, 10, 2.5, 0.035);
       this.shockwave(pos, 0xbbddff, 0.6);
-      this.label(pos, 'BLOCK ' + damage, 'fx-block');
+      if (!SPRITE_SPARKS.on) this.label(pos, 'BLOCK ' + damage, 'fx-block'); // hero mode: the guard bubble shows it
       return;
     }
     this.burst(pos, color, isSuper ? 50 : 22, isSuper ? 7 : 4.5, isSuper ? 0.08 : 0.05);

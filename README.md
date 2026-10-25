@@ -13,7 +13,8 @@ Built at HackTX 2026 (October 24 to 25, 2026). **Built with Claude Code** (AI co
 - **Online 1v1**: create a room, share the link or 4-letter code, fight a friend on any device. Spectators can watch and send cheers.
 - **Brawl**: up to 8 fighters in one ring, bots fill empty slots, Smash-style knockback and ring-outs, live KO feed.
 - **Winner stays on**: up to 8 friends, two fight at a time, the winner stays on.
-- **Super moves**: uppercut (fist driven up), shield (forearms crossed in an X), energy blast (both palms pushed forward), when your meter is full.
+- **Guard**: both forearms up in front of the face blocks 90% of damage, but a GUARD meter drains while you hold it and when hits land on it; let it empty and your guard breaks (dizzy for 2 s).
+- **Super moves**: uppercut (fist driven up), Iron Wall (forearms crossed in an X above the face, elbows up: 2.5 s unbreakable guard that counters the first hit), energy blast (both palms pushed forward), when your meter is full.
 - **Fighter Forge**: describe a fighter; Meta's Muse Spark writes the name, story, and moves, Muse Image paints the card, and your suit takes the card's colors.
 - **Live commentator**: Gemini calls the fight every few seconds, spoken with Gemini TTS.
 - **Rivalry card** after online matches, **Elo leaderboard** (Tiger Data), **store** (mock purchases, "Demo: no charge"), and an opt-in **motion data** program with an explicit consent screen.
@@ -76,7 +77,8 @@ Assets:
 
 | Asset | Source | License |
 |---|---|---|
-| Seed-san VRM model (`web/public/avatars/seed-san.vrm`, textures downscaled by `scripts/optimize-vrm.py`) | VirtualCast, Inc., [vrm-c/vrm-specification samples](https://github.com/vrm-c/vrm-specification/tree/master/samples/Seed-san) | VRM Public License 1.0: avatar use by everyone, commercial use allowed, modification and redistribution allowed, credit required. **Credit: Seed-san model by VirtualCast, Inc.** We hide the robot arm and backpack and recolor the suit at runtime. |
+| Fighters and animations (`web/public/characters/th-*.glb`): Quaternius Universal Base Characters (Superhero male/female) and Universal Animation Library 1 + 2 | [quaternius.com](https://quaternius.com), free Standard packs from itch.io, details and processing in `web/public/characters/README.md` | CC0 1.0 (license files from the downloads are in `web/public/characters/`). Credit: characters and animations by Quaternius. |
+| Seed-san VRM model, used only by the `?classic` renderer (`web/public/avatars/seed-san.vrm`, textures downscaled by `scripts/optimize-vrm.py`) | VirtualCast, Inc., [vrm-c/vrm-specification samples](https://github.com/vrm-c/vrm-specification/tree/master/samples/Seed-san) | VRM Public License 1.0: avatar use by everyone, commercial use allowed, modification and redistribution allowed, credit required. **Credit: Seed-san model by VirtualCast, Inc.** We hide the robot arm and backpack and recolor the suit at runtime. |
 | Bungee font (headings) | Google Fonts, David Jonathan Ross | SIL Open Font License 1.1 |
 | Sound effects | Synthesized in code with WebAudio (`web/src/game/audio.ts`) | Ours |
 | Fighter card and rivalry art | Generated at runtime by Meta Muse Image | Generated per player |

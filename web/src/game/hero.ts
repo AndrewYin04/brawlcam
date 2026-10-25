@@ -180,6 +180,7 @@ export class HeroFighter {
   private shield!: THREE.Mesh;
   private shieldMat!: THREE.ShaderMaterial;
   private targetRing!: THREE.Mesh;
+  private stars = new THREE.Group();
   private gloveL!: THREE.Mesh;
   private gloveR!: THREE.Mesh;
   private gloveMat!: THREE.MeshToonMaterial;
@@ -315,6 +316,15 @@ export class HeroFighter {
     this.shield.position.y = 1.0;
     this.shield.visible = false;
     this.body.add(this.shield);
+    // Dizzy stars circling over the head (guard broken)
+    const starTex = new THREE.CanvasTexture(starCanvas());
+    for (let i = 0; i < 5; i++) {
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: starTex, color: 0xffe14d, depthWrite: false }));
+      sp.scale.setScalar(0.13);
+      this.stars.add(sp);
+    }
+    this.stars.visible = false;
+    this.root.add(this.stars);
     // Target lock (Brawl)
     this.targetRing = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.64, 40), new THREE.MeshBasicMaterial({ color: 0xff3355, transparent: true, opacity: 0.85, side: THREE.DoubleSide }));
     this.targetRing.rotation.x = -Math.PI / 2;
@@ -545,6 +555,16 @@ export class HeroFighter {
       this.shieldMat.uniforms.strength.value = iron ? 1.2 : 0.9;
       this.shieldMat.uniforms.time.value = time;
     }
+    this.stars.visible = !!opts.dizzy && opts.alive;
+    if (this.stars.visible && this.bones.Head) {
+      const hp = this.bones.Head.getWorldPosition(new THREE.Vector3());
+      hp.y += 0.3;
+      this.stars.position.copy(this.root.worldToLocal(hp));
+      this.stars.children.forEach((c, i) => {
+        const a = time * 4 + (i / 5) * Math.PI * 2;
+        c.position.set(Math.cos(a) * 0.22, Math.sin(a * 2) * 0.03, Math.sin(a) * 0.22);
+      });
+    }
     this.shadow.scale.setScalar(THREE.MathUtils.clamp(1 - opts.airborne / 3, 0.25, 1));
     this.root.visible = opts.alive || this.koTime >= 0;
   }
@@ -726,6 +746,25 @@ function twoBoneIK(upper: THREE.Object3D, lower: THREE.Object3D, end: THREE.Obje
   const G = S.clone().addScaledVector(n, dist);
   rotateBoneTowards(upper, dirOf(upper, lower), E.clone().sub(S), w);
   rotateBoneTowards(lower, dirOf(lower, end), G.sub(lower.getWorldPosition(new THREE.Vector3())), w);
+}
+
+function starCanvas() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#fff';
+  g.strokeStyle = '#222';
+  g.lineWidth = 4;
+  g.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const r = i % 2 ? 12 : 28;
+    const a = (i / 10) * Math.PI * 2 - Math.PI / 2;
+    g.lineTo(32 + Math.cos(a) * r, 32 + Math.sin(a) * r);
+  }
+  g.closePath();
+  g.stroke();
+  g.fill();
+  return c;
 }
 
 function radial(inner: string, outer: string) {

@@ -285,7 +285,9 @@ export class Room {
       for (const e of events) if (e.type !== 'whiff' && e.type !== 'super_denied' && e.type !== 'respawn') this.commentBuf.push(e);
       for (const e of events) {
         const nm = (id: number | null) => sim.get(id ?? -1)?.name ?? 'someone';
-        if (e.type === 'super') this.matchHighlights.push(`${nm(e.id)} super ${e.kind}`);
+        if (e.type === 'super') this.matchHighlights.push(`${nm(e.id)} super ${e.kind === 'ironwall' ? 'Iron Wall' : e.kind}`);
+        if (e.type === 'guard_break' && e.attacker != null) this.matchHighlights.push(`${nm(e.attacker)} broke ${nm(e.id)}'s guard`);
+        if (e.type === 'iron_counter') this.matchHighlights.push(`${nm(e.id)} Iron Wall countered ${nm(e.attacker)}`);
         if (e.type === 'ko') this.matchHighlights.push(`${nm(e.attacker)} KO'd ${nm(e.target)} with ${e.kind}`);
       }
     }

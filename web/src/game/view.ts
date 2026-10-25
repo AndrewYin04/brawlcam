@@ -139,6 +139,17 @@ export class MatchView {
           else sfx.sfxPunch(e.damage / 15);
           break;
         }
+        case 'cage': {
+          // Slammed into the fence: the panel shakes, a heavy spark at the contact point, a camera kick.
+          const cp = new THREE.Vector3(e.x, e.y, e.z);
+          const strength = Math.min(1.5, e.speed / 5);
+          this.arena.stage?.cageHit(e.x, e.z, strength);
+          this.vfx.burst(cp, 0xffffff, 30, 5, 0.06);
+          this.vfx.burst(cp, 0xffc53d, 20, 3.5, 0.05);
+          this.arena.shake = Math.min(1.5, this.arena.shake + 0.3 + strength * 0.5);
+          sfx.sfxPunch(Math.min(1, strength));
+          break;
+        }
         case 'whiff':
           sfx.sfxWhoosh();
           break;
@@ -146,9 +157,9 @@ export class MatchView {
           const s = this.slots.get(e.id);
           if (!s) break;
           const col = s.snap.color;
-          if (e.kind === 'shield') {
-            this.vfx.shockwave(s.pos.clone().setY(1), 0x66ccff, 2);
-            this.showBanner('SHIELD!', 700, true);
+          if (e.kind === 'ironwall') {
+            this.vfx.shockwave(s.pos.clone().setY(1), 0xffc53d, 2);
+            this.showBanner('IRON WALL!', 900, true);
           } else if (e.kind === 'uppercut') {
             if (!USE_HEROES) this.vfx.pillar(s.pos, col);
             else this.vfx.speedLines();
@@ -163,6 +174,28 @@ export class MatchView {
           sfx.sfxSuper();
           break;
         }
+        case 'guard_break': {
+          // Bubble shatters: glass shards, glass sound, a short shake.
+          const gp = new THREE.Vector3((e as any).x ?? 0, (e as any).y ?? 1.3, (e as any).z ?? 0);
+          this.vfx.burst(gp, 0x8fd0ff, 26, 4.5, 0.04);
+          this.vfx.burst(gp, 0xffe14d, 10, 3, 0.035);
+          this.vfx.shockwave(gp, 0x9fdcff, 0.9);
+          this.arena.shake = Math.min(1.5, this.arena.shake + 0.8);
+          sfx.sfxGlass();
+          const mine = this.opts.localIds.includes(e.id) || (e.attacker != null && this.opts.localIds.includes(e.attacker));
+          if (this.snap && this.snap.f.length > 2) this.addKoFeed(`${e.attacker != null ? this.name(e.attacker) + ' broke ' + this.name(e.id) + '’s guard' : this.name(e.id) + '’s guard ran out'}`);
+          else if (mine) this.showBanner('GUARD BREAK!', 1000, true);
+          if (this.opts.localIds.includes(e.id)) this.hint('Guard broken! Drop your arms between hits so the GUARD meter refills.', 3000);
+          break;
+        }
+        case 'iron_counter': {
+          const w = this.slots.get(e.id);
+          if (w) this.vfx.shockwave(w.pos.clone().setY(1.2), 0xffc53d, 1.6);
+          sfx.sfxBlock();
+        }
+          if (this.snap && this.snap.f.length > 2) this.addKoFeed(`${this.name(e.id)}’s Iron Wall countered ${this.name(e.attacker)}`);
+          else this.showBanner('COUNTER!', 800, true);
+          break;
         case 'super_denied':
           if (this.opts.localIds.includes(e.id)) this.hint(e.reason === 'meter' ? 'Fill your SUPER meter first: land hits!' : 'Super on cooldown');
           break;
@@ -179,7 +212,7 @@ export class MatchView {
             this.vfx.groundRing(tgt.pos, 0xffc53d, 3);
           }
           if (this.snap && this.snap.f.length > 2) {
-            this.addKoFeed(e.attacker != null ? `${this.name(e.attacker)} ${verb(e.kind, e.ringout)} ${this.name(e.target)}` : `${this.name(e.target)} fell out of the ring`);
+            this.addKoFeed(e.attacker != null ? `${this.name(e.attacker)} ${verb(e.kind, e.ringout)} ${this.name(e.target)}` : `${this.name(e.target)} was knocked out`);
           } else {
             this.showBanner('K.O.!', 1800, true);
             this.slowmoUntil = this.time + 1.6;
@@ -273,7 +306,7 @@ export class MatchView {
         if (!joints && f.pr) joints = unpackJoints(f.j as number[] | undefined);
         if (!joints) {
           // Idle guard (or the procedural strike) when no live pose: absent players, bots without data.
-          joints = proceduralJoints({ atk: f.atk ? { k: f.atk.k, h: f.atk.h, age: f.atk.age } : null, blocking: !!f.b, shield: f.sh > 0, t: this.time, seed: f.id });
+          joints = proceduralJoints({ atk: f.atk ? { k: f.atk.k, h: f.atk.h, age: f.atk.age } : null, blocking: !!f.b, shield: f.iw > 0, t: this.time, seed: f.id });
         }
         if (slot.avatar instanceof HeroFighter) {
           // Heroes: humans' torso/arms follow their live pose; bots use authored clips.
@@ -285,10 +318,10 @@ export class MatchView {
             slot.avatar.attack(f.atk.k, f.atk.h, `${f.atk.k}${f.atk.h}${(s.t - f.atk.age).toFixed(2)}`, null);
           }
           const fa = f as any;
-          slot.avatar.update(animDt, this.time, { shield: f.sh, meterFull: f.meter >= 100, airborne: f.y, alive: !!f.alive, blocking: !!f.b, guard: fa.gd ?? 100, dizzy: !!fa.dz, ironWall: !!fa.iw });
+          slot.avatar.update(animDt, this.time, { shield: 0, meterFull: f.meter >= 100, airborne: f.y, alive: !!f.alive, blocking: !!f.b, guard: fa.gd ?? 100, dizzy: (fa.dz ?? 0) > 0, ironWall: (fa.iw ?? 0) > 0 });
         } else {
           slot.avatar.setJoints(joints);
-          slot.avatar.update(animDt, this.time, { shield: f.sh, meterFull: f.meter >= 100, airborne: f.y, alive: !!f.alive || s.f.length <= 2 });
+          slot.avatar.update(animDt, this.time, { shield: f.iw, meterFull: f.meter >= 100, airborne: f.y, alive: !!f.alive || s.f.length <= 2 });
         }
         slot.avatar.setTargeted(s.f.length > 2 && me?.tg === f.id);
         slot.avatar.setSeeThroughCape(this.opts.camera !== 'side' && f.id === myId);
@@ -299,14 +332,8 @@ export class MatchView {
           this.vfx.trail(slot.avatar.glovePos(f.atk.h === 'L' ? 'L' : 'R'), f.color);
         }
       }
-      // Floating stage: size follows the mode; the edge warns when a fighter is close to the drop.
-      if (this.arena.stage) {
-        const R = (s as any).R ?? this.arena.stage.radius;
-        this.arena.stage.setRadius(R);
-        let warn = 0;
-        for (const f of s.f) if (f.alive) warn = Math.max(warn, THREE.MathUtils.clamp(1 - (R - Math.hypot(f.x, f.z)) / 1.0, 0, 1));
-        this.arena.stage.setEdgeWarning(warn);
-      }
+      // Octagon size follows the mode.
+      if (this.arena.stage) this.arena.stage.setRadius((s as any).R ?? this.arena.stage.radius);
       const owners = new Map<number, number>(s.p.map((p) => [p.id, p.o]));
       this.vfx.setProjectiles(s.p, (id) => this.color(id), owners);
       this.updateCamera(dt, s);
@@ -358,8 +385,8 @@ export class MatchView {
         // Closer over-the-shoulder framing: both fighters fill most of the frame height.
         // Higher and further to the side than before so the chibi heroes' big heads never hide the opponent.
         // Over the right shoulder of a 1.8 m fighter: you on the left third, the opponent clear in the middle.
-        pos = me.pos.clone().addScaledVector(fwd, portrait ? -3.4 : -2.55).addScaledVector(right, portrait ? 0.8 : 1.05).setY(portrait ? 2.1 : 1.9);
-        look = (opp ? opp.pos.clone().lerp(me.pos, 0.15) : me.pos.clone().addScaledVector(fwd, 1.4)).setY(1.15);
+        pos = me.pos.clone().addScaledVector(fwd, portrait ? -3.4 : -2.6).addScaledVector(right, portrait ? 0.95 : 1.4).setY(portrait ? 2.1 : 1.85);
+        look = (opp ? opp.pos.clone().lerp(me.pos, 0.1) : me.pos.clone().addScaledVector(fwd, 1.4)).setY(1.2);
       } else {
         pos = me.pos.clone().addScaledVector(fwd, portrait ? -3.6 : -2.7).addScaledVector(right, portrait ? 0.7 : 1.05).setY(portrait ? 2.3 : 2.0);
         look = (opp ? opp.pos.clone() : me.pos.clone().addScaledVector(fwd, 1.5)).setY(1.2);
@@ -425,6 +452,16 @@ export class MatchView {
     const meter = $(`${p}-meter`).parentElement!;
     meter.classList.toggle('full', f.meter >= 100);
     $(`${p}-meter-label`).textContent = f.meter >= 100 ? 'SUPER READY' : 'SUPER';
+    // Guard meter: blue (full) -> yellow -> red (about to break); flashes while guard-broken, gold during Iron Wall.
+    const gd = f.dz > 0 ? 0 : f.gd;
+    ($(`${p}-guard`) as HTMLElement).style.width = `${f.iw > 0 ? 100 : gd}%`;
+    const guard = $(`${p}-guard`).parentElement!;
+    const level = f.iw > 0 ? 'iron' : f.dz > 0 ? 'broken' : gd > 60 ? 'hi' : gd > 30 ? 'mid' : 'lo';
+    if (guard.dataset.level !== level) {
+      guard.dataset.level = level;
+      $(`${p}-guard-label`).textContent = level === 'iron' ? 'IRON WALL' : level === 'broken' ? 'GUARD BROKEN' : 'GUARD';
+    }
+    guard.classList.toggle('up', !!f.b);
     const pips = $(`${p}-pips`);
     const want = this.snap && this.snap.f.length <= 2 ? `${'<span class="pip won"></span>'.repeat(f.rw)}${'<span class="pip"></span>'.repeat(Math.max(0, 2 - f.rw))}` : `${f.kos} KO · ${f.kb}%`;
     if (pips.innerHTML !== want) pips.innerHTML = want;

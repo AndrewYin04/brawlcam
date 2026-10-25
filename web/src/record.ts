@@ -158,6 +158,10 @@ export async function initRecord() {
       f.z = z;
       if (kb != null) f.kb = kb;
     },
+    setGuard(id: number, v: number) {
+      const f = session?.sim.get(id);
+      if (f) f.guard = v;
+    },
     setHp(id: number, v: number) {
       const f = session?.sim.get(id);
       if (f) f.hp = v;

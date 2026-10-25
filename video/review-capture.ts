@@ -35,6 +35,10 @@ const SCENES: Scene[] = [
   { name: 'ko', seconds: 4, cfg: duel([P('jab_01', 0.3)]), cues: [[0, 'setHp', 2, 12], [0.6, 'move', 0, 'jab', 'L']] },
   { name: 'ringout', seconds: 4, cfg: duel([P('guard_02')], { meter: 100 }), cues: [[0, 'place', 2, 0, -2.4, 90], [0, 'place', 1, 0, -1.2], [0.6, 'move', 0, 'uppercut', 'R']] },
   { name: 'teeter', seconds: 3, cfg: duel([P('guard_02')]), cues: [[0, 'place', 1, 0, 3.0], [0, 'place', 2, 0, 1.8]] },
+  // Guard break: the player holds the guard with little meter left while the bot attacks; then dizzy and a clean hit.
+  { name: 'guard_break', seconds: 4, cfg: duel([P('block_01', 3.0)], { botLevel: 3 }), cues: [[0, 'setGuard', 1, 25]] },
+  // Circling: strafe left then right (step-sideways input).
+  { name: 'strafe', seconds: 3, cfg: duel([P('guard_02')]), cues: [[0, 'setMove', 0, [0.8, 0]], [1.5, 'setMove', 0, [-0.8, 0]]] },
   { name: 'brawl8', seconds: 4, cfg: { mode: 'brawl', camera: 'wide', players: [P('jab_01')], bots: 7, botLevel: 2, meter: 50 }, warmup: 30 * 3.6 },
 ];
 
