@@ -96,7 +96,7 @@ export const GESTURE_CFG = {
   edgeMargin: 0.1, // fraction of image width: closer to the edge than this stops increasing the strafe that way
   moveSmooth: 0.15, // s
   moveQuietAfterStrike: 0.35, // s: torso motion around a strike is the punch, not a step
-  armBusySpeed: 0.9, // m/s: a hand this fast means a strike is starting (its wind-up and twist are not movement)
+  armBusySpeed: 1.2, // m/s: a hand this fast means a strike is starting (0.9 also caught tracking jitter close to the camera, session ea6e2541)
   moveQuietAfterDetect: 0.65, // s: recovery after a detected strike (lean-back, re-squaring) is not movement
   moveHoldLookback: 0.2, // s: during a strike, movement holds its value from this long before the onset
   fwdPersist: 0.2, // s: forward/back intent must last this long before it moves the fighter
@@ -119,21 +119,26 @@ export const GESTURE_CFG = {
  */
 export const GRAPPLE_CFG = {
   // Reach: both arms extend forward together.
-  reachExt: 0.75, // extension (fraction of arm length) both arms must pass
+  reachExt: 0.65, // extension both arms must pass (0.75 missed 3 of 4 real reaches toward the camera, foreshortened: session ea6e2541)
+  holdReachExt: 0.75, // the jab hold's "arm out at reach length" (tuned with the jab-latency checks; kept when reachExt dropped)
   reachSync: 0.25, // s: the two arms must pass reachExt within this of each other
   reachRise: 0.12, // an arm "reaches" when it passes reachExt having extended by at least this within reachRiseWindow
+  armBack: 0.15, // an arm that comes back this far from its reach peak is no longer reaching
   reachUp: 0.25, // m wrist rise within reachRiseWindow that also counts as a reach (camera below the face)
   reachRiseWindow: 0.4, // s (so an arm already held out near reachExt in a long guard is not a reach)
   // Pull: then both wrists come back to the chest, close together.
   pullExt: 0.45, // both extensions below this
   pullGap: 1.0, // wrists closer than this many shoulder widths
   pullSyncReach: 0.12, // s: ... or, after a reach whose arms rose within this of each other (a one-two is ~0.2-0.3 s apart),
-  pullReachUp: 0.25, // m both wrists rose (reaching up for the neck; punches go forward), and
-  pullToGuard: 0.05, // both arms back to within this of the guard the reach started from,
+  pullReachUp: 0.33, // m both wrists rose (reaching up for the neck; punches go forward), and
+  pullToGuard: 0.1, // both arms back to within this of the guard the reach started from,
   pullFromPeak: 0.15, // having come back at least this much from the reach,
   pullGapVsGuard: 1.4, // with the hands within this multiple of the guard's spacing
   reachMaxHold: 0.5, // s: arms held out longer than this before coming back is a push-and-hold (energy blast), not a grab
   pullWindow: 0.5, // s from the arms starting back (first arm dropping below reachExt) to the pulled-in pose
+  pullSteadyRatio: 1.6, // image shoulder width may not change more than this from reach to pull
+  chestReachExt: 0.75, // the chest pull's reach must pass this (unless grab-like)
+  pullKeepMargin: 0.08, // looser margin while the pulled-in pose is being held
   pullHold: 0.06, // s the pulled-in pose must persist (single-frame tracking glitches are not grabs)
   pullMaxTurnDeg: 35, // a grab is not a turn: torso yaw stays within this of the reach (also rejects tracking flips)
   grabRefractory: 0.8, // s between grabs
@@ -179,6 +184,7 @@ export interface GrappleFeatures {
   yaw: number; // torso yaw, radians
   shH: number; // shoulder-centre height above the hip centre, meters
   torso: number; // shoulder-centre to hip-centre distance, meters
+  isw?: number; // shoulder width in the image (tracking-stability check)
   yL?: number; // wrist height relative to the shoulder line, meters (up = +)
   yR?: number;
 }
@@ -188,9 +194,10 @@ export class GrappleDetector {
   private riseAt = { L: -9, R: -9 };
   private wasExt = { L: false, R: false };
   private wasReach = { L: false, R: false };
+  private armPeak = { L: 0, R: 0 };
   private hist: { t: number; L: number; R: number; gap: number; yL: number; yR: number }[] = [];
   /** Time both arms were last out together (the later arm's rise), with the torso pose at that moment. */
-  private reach: { t: number; yaw: number; shH: number; torso: number; pulled: boolean; thrown: boolean; pullSince: number; throwSince: number; releasedAt: number; loL: number; loR: number; guardGap: number; sync: number; peakL: number; peakR: number; yLoL: number; yLoR: number; upL: number; upR: number } | null = null;
+  private reach: { t: number; yaw: number; shH: number; torso: number; pulled: boolean; thrown: boolean; pullSince: number; throwSince: number; releasedAt: number; loL: number; loR: number; guardGap: number; sync: number; peakL: number; peakR: number; yLoL: number; yLoR: number; upL: number; upR: number; out: boolean; iswMin: number; iswMax: number } | null = null;
   private lastGrab = -9;
   private lastThrow = -9;
   /** Features of the last grab (tuning tools). */
@@ -213,20 +220,29 @@ export class GrappleDetector {
     if (!(rate > c.jabHoldRate)) return false;
     let lo = ext;
     for (const x of this.hist) lo = Math.min(lo, x[h]);
-    const target = Math.max(c.reachExt, lo + c.reachRise);
+    const target = Math.max(c.holdReachExt, lo + c.reachRise);
     return (ext - lo) / Math.max(1e-3, target - lo) >= c.jabHoldProgress;
+  }
+
+  /** A grab-like reach (both arms out together, both wrists up) is in progress: not yet pulled, within its window. */
+  grabLikeActive(t: number): boolean {
+    const r = this.reach;
+    const c = this.cfg;
+    if (!r || r.pulled || r.thrown) return false;
+    if (t - r.t > c.reachMaxHold + c.pullWindow) return false;
+    return r.sync <= c.pullSyncReach && Math.min(r.upL, r.upR) >= c.pullReachUp;
   }
 
   /** The two arms formed a reach at or after time t0 and are both still out. */
   reachSince(t0: number): boolean {
-    return !!this.reach && this.reach.t >= t0 && this.reach.releasedAt < 0;
+    return !!this.reach && this.reach.t >= t0 && this.reach.out;
   }
 
   /** Extension arm h must pass to count as reaching (given its recent low). */
   reachTarget(h: 'L' | 'R', ext: number): number {
     let lo = ext;
     for (const x of this.hist) lo = Math.min(lo, x[h]);
-    return Math.max(this.cfg.reachExt, lo + this.cfg.reachRise);
+    return Math.max(this.cfg.holdReachExt, lo + this.cfg.reachRise);
   }
 
   update(f: GrappleFeatures): ('grab' | 'throw')[] {
@@ -248,8 +264,11 @@ export class GrappleDetector {
       const reaching = ext && (e - lo >= c.reachRise || yUp >= c.reachUp);
       // A fresh rise counts even if the arm never dropped below reachExt: a low guard can sit right at reachExt (drill
       // session 2dd3adbd, ext 0.78-0.81), which left that arm "reached" from an old rise and never in sync with the other.
-      if (reaching && (!this.wasReach[h] || f.t - this.riseAt[h] > c.reachRiseWindow)) this.riseAt[h] = f.t;
-      this.wasReach[h] = reaching || (this.wasReach[h] && ext); // stays "reached" while the arm stays out
+      if (reaching && (!this.wasReach[h] || f.t - this.riseAt[h] > c.reachRiseWindow)) (this.riseAt[h] = f.t), (this.armPeak[h] = e);
+      else if (this.wasReach[h]) this.armPeak[h] = Math.max(this.armPeak[h], e);
+      // Stays "reached" while the arm stays out near its peak: coming back armBack from the peak ends it (a resting guard
+      // can sit above reachExt, session ea6e2541, so "below reachExt" alone never released).
+      this.wasReach[h] = reaching || (this.wasReach[h] && ext && e >= this.armPeak[h] - c.armBack);
       this.wasExt[h] = ext;
     }
     // Both arms out now, having risen within reachSync of each other: a (new) reach.
@@ -259,19 +278,20 @@ export class GrappleDetector {
       const live = this.reach && !this.reach.pulled && !this.reach.thrown && f.t - this.reach.t <= c.reachMaxHold;
       if (!this.reach || (this.reach.t !== at && !live)) {
         // The guard the reach started from (the arms' recent lows): the pull is a return to it.
-        let loL = f.extL, loR = f.extR, guardGap = f.gap / Math.max(0.15, f.sw), lo = Infinity, yLoL = f.yL ?? 0, yLoR = f.yR ?? 0;
+        // Guard level = the median extension before the reach (the minimum caught a brief wind-up dip, session ea6e2541).
+        const medOf = (a: number[]) => [...a].sort((x, y) => x - y)[a.length >> 1];
+        let loL = medOf(this.hist.map((x) => x.L)), loR = medOf(this.hist.map((x) => x.R)), guardGap = f.gap / Math.max(0.15, f.sw), lo = Infinity, yLoL = f.yL ?? 0, yLoR = f.yR ?? 0;
         for (const x of this.hist) {
-          loL = Math.min(loL, x.L);
-          loR = Math.min(loR, x.R);
           yLoL = Math.min(yLoL, x.yL);
           yLoR = Math.min(yLoR, x.yR);
           if (x.L + x.R < lo) (lo = x.L + x.R), (guardGap = x.gap);
         }
-        this.reach = { t: at, yaw: f.yaw, shH: f.shH, torso: f.torso, pulled: false, thrown: false, pullSince: -1, throwSince: -1, releasedAt: -1, loL, loR, guardGap, sync: Math.abs(this.riseAt.L - this.riseAt.R), peakL: f.extL, peakR: f.extR, yLoL, yLoR, upL: (f.yL ?? 0) - yLoL, upR: (f.yR ?? 0) - yLoR };
+        this.reach = { t: at, yaw: f.yaw, shH: f.shH, torso: f.torso, pulled: false, thrown: false, pullSince: -1, throwSince: -1, releasedAt: -1, loL, loR, guardGap, sync: Math.abs(this.riseAt.L - this.riseAt.R), peakL: f.extL, peakR: f.extR, yLoL, yLoR, upL: (f.yL ?? 0) - yLoL, upR: (f.yR ?? 0) - yLoR, out: true, iswMin: f.isw ?? 1, iswMax: f.isw ?? 1 };
       }
     }
     const r = this.reach;
     if (!r) return out;
+    if (f.isw != null) (r.iswMin = Math.min(r.iswMin, f.isw)), (r.iswMax = Math.max(r.iswMax, f.isw));
     if (r.releasedAt < 0) {
       r.peakL = Math.max(r.peakL, f.extL);
       r.peakR = Math.max(r.peakR, f.extR);
@@ -279,7 +299,10 @@ export class GrappleDetector {
       r.upR = Math.max(r.upR, (f.yR ?? 0) - r.yLoR);
     }
     const age = f.t - r.t;
-    if (r.releasedAt < 0 && !(this.wasExt.L && this.wasExt.R)) r.releasedAt = f.t;
+    // Released (for the pull): an arm left the reach, i.e. dropped below reachExt or came back armBack from its peak.
+    if (r.releasedAt < 0 && !(this.wasReach.L && this.wasReach.R)) r.releasedAt = f.t;
+    // Still out (for the jab hold): both arms past reachExt.
+    r.out = this.wasExt.L && this.wasExt.R;
     const grabLive = r.releasedAt >= 0 ? r.releasedAt - r.t <= c.reachMaxHold && f.t - r.releasedAt <= c.pullWindow : age <= c.reachMaxHold;
     if (!grabLive && age > c.throwWindow) {
       this.reach = null;
@@ -303,11 +326,20 @@ export class GrappleDetector {
       // pullSyncReach of each other, unlike a one-two), both arms brought well back from it to the guard it started
       // from. A low guard sits at ext ~0.75, hands ~1.3 shoulder widths apart; that player reaches overhead and pulls
       // down to it (drill session 2dd3adbd), never reaching pullExt.
-      const chest = f.extL < c.pullExt && f.extR < c.pullExt && f.gap < c.pullGap * f.sw;
+      // Once the pulled-in pose is seen, a looser margin keeps it (at 13-16 fps the 0.06 s hold is two frames, and the
+      // second frame missed by 0.001 in session ea6e2541 grab 1).
+      const m = r.pullSince >= 0 ? c.pullKeepMargin : 0;
+      // A grab-like reach: both arms went out together (risen within pullSyncReach) and both wrists rose (toward the neck).
+      const grabLike = r.sync <= c.pullSyncReach && Math.min(r.upL, r.upR) >= c.pullReachUp;
+      // The chest pull needs a full reach (chestReachExt) unless the reach was grab-like (reachExt alone is lowered for
+      // foreshortened reaches toward the camera; ufc_08's one-arm 0.74 punch then read as a grab).
+      const chest = (grabLike || Math.min(r.peakL, r.peakR) >= c.chestReachExt) && f.extL < c.pullExt + m && f.extR < c.pullExt + m && f.gap < (c.pullGap + m) * f.sw;
       // Back from the reach: extension came back, or (camera below the face) the wrist came back down.
-      const toGuard = (e: number, lo: number, pk: number, up: number, y: number, yLo: number) => e <= lo + c.pullToGuard && (pk - e >= c.pullFromPeak || yLo + up - y >= c.reachUp);
-      const guardPull = r.sync <= c.pullSyncReach && Math.min(r.upL, r.upR) >= c.pullReachUp && toGuard(f.extL, r.loL, r.peakL, r.upL, f.yL ?? 0, r.yLoL) && toGuard(f.extR, r.loR, r.peakR, r.upR, f.yR ?? 0, r.yLoR) && f.gap < Math.max(c.pullGap, r.guardGap * c.pullGapVsGuard) * f.sw;
-      if ((chest || guardPull) && turn <= c.pullMaxTurnDeg) {
+      const toGuard = (e: number, lo: number, pk: number, up: number, y: number, yLo: number) => e <= lo + c.pullToGuard + m && (pk - e >= c.pullFromPeak - m || yLo + up - y >= c.reachUp - m);
+      const guardPull = grabLike && toGuard(f.extL, r.loL, r.peakL, r.upL, f.yL ?? 0, r.yLoL) && toGuard(f.extR, r.loR, r.peakR, r.upR, f.yR ?? 0, r.yLoR) && f.gap < Math.max(c.pullGap, r.guardGap * c.pullGapVsGuard) * f.sw;
+      // Tracking stayed on one steady person (a referee crossing in ufc_07 swapped the tracked body mid-"reach").
+      const steady = r.iswMax / Math.max(1e-3, r.iswMin) <= c.pullSteadyRatio;
+      if ((chest || guardPull) && steady && turn <= c.pullMaxTurnDeg) {
         if (r.pullSince < 0) r.pullSince = f.t;
         if (f.t - r.pullSince >= c.pullHold) {
           r.pulled = true;
@@ -692,7 +724,7 @@ export class GestureRecognizer {
     // features, so running it before strike emission does not change its output; its actions are appended at the end.
     const midHipG = mid(P[J.lHip], P[J.rHip]);
     const yawG = Math.atan2(-(lS[2] - rS[2]), lS[0] - rS[0]);
-    const grappleActs = this.grapple.update({ t, extL: hL.ext, extR: hR.ext, gap: len(sub(lW, rW)), sw: SW, yaw: yawG, shH: MS[1] - midHipG[1], torso: len(sub(MS, midHipG)), yL: lW[1] - MS[1], yR: rW[1] - MS[1] });
+    const grappleActs = this.grapple.update({ t, extL: hL.ext, extR: hR.ext, gap: len(sub(lW, rW)), sw: SW, yaw: yawG, shH: MS[1] - midHipG[1], torso: len(sub(MS, midHipG)), yL: lW[1] - MS[1], yR: rW[1] - MS[1], isw: imgSW });
     const nBefore = out.actions.length;
     const held: (Action & { t: number })[] = []; // strikes taken out of the stream this frame (they keep the hand refractory)
     const palmShape = () => wristsGap < this.cfg.palmMaxGap && ry(lW) < noseY - 0.05 && ry(rW) < noseY - 0.05;
@@ -711,10 +743,12 @@ export class GestureRecognizer {
     const emitSingle = (a: Action & { t: number }) => {
       // Both wrists rising together (a two-arm reach up to the head, drill session 2dd3adbd grab reps) is not one strike.
       if ((a.kind === 'jab' || a.kind === 'uppercut' || a.kind === 'hook') && this.bothRising()) return twoArm(a, 'both arms rising together');
+      // A grab's pull-in sweeps both wrists toward the midline, which reads as a hook (session ea6e2541 grab 1).
+      if ((a.kind === 'jab' || a.kind === 'uppercut' || a.kind === 'hook') && this.grapple.grabLikeActive(t)) return twoArm(a, 'grab in progress');
       if (a.kind === 'jab' && (a.hand === 'L' || a.hand === 'R')) {
         const o = a.hand === 'L' ? 'R' : 'L';
         if (bothOut(t - gc.reachSync)) return twoArm(a, 'both arms out in a reach');
-        if (info(a.hand).ext >= gc.reachExt && info(o).elbow >= gc.holdElbowMin && this.grapple.armRising(o, info(o).ext, info(o).extRate)) {
+        if (info(a.hand).ext >= gc.holdReachExt && info(o).elbow >= gc.holdElbowMin && this.grapple.armRising(o, info(o).ext, info(o).extRate)) {
           if (this.debugLog) this.debugLog.push(`${t.toFixed(2)} jab${a.hand} held: other arm rising (ext ${info(o).ext.toFixed(2)} rate ${info(o).extRate.toFixed(2)})`);
           this.jabHold = { hand: a.hand, a, t };
           held.push(a);
@@ -749,7 +783,7 @@ export class GestureRecognizer {
         // The second arm followed into a reach: fire nothing.
         this.jabHold = null;
         twoArm(jh.a, 'held jab became a reach');
-      } else if (t - jh.t >= gc.reachSync || info(jh.hand).ext < gc.reachExt || (info(o).extRate <= 0 && info(o).ext < this.grapple.reachTarget(o, info(o).ext))) {
+      } else if (t - jh.t >= gc.reachSync || info(jh.hand).ext < gc.holdReachExt || (info(o).extRate <= 0 && info(o).ext < this.grapple.reachTarget(o, info(o).ext))) {
         // Window over, the jab arm came back, or the other arm stopped short: it was a one-arm jab.
         if (this.debugLog) this.debugLog.push(`${t.toFixed(2)} held jab${jh.hand} fired`);
         this.jabHold = null;

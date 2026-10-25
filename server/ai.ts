@@ -11,7 +11,7 @@ const ipv4 = new Agent({ connect: { family: 4 } });
 const META_BASE = 'https://api.meta.ai/v1';
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 // Verified 2026-10-24 against the key's model list: flash-lite answers in ~0.6 s without thinking.
-const GEMINI_TEXT_MODELS = ['gemini-3.5-flash-lite', 'gemini-3.8-flash'];
+const GEMINI_TEXT_MODELS = ['gemini-3.5-flash-lite', 'gemini-3.8-flash', 'gemini-3.5-flash']; // 3.5-flash: separate free-tier quota (flash-lite's daily quota ran out Oct 25 ~5:45 AM)
 // The full TTS model first (more expressive), the lite one as a fallback.
 const GEMINI_TTS_MODELS = ['gemini-3.8-flash-tts', 'gemini-3.8-flash-lite-tts'];
 // Meta prices (dev.meta.ai/docs/pricing-rate-limits, checked 2026-10-24): $1.25/M input, $4.25/M output, $0.01/image.

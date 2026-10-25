@@ -267,7 +267,24 @@ export async function startMode(mode: string) {
     const wait = setInterval(() => {
       if (!calibrating && (s as any).sim?.phase === 'fight') {
         clearInterval(wait);
-        const keep = setInterval(() => ((s as any).sim.roundTimer = 120), 1000);
+        // The hidden stand-in never ends the drills: kept at full health, never stunned or knocked back, 1 m in front of
+        // you and facing you (inside grab range), so a KO, a cage slam or the match ending can't interfere (REVIEW.md 6:00 AM).
+        const keep = setInterval(() => {
+          const sim = (s as any).sim;
+          if (!sim) return;
+          sim.roundTimer = 120;
+          const myId = s.localIds[0];
+          const meF = sim.get(myId);
+          if (!meF) return;
+          for (const f of sim.fighters ?? []) {
+            if (f.id === myId) continue;
+            Object.assign(f, { hp: 100, alive: true, stunUntil: 0, dizzyUntil: 0, vx: 0, vy: 0, vz: 0, y: 0, kb: 0 });
+            if (typeof f.guard === 'number') f.guard = 100;
+            f.x = meF.x + Math.sin(meF.yaw) * 1.0;
+            f.z = meF.z + Math.cos(meF.yaw) * 1.0;
+            f.yaw = meF.yaw + Math.PI;
+          }
+        }, 50);
         void import('./drills').then(({ runDrills }) =>
           runDrills(pose!, () => {
             clearInterval(keep);
