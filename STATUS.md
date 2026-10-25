@@ -17,7 +17,7 @@ Last update: Sun Oct 25, 12:05 AM CDT.
 - **Final cut ready: https://144-202-71-213.sslip.io/media/throwhands-demo.mp4** (2:27, 1280x720, H.264/AAC, 42.6 MB, loudness -16 LUFS, burned-in captions). On the server: `/home/agent/projects/brawlcam/video/out/throwhands-demo.mp4`.
 - Follows Meta's required structure: problem and human connection, working demo, how AI is integrated, tools/harnesses. Hook: a real punch and the slow-motion super uppercut in the first 6 s.
 - Made with code: gameplay rendered by the real game in a frame-stepped record mode (fighters driven by saved pose landmarks; no third-party footage appears), UI captured from the live site, HTML title cards, ElevenLabs voiceover (narration checked with a Gemini transcription), ffmpeg assembly (`video/`).
-- **Request:** I could not create the GitHub release (`gh release create` refused: no write access). Please upload it as a release asset (and to YouTube for Devpost).
+- **GitHub release asset:** https://github.com/andrewyin-builds/throwhands/releases/tag/demo-video-v1 (on the fork, because this account cannot create releases on `AndrewYin04/throwhands`). Please also attach it to a release on the main repo and upload it to YouTube for Devpost.
 
 ## Meta spend
 - Server-side estimate at `/api/health` (`ai.metaSpendUsd`); cap $20 (then fallbacks). About $0.05 so far. Live smoke calls so far tonight: 8.
@@ -46,7 +46,7 @@ All game paths below were run end to end on the deployed server through the real
 None so far.
 
 ## Requests for planner
-1. **Blocking: GitHub write access.** The server's `gh` login is `andrewyin-builds`, which has read-only access to `AndrewYin04/throwhands`: every push since 8:30 PM fails with `remote: Permission to AndrewYin04/throwhands.git denied to andrewyin-builds.` (403). No invitation is pending. Please add `andrewyin-builds` as a collaborator with **Write** access, or tell me which account to push as. About 15 commits are waiting locally (including this file, `submission/devpost.md` for the soft submission, README, TESTING.md).
+1. **Merge PR #1: https://github.com/AndrewYin04/throwhands/pull/1** (all work so far, pushed from a fork). Then **GitHub write access:** The server's `gh` login is `andrewyin-builds`, which has read-only access to `AndrewYin04/throwhands`: every push since 8:30 PM fails with `remote: Permission to AndrewYin04/throwhands.git denied to andrewyin-builds.` (403). No invitation is pending. Please add `andrewyin-builds` as a collaborator with **Write** access, or tell me which account to push as. About 15 commits are waiting locally (including this file, `submission/devpost.md` for the soft submission, README, TESTING.md).
    - Until then, the Devpost draft is on the server at `/home/agent/projects/brawlcam/submission/devpost.md`.
 2. **DNS for throwhands.tech**: public DNS currently answers `127.0.0.1` for both names. They need A records `throwhands.tech` and `www.throwhands.tech` -> `144.202.71.213`. Deploys add the names to Caddy automatically once DNS resolves here (earlier attempts while DNS was wrong got Let's Encrypt to rate-limit the name for about an hour; Caddy also tries ZeroSSL).
 3. **Upload the demo video** as a GitHub release asset and to YouTube: https://144-202-71-213.sslip.io/media/throwhands-demo.mp4
