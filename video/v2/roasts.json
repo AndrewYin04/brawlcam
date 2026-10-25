@@ -1,0 +1,17 @@
+[
+ {
+  "file": "/home/agent/projects/brawlcam/video/out/v2roast/roast_0.mp3",
+  "text": "Iron Rook just got a taste of the stratosphere thanks to your super uppercut.",
+  "from": "roasts-s2.json t=36.7 (gemini-3.1-flash-lite)"
+ },
+ {
+  "file": "/home/agent/projects/brawlcam/video/out/v2roast/roast_1.mp3",
+  "text": "You and Iron Rook are looking like a pair of shiny metal statues tonight.",
+  "from": "roasts-s3.json t=21.7 (gemini-3.1-flash-lite)"
+ },
+ {
+  "file": "/home/agent/projects/brawlcam/video/out/v2roast/roast_2.mp3",
+  "text": "Iron Rook is playing brick wall while you are gathering all that power.",
+  "from": "roasts-s3.json t=26.7 (gemini-3.1-flash-lite)"
+ }
+]

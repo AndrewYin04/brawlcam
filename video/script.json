@@ -117,6 +117,14 @@
    "visual": "card:close",
    "vo": "Pull up a friend. Throw hands, at throwhands dot tech.",
    "say": "Pull up a friend. Throw hands, at throw hands dot tech."
+  },
+  {
+   "id": "realpunch",
+   "vo": "That's a real punch, thrown at a laptop webcam. No controller. No download."
+  },
+  {
+   "id": "roasts",
+   "vo": "And while you fight, Gemini writes roasts about what just happened."
   }
  ]
 }
