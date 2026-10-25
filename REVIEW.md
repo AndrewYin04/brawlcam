@@ -627,3 +627,48 @@ The user's big hooks open the elbow to **155 to 160°**, past `hookElbowMax: 150
 The forward/back signs are still unreliable.
 
 **Order:** the movement fix (4:25 AM), then the hook classification, then the grab two-arm hold (4:10 AM). Then ask the user to re-run the drills.
+
+## 2026-10-25 5:10 AM CDT: demo-video-v2: motion graphics, a faster pace, and audible roasts (the user's request)
+Seen: 18eaea6 (forward/back), 82e13b7 (hooks and uppercuts), 1ffa721 and 89f766a (grab), 6e87ff8 (before/after drill numbers). Thanks. The planner will ask the user to re-run the drills.
+
+### 1. Motion graphics, polished and fast
+The user wants v2 "more polished and fast paced." Keep Meta's four-part structure (problem and connection, about 30 s; demo, about 90 s; AI, about 30 s; tools, about 30 s) and a 2:00 to 2:45 total. Then:
+- **Pacing:** average shot under about 2.5 s during the demo; the hook lands in the first 3 s; no static slide longer than about 4 s.
+- **A licensed music bed** (CC0 or royalty-free; credit it in the README), with **cuts and type animations on the beat**. Duck the music under the voiceover and announcer calls.
+- **Kinetic typography** for the key phrases ("YOUR BODY IS THE CONTROLLER", "FIGHT YOUR FRIENDS FROM ANYWHERE"), using the game's brand fonts and colors.
+- **Impact motion design:** a punch-in zoom and a 2 to 3 frame white flash on big hits, whip or glitch transitions between sections, and screen shake synced to the cage slams in the footage.
+- **Animated callouts on gestures:** a lower third naming the move and its effect ("RIGHT HOOK → 11 DMG", "GUARD BROKEN → 2 s DIZZY"), with an arrow to the body part.
+- **An animated pipeline diagram** for the AI section: camera, then MediaPipe (33 points), then gesture rules, then the server sim, then the opponent's screen; plus Gemini and Muse for commentary and Forge. Flowing particles along the arrows.
+- **Animated stat counters** for the tools section, using real numbers from STATUS and TESTING (48 e2e tests, 0 state mismatches over 2,160 ticks, 3.4× pose compression).
+- **A logo sting** at the start and end, a throwhands.tech end card, and captions throughout in safe areas.
+- **Build it in code** (Remotion, or HTML/CSS/GSAP rendered frame by frame), 1080p at 30 or 60 fps, loudness about -14 LUFS.
+- **Review it with the section 11 video reviewer:** pacing, every caption true to the frame, no repeated clips, no grappling (still flagged). The planner also reviews before upload.
+
+### 2. Real gameplay with audible roasts
+The user: "there should be real gameplay with the roasts too ... we need to be able to hear at least some of the roasts in the video demo." Gemini TTS is out of free quota (STATUS), so live AI lines are captions only. **Don't wait for the quota:**
+- **Real gameplay:** drive the game with the **user's own research recordings** (sessions `fda75d56`, `2dd3adbd`, and any newer drill sessions in `research_frames`). These are a real person's motion, not third-party clips. Render the matches through the real renderer with the commentary system running, and keep the AI roast lines Gemini *writes* during those matches (text generation still works; check `geminiCalls`).
+- **Voicing the roasts:** pick 6 to 10 of the best Gemini-written roast lines from those real matches, and voice them with ElevenLabs in the same "Charlie" voice. Run each through the `check-calls.ts` transcript check (0 extra words). Mix them into the footage at the moment each line fired, with the caption on screen. Budget: ElevenLabs is at 4,499 of 10,000 used, so at most about 1,000 more characters for this.
+- **In the game too:** so judges hear roasts live, pre-render a bank of about 20 to 30 generic roasts with no names (about 1,200 characters, same voice, transcript-checked). When a live Gemini line is caption-only, play the generic roast matching the event (big hit, whiff streak, guard break, comeback). The on-screen caption keeps the specific Gemini roast.
+- **Honesty:** the video's AI section must say what is true, for example "Gemini writes the roasts live; the announcer voice is ElevenLabs."
+
+### 3. The user's real face (optional; the planner is asking the user)
+The user's own research videos (`throwhands-research-…-09-25-59.webm` and others, on the user's laptop) are timestamp-synced with the JSONL. If the user approves, a picture-in-picture of the user's real punch beside the fighter's punch fixes the v1 hook ("This is a real punch"). Do not use them until STATUS shows the user's approval; the planner will relay it.
+
+Timeline: freeze 7:30 AM; v2 render, release asset, and final text by **10:15 AM**.
+
+### 5:20 AM: the user APPROVED use of their research webcam footage
+The user said yes to using their own research recordings, both for debugging **and** as picture-in-picture in the public demo video (YouTube; it stays public after the event). This applies only to the user's own `throwhands-research-*.webm` files, which they are copying to `~/hacktx26/research/` on this server:
+- `…09-25-59` (drill session 2, with `.jsonl`)
+- `…09-13-15` (drill session 1, with `.jsonl`)
+- `…08-00-59` (free play; the server has its landmarks under session `ee6f97a0`, but there is no local `.jsonl`)
+
+Guidance for the video:
+- Use the PiP mainly for the hook ("a real punch") and a few walkthrough moments. Sync it to the fighter using the JSONL timestamps; the drift must be under about 2 frames.
+- Crop to the user's upper body. Don't show anything else in the room that identifies where they live.
+- The `.webm` files stay out of the repo, as with all research data.
+- If the user records a fresh, better-lit session after the latest fixes, prefer that for the PiP.
+
+### 5:30 AM: pitching format (from the HackTX26 Pitching Document linked in the handbook)
+Best Pitch is **1 minute per team, spoken only: no slides, no prep, no demos** (props are OK only if they need no setup). The audience votes by QR code, Sunday 5:30 to 6:00 PM in WEL 2.224. The deck at `submission/pitch/` cannot be used there.
+
+Instead, write **`submission/pitch-1min.md`**: a spoken script of about 140 to 150 words (under 60 s at a natural pace), ordered: hook (about 8 s), problem, solution, what makes it different, and a close with "throwhands.tech". Mark one physical beat the user can do on stage with no setup (for example, throwing a real hook while saying "your body is the controller"). Keep it school-appropriate. Also include a 30-second version in case they are cut short.
