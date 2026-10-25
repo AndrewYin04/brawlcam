@@ -32,7 +32,7 @@ const CARDS: Record<string, string> = {
     <div class="grid" style="margin-top:26px;grid-template-columns:repeat(3,1fr)"><div class="c"><b>Meta Muse Spark + Muse Image</b><span>Fighter Forge and rivalry cards</span></div><div class="c"><b>Gemini + Gemini TTS</b><span>Live fight commentary lines</span></div><div class="c"><b>ElevenLabs</b><span>Announcer calls for big moments, made in advance</span></div></div>
     <p style="font-size:22px">No video ever leaves your device: only joint positions travel.</p>`,
   tools: `<div class="k">Tools, harnesses, models</div><h2>How we built it</h2>
-    <div class="grid">
+    <div class="grid" style="grid-template-columns:repeat(3,1fr)">
       <div class="c"><b>Claude Code</b><span>Wrote and tested the game, server, and tools with us</span></div>
       <div class="c"><b>Playwright harness</b><span>Pro fighters' shadowboxing footage as the webcam in headless browsers; checks both screens match on every tick</span></div>
       <div class="c"><b>Vultr</b><span>Runs the game, every online room, and the AI proxy</span></div>

@@ -695,8 +695,8 @@ export class HeroFighter {
       else col.copy(YELLOW).lerp(RED, 1 - g * 2);
       // Guard: a compact bubble around the head and arms (not a full-body capsule); Iron Wall covers the body.
       if (iron) {
-        this.shield.scale.set(1.08, 1.6, 1.08);
-        this.shield.position.y = 0.97;
+        this.shield.scale.set(1.0, 0.95, 1.0);
+        this.shield.position.y = 1.35;
       } else {
         const sc = 0.62 + 0.25 * g;
         this.shield.scale.set(sc, sc * 0.9, sc);
@@ -716,6 +716,8 @@ export class HeroFighter {
       });
     }
     this.shadow.scale.setScalar(THREE.MathUtils.clamp(1 - opts.airborne / 3, 0.25, 1));
+    this.shadow.position.z = this.body.position.z; // shadow and ring follow a lunge
+    this.ring.position.z = this.body.position.z;
     this.root.visible = !this.hidden && (opts.alive || this.koTime >= 0);
   }
 
@@ -728,7 +730,8 @@ export class HeroFighter {
       if (t > end) this.strike = null;
       else if (s.target) {
         // IK weight: rise to 1 at contact, hold briefly, release.
-        const w = t < s.contactT ? smooth(t / s.contactT) : t < s.contactT + 0.07 ? 1 : 1 - smooth((t - s.contactT - 0.07) / 0.25);
+        const up = s.kind === 'uppercut' || s.kind === 'super_uppercut';
+        const w = t < s.contactT ? (up ? Math.min(1, t / 0.05) : smooth(t / s.contactT)) : t < s.contactT + 0.07 ? 1 : 1 - smooth((t - s.contactT - 0.07) / 0.25);
         const goal = this.aimPoint(s, new THREE.Vector3());
         if (goal) {
           const kick = s.kind === 'kick';
@@ -740,13 +743,14 @@ export class HeroFighter {
           const gap = from.distanceTo(goal) - reach * 0.97;
           // Never step into the target's body (roots stay at least 0.5 m apart: two ~0.25 m bodies touching).
           const rootDist = this.root.position.distanceTo(s.target.root.position);
-          s.lunge = THREE.MathUtils.clamp(this.lungeNow + gap, 0, Math.max(0, Math.min(0.95, rootDist - 0.5)));
+          s.lunge = THREE.MathUtils.clamp(this.lungeNow + gap, 0, Math.max(0, Math.min(0.6, rootDist - 0.5)));
           lungeWant = s.lunge * w;
           this.body.position.z = lungeWant;
           this.root.updateMatrixWorld(true);
           if (s.kind === 'uppercut' || s.kind === 'super_uppercut') {
-            // Rise from under the chin: dip the hips, then drive up through the hit.
-            goal.y -= (1 - w) * 0.6;
+            // A real uppercut: the fist starts low at the hip and drives straight up to the chin (full IK control).
+            const u = Math.min(1, t / s.contactT);
+            goal.y -= (1 - smooth(u)) * 0.75;
             this.body.position.y += (w < 1 ? -0.1 * (1 - w) : 0.05);
             this.root.updateMatrixWorld(true);
           }
@@ -754,7 +758,7 @@ export class HeroFighter {
             const pole = this.root.localToWorld(new THREE.Vector3(side === 'l' ? 0.2 : -0.2, 1.4, 1.2));
             twoBoneIK(upper, this.bones['calf_' + side]!, this.bones['foot_' + side]!, goal, pole, w, this.len['th' + side], this.len['ca' + side], 0);
           } else {
-            const pole = this.root.localToWorld(new THREE.Vector3(side === 'l' ? 0.7 : -0.7, 0.6, -0.3));
+            const pole = this.root.localToWorld(up ? new THREE.Vector3(side === 'l' ? 0.4 : -0.4, -0.6, 0.2) : new THREE.Vector3(side === 'l' ? 0.7 : -0.7, 0.6, -0.3));
             twoBoneIK(upper, this.bones['lowerarm_' + side]!, this.bones['hand_' + side]!, goal, pole, w, this.len['ua' + side], this.len['la' + side], 0.07);
           }
           if (!s.recorded && t >= s.contactT) {

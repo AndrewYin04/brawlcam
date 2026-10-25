@@ -479,7 +479,7 @@ export class MatchView {
         // (you stay the near fighter); never closer than 1.3 m to either body.
         const side = Math.sign(this.arena.camera.position.clone().sub(mid).dot(right)) || 1;
         const towardMe = a.clone().sub(b2).setY(0).normalize();
-        pos = mid.clone().addScaledVector(right, side * (3.0 + span * 0.8)).addScaledVector(towardMe, 1.2).setY(1.5 + span * 0.15);
+        pos = mid.clone().addScaledVector(right, side * (4.2 + span * 0.9)).addScaledVector(towardMe, 1.4).setY(1.7 + span * 0.15);
         look = mid.clone();
       }
     }
@@ -544,10 +544,19 @@ export class MatchView {
         }
       }
     }
+    // Hard rule outside slow motion: your fighter is always nearer the camera than the opponent.
+    if (USE_HEROES && me && opp && !this.slowmo && this.opts.camera === 'behind') {
+      if (pos.distanceTo(opp.pos) < pos.distanceTo(me.pos) + 0.5) {
+        const fwd2 = opp.pos.clone().sub(me.pos).setY(0).normalize();
+        const right2 = new THREE.Vector3(-fwd2.z, 0, fwd2.x);
+        pos = me.pos.clone().addScaledVector(fwd2, -2.4).addScaledVector(right2, 1.2).setY(pos.y);
+        this.camSwing *= 0.5;
+      }
+    }
     // Never inside or against a fighter: keep a minimum distance from both bodies (more in slow motion, when the
     // victim tumbles), measured to where they are drawn.
     if (USE_HEROES) {
-      const minD = this.slowmo ? 2.0 : 1.4;
+      const minD = this.slowmo ? 3.0 : 1.4;
       for (const sl of this.slots.values()) {
         if (!(sl.avatar instanceof HeroFighter) || !sl.avatar.root.visible) continue;
         const body = sl.avatar.root.position.clone().add(sl.avatar.body.position).setY(0);
@@ -565,7 +574,7 @@ export class MatchView {
     this.arena.setCamera(pos, look, dt, this.camCut, this.time < this.camEaseUntil ? 2.2 : 5);
     // The eased camera itself must also stay clear of the bodies (its path can cross a fighter while easing).
     if (USE_HEROES) {
-      const minD = this.slowmo ? 1.8 : 1.3;
+      const minD = this.slowmo ? 2.8 : 1.3;
       const cp = this.arena.camPos;
       for (const sl of this.slots.values()) {
         if (!(sl.avatar instanceof HeroFighter) || !sl.avatar.root.visible) continue;
