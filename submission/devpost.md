@@ -86,9 +86,13 @@ More fighters and arenas, then three revenue lines:
 - Caddy
 - Vultr
 - Tiger Data (TimescaleDB)
-- Gemini API (Gemini Flash, Gemini TTS)
-- Meta Model API (Muse Spark, Muse Image)
-- WebAudio API
+- Gemini API (`gemini-3.5-flash-lite` commentary, `gemini-3.8-flash-lite-tts` speech)
+- Meta Model API (`muse-spark-1.3` with `muse-spark-1.2` fallback, `muse-image-1.0`)
+- WebAudio API (all sound effects synthesized in code)
+- undici (IPv4-pinned HTTP client)
+- esbuild
+- ElevenLabs (demo video voiceover only)
+- ffmpeg (demo video assembly)
 - throwhands.tech (.Tech domain)
 
 ## Prize tracks
