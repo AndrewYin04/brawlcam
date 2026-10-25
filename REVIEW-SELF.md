@@ -215,3 +215,92 @@ Highs:
 - **Brawl:** a marker over you, and a wider, higher opening shot.
 - **Effects:** sphere trails removed, glove glow capped.
 - **Camera cuts:** on teleports.
+
+## Round 7: build d807dee (camera kept inside the cage, see-through fallback), Sun Oct 25 3:32 AM CDT
+| Item | Reviewer A | Reviewer B (judge) |
+|---|---|---|
+| 1 Walk/run | 2 | 2 |
+| 2 Torso/head | 3 | 3 |
+| 3 Attacks | 3 | 2 |
+| 4 Reactions | 3 | 3 |
+| 5 Glows | 3 | 4 |
+| 6 Effects | 3 | 3 |
+| 7 Stage | 4 | 4 |
+| 8 Camera | 2 | 2 |
+| 9 Silhouettes | 3 | 3 |
+| Strikes connect | 3 | 2 |
+| Cage never blocks | 4 | 4 |
+| Opponent visible | 2 | 2 |
+
+The cage problem was solved: occlusion ≤0.9% everywhere.
+
+New highs:
+- **Camera side flips during a plain jab** (9 jumps). The new "cut on big moves" rule fired on the cage swing.
+- **Opponent hidden** in cage_far (56%).
+- **Super camera loses the launched victim.**
+- **Launched fighter floats** in a seated guard pose.
+- **Walking backward uses the jog clip in reverse**, which looks like splits.
+- **See-through ghosting** (also flagged by the planner: it shows inner surfaces).
+- **Brawl:** you are small at the back, behind cropped foreground fighters.
+- **KO'd fighter** lies with gloves up.
+
+Fixes (build 6039076 and later):
+- **Camera:** the swing angle is smoothed with hysteresis, and it widens when your fighter hides the opponent. It cuts only on your own teleports.
+- **Slow-motion camera:** frames both fighters and keeps its side.
+- **See-through removed.**
+- **Brawl:** a chase camera behind you.
+- **Launch:** knocked-up fighters tumble.
+- **Backing up:** never jogs, and runs at 70% speed.
+- **KO:** settles into a limp lying pose.
+
+Measured afterwards:
+- **Opponent visible:** jab 89%, hook 84%, ko 93%, cage_far 72%.
+- **Camera jumps in normal play:** 0.
+
+## Round 8: build 53fcb66 (plus audio, drills), Sun Oct 25 4:08 AM CDT
+| Item | Reviewer A | Reviewer B (judge) |
+|---|---|---|
+| 1 Walk/run | 2 | 3 |
+| 2 Torso/head | 3 | 3 |
+| 3 Attacks | 2 | 2 |
+| 4 Reactions | 3 | 2 |
+| 5 Glows | 2 | 3 |
+| 6 Effects | 2 | 3 |
+| 7 Stage | 3 | 4 |
+| 8 Camera | 2 | 2 |
+| 9 Silhouettes | 2 | 3 |
+| Strikes connect | 1 | 2 |
+| Cage never blocks | 4 | 4 |
+| Opponent visible | 2 | 2 |
+
+Highs (both):
+- **KO slow-motion camera clips into the falling fighter** (ko f40).
+- **Punches land behind your own back** from the camera.
+- **Cage slam / launched bodies** pass over the fence or pop upright.
+- **Brawl camera dives** overhead.
+- **Energy blast** fires point-blank with no side camera.
+- **Super uppercut glove** never rises for a live-pose player.
+
+Fixes (build 83f8941):
+- **Camera stays clear of bodies:** never inside or against a fighter. Its target and its eased path both stay 1.3 m clear of each body (1.8–2 m in slow motion). Checked frame by frame on the KO sheet: no clipping.
+- **Slow-motion camera:** stays on your side and eases in and out.
+- **Strikes:** the camera orbits wider during your own strike.
+- **Tumbles:** limited by the distance to the fence.
+- **Brawl camera:** looks 2.4 m ahead of you.
+- **Energy blast:** gets the slow-motion side camera.
+- **Super uppercut:** always plays its rising strike.
+- **Spacing:** 1.3 m fighting distance, 1.0 m minimum.
+- **Wrists:** straight along the forearm.
+
+Measured after the fixes (local build):
+
+| Scene | Contact mean (cm) | Opponent visible |
+|---|---|---|
+| jab | 0.7 | 94% |
+| uppercut | 0.3 | 100% |
+| ko | 0.7 | 97% |
+| getting_hit | 7.8 | 99% |
+| brawl8 | 4.6 | 100% |
+| cage_far | 4.4 | 73% |
+
+Still below target: planted-foot slide during strikes (5–9 cm; a rear-foot IK pin was tried, did not change the metric, and was reverted).
