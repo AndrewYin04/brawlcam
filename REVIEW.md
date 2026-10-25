@@ -422,3 +422,12 @@ The user can't press label keys while throwing punches, and wants a separate res
   - drill sessions become regression fixtures (stored outside the repo)
   - results in TESTING.md, with each fix showing before and after numbers
 - **Order:** build a minimal version first (drills 1, 2, and 4), so the user can record bug A's data within about 30 minutes, then add drill 3. Then continue the 2:50 AM order.
+
+### 2:58 AM refinement from the user: one prompt at a time ("throw a hook, then you throw a hook, and throw a jab, then throw a jab")
+Make the drills **prompt-by-prompt** instead of reps on a beat:
+- The screen shows one large instruction ("THROW A RIGHT HOOK"), then waits for the player.
+- The rep ends when the detector fires the matching move, or after a 3 s timeout, which counts as a miss. A short "✓ hook" or "✗ missed" flashes, then after about 0.8 s the next prompt appears.
+- **Label window:** from the prompt appearing until the rep ends, with the prompted move as the label. Any other move detected in the window is recorded as an extra (false) detection.
+- **Order:** randomized moves (jab L/R, hook L/R, straight, uppercut, block, X-cross, palm, knee, kick, step and lean in each direction), each about 6 times, so the player can't anticipate. The "stand still" (20 s) and "big punches while standing still" blocks stay as their own sections at the start, because bug A needs them.
+- **Calm pacing:** a progress bar ("23 / 90"), and a pause on Space.
+- The live per-move tally and the end summary stay as specified above.
