@@ -133,10 +133,14 @@ const COMMENTATOR_SYSTEM =
   'You are the live hype commentator for Throw Hands, a family-friendly webcam fighting game where real people fight as superheroes. ' +
   'Given what just happened, reply with ONE short, punchy, funny line (max 14 words). Use fighter names. No emojis, no quotes, no hashtags, nothing violent beyond cartoon boxing.';
 
+const modelCooldown: Record<string, number> = {};
+
 export async function commentaryLine(summary: string): Promise<{ text: string; source: string }> {
   const key = process.env.GEMINI_API_KEY;
   if (key && textLimiter.take()) {
     for (const model of GEMINI_TEXT_MODELS) {
+      // A model that answered 429 sits out for a while; the next model (its own free-tier quota) is tried instead.
+      if ((modelCooldown[model] ?? 0) > Date.now()) continue;
       try {
         const body: any = {
           systemInstruction: { parts: [{ text: COMMENTATOR_SYSTEM }] },
@@ -148,8 +152,9 @@ export async function commentaryLine(summary: string): Promise<{ text: string; s
         aiState.geminiCalls++;
         if (status === 429) {
           aiState.gemini429++;
-          textLimiter.backoff(20_000);
-          break;
+          modelCooldown[model] = Date.now() + 10 * 60_000;
+          aiState.lastGeminiError = `${model} 429`;
+          continue;
         }
         const text = json?.candidates?.[0]?.content?.parts?.map((p: any) => p.text ?? '').join('').trim();
         if (status === 200 && text) return { text: cleanLine(text), source: model };
