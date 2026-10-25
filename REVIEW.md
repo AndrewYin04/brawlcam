@@ -195,3 +195,35 @@ The site footer still credits "Seed-san model by VirtualCast, Inc." Update the f
 
 ### Order
 1, 3, 2, then 4. Movement and contact affect every match. Run the section 11 loop after each, keep `?classic` until the new build passes, feature freeze 7:30 AM.
+
+## 2026-10-25 1:50 AM CDT: defense redesign (the user chose a Smash-style guard plus an "Iron Wall" super), and DNS
+
+### DNS
+At 1:45 AM, nameserver `tech-domains.venus.orderbox-dns.com` answered `127.0.0.1` for `throwhands.tech`, while `www` was correct there and all other nameservers were correct for both. The planner re-saved both A records at the registrar at 1:48 AM. Re-check all four nameservers before your next certificate attempt. If one still lags, post the time in STATUS.md and the planner will contact the registrar.
+
+### Defense: replace unlimited Block and the 3 s X-shield
+The user asked how shields break and pointed to Smash. Per SmashWiki, Smash's shield shrinks while held, shrinks faster per blocked hit (by the attack's shield damage), regenerates when released, and when it breaks the fighter is stunned (https://www.ssbwiki.com/Shield). Today Block is unlimited at 20% damage, so a player can stand with forearms up and barely take damage. New design:
+
+1. **Guard** (gesture unchanged: both forearms up in front of the face):
+   - raises a bubble around the fighter; blocked hits deal 10% damage
+   - **guard meter 0 to 100:**
+     - drains 20 per second while held, so it empties in 5 s
+     - each blocked hit drains extra: jab 10, hook 15, kick 20, super uppercut 60, energy blast 50
+     - refills at 25 per second after 0.5 s with the arms down
+   - the bubble shrinks and shifts from blue to yellow to red as the meter drops; show the meter on the HUD
+2. **Guard break:**
+   - at 0 the bubble shatters, with a glass-break sound, shards, and a short camera shake
+   - the fighter is **dizzy for 2 s** (stars over the head, wobble animation), cannot attack or guard, and takes normal damage
+   - the guard starts again at 30 after the dizzy ends
+3. **Iron Wall** (the X-cross gesture with a full super meter; this replaces the 3 s X-shield):
+   - for 2.5 s an unbreakable guard (gold bubble, 0 damage, no meter drain)
+   - the first attacker to hit it is **countered**: they take 10 damage and a short stagger
+   - it costs the full super meter
+   - pick one X-cross pose (in front of the chest, or above the head) and make the tutorial, menu, and detection match; today the menu and STATUS.md disagree
+4. **Bots** use the guard too, and sometimes get guard-broken, so the mechanic shows up in practice and in the video.
+5. **Teaching:** add guard and Iron Wall to the calibration tutorial (after movement) and the menu's controls list.
+6. **Tests and review:**
+   - unit tests for meter drain, refill, break, dizzy duration, and the Iron Wall counter
+   - an e2e path: hold guard until it breaks, then take a hit while dizzy
+   - add a "guard break" scene to the section 11 review loop
+7. **Order:** after the 1:35 AM items 1 (movement) and 3 (human proportions and visible contact); before the octagon if time is short. Freeze is still 7:30 AM.
