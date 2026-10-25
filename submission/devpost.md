@@ -29,7 +29,7 @@ Matches are best of 3 with HP KOs and a rematch button. Big moments get an insta
 - **Winner stays on**: two fight, the rest of the room watches and queues.
 - **Local 2-player**: two people side by side in front of one camera.
 
-AI is the core of it. A pose model in your browser *is* the controller. **Fighter Forge** turns a prompt like "lava golem with a crown" into a name, backstory, and move names (Muse Spark) and a fighter card (Muse Image). After an online match, a **rivalry card** sums up the fight for you to send your opponent. A **Gemini commentator** writes live lines about the fight.
+AI is the core of it. A pose model in your browser *is* the controller. **Fighter Forge** turns a prompt like "lava golem with a crown" into a name, backstory, and move names (Muse Spark) and a fighter card (Muse Image). After an online match, a **rivalry card** sums up the fight for you to send your opponent. A **Gemini commentator** writes live roasts about what just happened; the announcer voice (ElevenLabs) calls the big moments and voices a matching pre-recorded roast whenever a live line is caption-only.
 
 Online wins feed an Elo leaderboard. A store page shows skins and a season pass with mock purchases. An opt-in motion-data program and a research mode collect body-point coordinates (never video) with explicit consent.
 
@@ -55,6 +55,8 @@ Online wins feed an Elo leaderboard. A store page shows skins and a season pass 
 
 **Making fists actually land.** Our first characters were chibi, with short arms, so punches stopped short. We switched to human-proportioned fighters, then measured the gap between the fist and the target on every hit frame. The worst misses came from an unexpected place: knocked-back fighters tumbled around their feet, which swung the head a metre away from where the next punch aimed. Pivoting the tumble at the hips fixed it.
 
+**Tuning on a real player, not just clips.** Our own guided drill mode (stand still, big punches, steps and leans, labeled by the prompt) let one player record sessions on a laptop. Replaying those exact frames through the recognizer showed problems no downloaded clip had: at a laptop the hips are out of frame, so the torso-lean depth signal read leaning *back* as moving forward; big hooks open the elbow to 160° and read as jabs; a reach toward a low camera barely changes measured arm length. We rebuilt forward/back on apparent body size against a self-correcting "your spot", classified big swings by their whole motion, and made grabs work from the player's own guard. Each fix was reproduced on the recorded session first and checked against the session's video.
+
 **Headless tests starved the pose model.** With no GPU, Chromium renders on the CPU through SwiftShader, and the 3D scene ate the frame budget. Reading frames with `MediaStreamTrackProcessor` and decoupling pose detection from render rate fixed capture.
 
 ## Accomplishments that we're proud of
@@ -62,6 +64,7 @@ Online wins feed an Elo leaderboard. A store page shows skins and a season pass 
 - A full fight loop with supers, slow motion, and KOs, controlled only by your body, in a browser tab.
 - Jab detection measured on labeled clips at several frame rates, not guessed.
 - One simulation shared by client and server, built for 1 to 8 fighters.
+- A research loop with a real player: three recorded drill sessions, replayed frame by frame, took stepping back from always-forward to 3 of 3, big uppercuts from 0 of 3 to 3 of 3, and big hooks from 0 of 4 to 3 of 4.
 
 ## What we learned
 
