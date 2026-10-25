@@ -393,3 +393,41 @@ Fix process (rule 3): reproduce it first with a clip of someone throwing big hoo
 5. HUD overlap (2:35 AM item 3)
 
 If B is not solid by about 6:45 AM, put it behind `?grapple=1` so the default build stays stable for the demo.
+
+## 2026-10-25 2:55 AM CDT: "Research drills", a guided recording mode with only the player's fighter (the user's request; build it first, since bug A uses it)
+Seen: 788f9eb (round 4 fixes; pose_streams 3.4x compression, 5.9 MB per player-hour). Good.
+
+The user can't press label keys while throwing punches, and wants a separate research mode showing only their character. Labels should come from **prompts**, not keys.
+
+- **Entry:** `?research=1&drills=1`, plus a "Guided drills" button on the research consent screen. Same consent; same uploads (landmark stream to `research_frames`, with no video); local video download stays on by default, with a checkbox to turn it off.
+- **Scene:**
+  - only the player's fighter in the octagon, no opponent, framed so the whole body is visible
+  - one large prompt card ("Throw 8 RIGHT HOOKS on the beat. Don't step."), with the fighter demonstrating the move once first
+  - a 3-2-1 countdown, then an audible beat, about one rep every 1.5 s
+  - the camera preview in a corner
+  - no game HUD, no commentator
+- **Labels come from the script:** each rep's label is the prompted move plus the beat time window (beat ± 0.6 s), written into the JSONL and into `research_frames` as `label` and `rep` columns. The marker keys stay available but are optional.
+- **The drill script (about 5 to 6 minutes; Skip and Redo buttons per drill):**
+  1. **stand still**, guard up, 20 s: ground truth for no movement
+  2. **big punches while standing still** (bug A): 8 big right hooks, 8 big left hooks, 8 big straights, 6 uppercuts; the card says "don't step"
+  3. each move ×8: jab L, jab R, block (hold 3 s ×3), X-cross (Iron Wall pose) ×4, palm push ×4, knee ×4, kick ×4; grab and shoulder throw ×4 each once they exist
+  4. movement ×4 each: step forward and back, lean forward and back, step left and right, lean left and right
+  5. free shadowboxing, 30 s, unlabeled
+- **Live feedback:**
+  - after each drill, a result line from the live detector, e.g. "8 asked · 7 detected · 1 extra move"
+  - for the stand-still and big-punch drills, "you drifted X cm", so bug A is visible right away
+  - a summary table at the end
+- **Agent side:**
+  - a script that pulls drill sessions from Tiger by session id and computes per-move recall and precision, plus drift during the stand-still and big-punch drills
+  - drill sessions become regression fixtures (stored outside the repo)
+  - results in TESTING.md, with each fix showing before and after numbers
+- **Order:** build a minimal version first (drills 1, 2, and 4), so the user can record bug A's data within about 30 minutes, then add drill 3. Then continue the 2:50 AM order.
+
+### 2:58 AM refinement from the user: one prompt at a time ("throw a hook, then you throw a hook, and throw a jab, then throw a jab")
+Make the drills **prompt-by-prompt** instead of reps on a beat:
+- The screen shows one large instruction ("THROW A RIGHT HOOK"), then waits for the player.
+- The rep ends when the detector fires the matching move, or after a 3 s timeout, which counts as a miss. A short "✓ hook" or "✗ missed" flashes, then after about 0.8 s the next prompt appears.
+- **Label window:** from the prompt appearing until the rep ends, with the prompted move as the label. Any other move detected in the window is recorded as an extra (false) detection.
+- **Order:** randomized moves (jab L/R, hook L/R, straight, uppercut, block, X-cross, palm, knee, kick, step and lean in each direction), each about 6 times, so the player can't anticipate. The "stand still" (20 s) and "big punches while standing still" blocks stay as their own sections at the start, because bug A needs them.
+- **Calm pacing:** a progress bar ("23 / 90"), and a pause on Space.
+- The live per-move tally and the end summary stay as specified above.
