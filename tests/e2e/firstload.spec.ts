@@ -13,7 +13,7 @@ test('desktop: camera allowed, game starts, no console errors', async () => {
   await page.waitForFunction(() => (window as any).__brawl.snapshot?.phase === 'fight', null, { timeout: 20_000 });
   await page.waitForTimeout(3000);
   const h = await hooks(page);
-  expect(h.delegate).toBe('CPU');
+  expect(h.delegate).toBe(process.env.PW_GL === 'swiftshader' ? 'CPU' : 'GPU');
   expect(h.poseFps).toBeGreaterThan(3);
   expect(realErrors(consoleErrors)).toEqual([]);
   await b.close();

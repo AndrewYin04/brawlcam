@@ -13,7 +13,7 @@ export type WorkerIn =
 
 export type WorkerOut =
   | { type: 'ready'; delegate: 'GPU' | 'CPU' }
-  | { type: 'error'; message: string }
+  | { type: 'error'; message: string; fatal?: boolean }
   | { type: 'result'; ts: number; people: PosePerson[]; inferMs: number; delegate: 'GPU' | 'CPU' };
 
 /** MediaPipe Pose landmark indices. */

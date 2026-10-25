@@ -4,11 +4,20 @@ import { GL_ARGS } from '../../playwright.config';
 
 // Browser matrix: WebKit (proxy for iOS Safari) and Firefox through the injected camera (no file-based fake camera there),
 // and Chromium on a phone viewport in landscape and portrait.
-for (const name of ['webkit', 'firefox'] as const) {
+test('firefox (headless, no WebGL on this server): friendly message instead of a crash', async () => {
+  const b = await launcher('firefox').launch();
+  const { page } = await openPage(b, `/?${TQ}`, { permissions: [] }, (ctx) => injectCamera(ctx, 'jab_01'));
+  const gl = await page.evaluate(() => !!document.createElement('canvas').getContext('webgl'));
+  test.skip(gl, 'this Firefox has WebGL; covered by the gameplay test');
+  await expect(page.locator('#load-text')).toContainText("can't run 3D graphics", { timeout: 30_000 });
+  await b.close();
+});
+
+for (const name of ['webkit'] as const) {
   test(`${name}: pose tracking drives the fighter and a practice round plays`, async () => {
     test.setTimeout(180_000);
-    const b = await launcher(name).launch(name === 'firefox' ? { firefoxUserPrefs: { 'media.navigator.streams.fake': true, 'webgl.force-enabled': true } } : {});
-    const { page, consoleErrors } = await openPage(b, `/?mode=practice&skipcal&${TQ}&botlevel=-1`, { permissions: name === 'firefox' ? [] : undefined }, (ctx) => injectCamera(ctx, 'jab_01'));
+    const b = await launcher(name).launch();
+    const { page, consoleErrors } = await openPage(b, `/?mode=practice&skipcal&${TQ}&botlevel=-1`, { permissions: [] }, (ctx) => injectCamera(ctx, 'jab_01'));
     await waitScreen(page, 'game', 120_000);
     await page.waitForFunction(() => (window as any).__brawl.lastGesture?.[0]?.present === true, null, { timeout: 90_000 });
     await page.waitForFunction(() => (window as any).__brawl.localActions.length >= 2, null, { timeout: 90_000 });

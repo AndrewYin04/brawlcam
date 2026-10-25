@@ -15,7 +15,7 @@ const params = new URLSearchParams(location.search);
 const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
 if (params.has('clean')) document.body.classList.add('clean');
 
-type Screen = 'loading' | 'menu' | 'camera' | 'join' | 'lobby' | 'results' | 'page' | 'game' | 'record';
+type Screen = 'loading' | 'menu' | 'camera' | 'join' | 'lobby' | 'results' | 'page' | 'game' | 'record' | 'nowebgl';
 
 // ---------- test/debug hooks ----------
 export const hooks = {
@@ -56,7 +56,19 @@ try {
 
 // ---------- state ----------
 FighterAvatar.lowGfx = params.has('lowgfx');
-const arena = new Arena($<HTMLCanvasElement>('game'), 4.2, isMobile, params.has('lowgfx'));
+function createArena(): Arena {
+  try {
+    return new Arena($<HTMLCanvasElement>('game'), 4.2, isMobile, params.has('lowgfx'));
+  } catch (e) {
+    // No WebGL (old browser, blocked GPU, some headless setups): explain instead of failing silently.
+    hooks.errors.push('webgl: ' + (e as Error).message);
+    hooks.screen = 'nowebgl' as Screen;
+    $('load-text').textContent = "This browser can't run 3D graphics (WebGL is off or unavailable). Try Chrome, Edge, or Safari, or turn on hardware acceleration in your browser settings.";
+    $('load-bar').parentElement!.classList.add('hidden');
+    throw e;
+  }
+}
+const arena = createArena();
 window.addEventListener('resize', () => arena.resize());
 let view: MatchView | null = null;
 let session: Session | null = null;
@@ -77,6 +89,7 @@ export function show(screen: Screen) {
   const el = document.getElementById('screen-' + screen);
   if (el) el.classList.add('active');
   $('hud').classList.toggle('hidden', !(screen === 'game' || screen === 'results'));
+  document.body.classList.toggle('in-game', screen === 'game' || screen === 'results');
 }
 
 export function toast(msg: string, ms = 2500) {
@@ -156,6 +169,7 @@ async function ensureCamera(players: number): Promise<boolean> {
   const video = $<HTMLVideoElement>('cam');
   if (!cameraOk) {
     try {
+      (hooks as any).stage = 'camera';
       await startCamera(video, isMobile);
       cameraOk = true;
     } catch (e) {
@@ -168,12 +182,15 @@ async function ensureCamera(players: number): Promise<boolean> {
     pose = new PoseInput(players);
     pose.skeleton = $<HTMLCanvasElement>('skeleton').getContext('2d');
     try {
+      (hooks as any).stage = 'pose-init';
       hooks.delegate = await pose.init(params.has('cpu'));
+      (hooks as any).stage = 'pose-ready';
     } catch (e) {
       showCameraProblem(new CameraFailure('unknown', 'The pose model failed to start: ' + (e as Error).message));
       pose = null;
       return false;
     }
+    pose.tracker.onError = (m) => ((hooks as any).poseError = m);
     pose.start(video);
   } else if (pose.players !== players) pose.setPlayers(players);
   return true;
@@ -413,6 +430,8 @@ function startLoop() {
     if (pose) {
       hooks.poseFps = pose.tracker.fps;
       (hooks as any).inferMs = +(pose.lastFrame?.inferMs ?? 0).toFixed(1);
+      (hooks as any).poseMode = pose.tracker.mode;
+      (hooks as any).poseStats = pose.tracker.stats;
       $('pose-fps').textContent = `${pose.tracker.fps} fps ${pose.tracker.delegate ?? ''}`;
     }
     if (session && view) {

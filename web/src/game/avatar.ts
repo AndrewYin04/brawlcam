@@ -74,6 +74,9 @@ export class FighterAvatar {
   private auraMat!: THREE.ShaderMaterial;
   private shield!: THREE.Mesh;
   private targetRing!: THREE.Mesh;
+  private cape: THREE.Mesh | null = null;
+  private capeBase: Float32Array | null = null;
+  private emblemMat: THREE.MeshBasicMaterial | null = null;
   private blockSpark = 0;
   private flinch = 0;
   private flinchDir = new THREE.Vector3();
@@ -189,6 +192,8 @@ export class FighterAvatar {
       this.gloveMat.emissive.copy(glow);
     }
     if (this.auraMat) this.auraMat.uniforms.color.value.copy(glow);
+    if (this.cape) (this.cape.material as THREE.MeshStandardMaterial).color.copy(new THREE.Color(style.color).multiplyScalar(0.55));
+    if (this.emblemMat) this.emblemMat.color.copy(glow);
   }
 
   private addGear() {
@@ -202,6 +207,35 @@ export class FighterAvatar {
       g.position.set(bone === 'leftHand' ? 0.05 : -0.05, 0, 0);
       node.add(g);
       this.gloves.push(g);
+    }
+    // Superhero cape and chest emblem, on the normalized chest bone (follows the pose; -Z is the back).
+    const chest = this.vrm.humanoid.getNormalizedBoneNode('upperChest') ?? this.vrm.humanoid.getNormalizedBoneNode('chest');
+    if (chest) {
+      const capeGeo = new THREE.PlaneGeometry(0.5, 1.0, 6, 12);
+      capeGeo.translate(0, -0.5, 0); // hang from the top edge
+      const capeColor = new THREE.Color(this.style.color).multiplyScalar(0.55);
+      const capeMat = new THREE.MeshStandardMaterial({ color: capeColor, emissive: glow.clone().multiplyScalar(0.12), side: THREE.DoubleSide, roughness: 0.6, metalness: 0.1 });
+      const cape = new THREE.Mesh(capeGeo, capeMat);
+      cape.position.set(0, 0.12, -0.13);
+      cape.rotation.x = 0.12;
+      cape.frustumCulled = false;
+      chest.add(cape);
+      this.cape = cape;
+      this.capeBase = (capeGeo.attributes.position.array as Float32Array).slice();
+      // Emblem: a glowing lightning bolt on the chest.
+      const bolt = new THREE.Shape();
+      bolt.moveTo(0.02, 0.06);
+      bolt.lineTo(-0.03, 0.0);
+      bolt.lineTo(0.0, 0.0);
+      bolt.lineTo(-0.02, -0.06);
+      bolt.lineTo(0.035, 0.012);
+      bolt.lineTo(0.005, 0.012);
+      bolt.closePath();
+      this.emblemMat = new THREE.MeshBasicMaterial({ color: glow, side: THREE.DoubleSide });
+      const emblem = new THREE.Mesh(new THREE.ShapeGeometry(bolt), this.emblemMat);
+      emblem.scale.setScalar(1.3);
+      emblem.position.set(0, 0.04, 0.115);
+      chest.add(emblem);
     }
     // Aura: additive fresnel shell around the body.
     this.auraMat = new THREE.ShaderMaterial({
@@ -364,6 +398,18 @@ export class FighterAvatar {
       this.aura.visible = this.auraMat.uniforms.power.value > 0.1;
     }
     if (this.gloveMat) this.gloveMat.emissiveIntensity = 0.6 + this.glowBoost * 3 + (opts.meterFull ? 0.6 : 0);
+    if (this.cape && this.capeBase) {
+      // Cape sway: a travelling wave, stronger lower down, plus a flutter when hit.
+      const pos = this.cape.geometry.attributes.position as THREE.BufferAttribute;
+      const a = pos.array as Float32Array;
+      for (let i = 0; i < a.length; i += 3) {
+        const y = this.capeBase[i + 1]; // 0 at the top, -1.05 at the bottom
+        const depth = -y;
+        a[i + 2] = this.capeBase[i + 2] - depth * depth * 0.12 - Math.sin(time * 3 + depth * 4 + this.capeBase[i] * 3) * 0.04 * depth - this.flinch * 0.25 * depth;
+        a[i] = this.capeBase[i] + Math.sin(time * 2.1 + depth * 3) * 0.02 * depth;
+      }
+      pos.needsUpdate = true;
+    }
     if (this.shield) {
       this.shield.visible = opts.shield > 0;
       this.shield.rotation.y += dt * 1.5;

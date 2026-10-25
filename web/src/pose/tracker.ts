@@ -1,4 +1,5 @@
 import type { PosePerson, WorkerOut } from './types';
+import { PoseEngine } from './engine';
 
 export interface PoseFrame {
   ts: number; // performance.now() when the frame was captured
@@ -26,7 +27,41 @@ export class PoseTracker {
     this.worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
   }
 
-  init(numPoses: number, forceCpu = false): Promise<'GPU' | 'CPU'> {
+  /** 'main' = detection runs on the main thread (fallback when the worker cannot run MediaPipe). */
+  mode: 'worker' | 'main' = 'worker';
+  private mainEngine: PoseEngine | null = null;
+  private numPoses = 1;
+  private forceCpu = false;
+  private switching = false;
+
+  async init(numPoses: number, forceCpu = false): Promise<'GPU' | 'CPU'> {
+    this.numPoses = numPoses;
+    this.forceCpu = forceCpu;
+    if (new URLSearchParams(location.search).has('mainpose')) return this.switchToMain();
+    try {
+      return await this.initWorker(numPoses, forceCpu);
+    } catch {
+      return this.switchToMain();
+    }
+  }
+
+  private async switchToMain(): Promise<'GPU' | 'CPU'> {
+    if (this.mainEngine) return this.mainEngine.delegate;
+    this.switching = true;
+    try {
+      this.worker.terminate();
+    } catch {}
+    const eng = new PoseEngine();
+    const d = await eng.init(this.numPoses, this.forceCpu, location.origin);
+    this.mainEngine = eng;
+    this.mode = 'main';
+    this.delegate = d;
+    this.switching = false;
+    this.busy = false;
+    return d;
+  }
+
+  private initWorker(numPoses: number, forceCpu = false): Promise<'GPU' | 'CPU'> {
     return new Promise((resolve, reject) => {
       const onMsg = (ev: MessageEvent<WorkerOut>) => {
         const m = ev.data;
@@ -61,16 +96,45 @@ export class PoseTracker {
         reject(new Error(m));
       };
       this.busy = true;
-      this.worker.postMessage({ type: 'frame', bitmap, ts }, [bitmap]);
+      this.submit(bitmap, ts);
     });
   }
 
   setNumPoses(n: number) {
-    this.worker.postMessage({ type: 'numPoses', numPoses: n });
+    this.numPoses = n;
+    if (this.mainEngine) void this.mainEngine.setNumPoses(n);
+    else this.worker.postMessage({ type: 'numPoses', numPoses: n });
+  }
+
+  /** Main-thread detection (fallback mode). */
+  private runMain(bitmap: ImageBitmap, ts: number) {
+    try {
+      const r = this.mainEngine!.detect(bitmap, ts);
+      this.handle({ type: 'result', ts, people: r.people, inferMs: r.inferMs, delegate: this.mainEngine!.delegate });
+    } catch (e) {
+      this.handle({ type: 'error', message: String((e as Error)?.message ?? e) });
+    } finally {
+      bitmap.close();
+    }
+  }
+
+  /** Send a frame to whichever engine is active. */
+  private submit(bitmap: ImageBitmap, ts: number) {
+    this.stats.submits++;
+    if (this.switching) {
+      bitmap.close();
+      this.busy = false;
+      return;
+    }
+    if (this.mode === 'main') {
+      // Yield first so rendering is not starved.
+      setTimeout(() => this.runMain(bitmap, ts), 0);
+    } else this.worker.postMessage({ type: 'frame', bitmap, ts }, [bitmap]);
   }
 
   private handle(m: WorkerOut) {
     if (m.type === 'result') {
+      this.stats.results++;
       this.busy = false;
       const now = performance.now();
       this.frameTimes.push(now);
@@ -80,8 +144,10 @@ export class PoseTracker {
       this.lastFrame = { ts: m.ts, people: m.people, inferMs: m.inferMs };
       this.onFrame?.(this.lastFrame);
     } else if (m.type === 'error') {
+      this.stats.errors++;
       this.busy = false;
       this.onError?.(m.message);
+      if (m.fatal && this.mode === 'worker') void this.switchToMain();
     }
   }
 
@@ -96,17 +162,24 @@ export class PoseTracker {
     }
     // Timer-driven (not requestAnimationFrame), so pose rate is independent of render rate.
     let lastVideoTime = -1;
+    let lastSubmit = 0;
     const tick = async () => {
       if (!this.running) return;
       const v = this.video!;
-      if (!this.busy && v.readyState >= 2 && v.videoWidth > 0 && v.currentTime !== lastVideoTime) {
+      const now = performance.now();
+      // Some engines (WebKit) do not advance currentTime for live camera streams: also grab every 40 ms.
+      if (!this.busy && v.readyState >= 2 && v.videoWidth > 0 && (v.currentTime !== lastVideoTime || now - lastSubmit > 40)) {
         lastVideoTime = v.currentTime;
+        lastSubmit = now;
         this.busy = true;
         try {
           const ts = performance.now();
+          this.stats.grabs++;
           const bitmap = await this.grab(v);
-          this.worker.postMessage({ type: 'frame', bitmap, ts }, [bitmap]);
-        } catch {
+          this.submit(bitmap, ts);
+        } catch (e) {
+          this.stats.grabErrors++;
+          this.stats.lastGrabError = String((e as Error)?.message ?? e).slice(0, 120);
           this.busy = false;
         }
       }
@@ -132,7 +205,7 @@ export class PoseTracker {
         const w = Math.min(480, frame.displayWidth);
         const h = Math.round((frame.displayHeight * w) / frame.displayWidth);
         const bitmap = await createImageBitmap(frame, { resizeWidth: w, resizeHeight: h });
-        this.worker.postMessage({ type: 'frame', bitmap, ts }, [bitmap]);
+        this.submit(bitmap, ts);
       } catch {
         this.busy = false;
       } finally {
@@ -143,6 +216,8 @@ export class PoseTracker {
   }
 
   usingProcessor = false;
+  /** Pipeline counters (diagnostics, shown to tests). */
+  stats = { grabs: 0, grabErrors: 0, submits: 0, results: 0, errors: 0, lastGrabError: '' };
   private canvas: HTMLCanvasElement | null = null;
   private ctx2d: CanvasRenderingContext2D | null = null;
   /** CPU-side frame grab (480 px wide max), so capture never waits on a busy GPU process. */

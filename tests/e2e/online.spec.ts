@@ -7,6 +7,7 @@ const Q = '&cpu&lowgfx&skipcal&nocomment&aifixture';
 async function open(clip: string, path: string, share: 'webshare' | 'clipboard' = 'webshare') {
   const b = await launchWithClip(clip);
   const ctx = await b.newContext({ permissions: share === 'clipboard' ? ['camera', 'clipboard-read', 'clipboard-write'] : ['camera'], viewport: { width: 960, height: 540 } });
+  await ctx.addInitScript(() => { if (!localStorage.getItem('throwhands.nick')) localStorage.setItem('throwhands.nick', 'E2E Player'); });
   // Web Share where supported (stubbed to record calls); otherwise remove it to test the copy-link fallback.
   await ctx.addInitScript((mode) => {
     (window as any).__shared = [];

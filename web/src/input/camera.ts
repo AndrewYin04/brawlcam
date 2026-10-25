@@ -25,8 +25,10 @@ export async function startCamera(video: HTMLVideoElement, lowRes: boolean): Pro
   video.srcObject = stream;
   video.muted = true;
   video.playsInline = true;
-  await video.play().catch(() => {});
-  if (video.readyState < 2) await new Promise((r) => video.addEventListener('loadeddata', r, { once: true }));
+  // Never hang on a camera that is slow to start: the pose loop waits for frames on its own.
+  const timeout = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  await Promise.race([video.play().catch(() => {}), timeout(4000)]);
+  if (video.readyState < 2) await Promise.race([new Promise((r) => video.addEventListener('loadeddata', r, { once: true })), timeout(6000)]);
   return stream;
 }
 

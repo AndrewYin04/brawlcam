@@ -8,7 +8,7 @@ export const CLIPS = path.join(ROOT, 'clips');
 export const FIXTURES = path.join(ROOT, 'tests/fixtures');
 export const BASE_URL = process.env.BASE_URL ?? 'https://144-202-71-213.sslip.io';
 /** Query string every game page in tests uses: CPU pose delegate (SwiftShader has no real GPU) and capsule fighters. */
-export const TQ = 'cpu&lowgfx&nocomment&aifixture';
+export const TQ = process.env.PW_GL === 'swiftshader' ? 'cpu&lowgfx&nocomment&aifixture' : 'nocomment&aifixture';
 
 /** Launch a Chromium whose fake webcam plays the given clip (absolute path or name in clips/). */
 export async function launchWithClip(clip?: string, extraArgs: string[] = [], opts: { fakeUi?: boolean } = {}): Promise<Browser> {
@@ -34,14 +34,17 @@ export async function injectCamera(ctx: BrowserContext, clip: string | null, fai
     if (!fs.existsSync(f)) return route.fulfill({ status: 404 });
     route.fulfill({ path: f, contentType: 'video/mp4', headers: { 'accept-ranges': 'bytes' } });
   });
+  // The TS runner wraps named functions with a __name() helper; give the page a no-op version.
+  await ctx.addInitScript({ content: 'window.__name = window.__name || ((f) => f);' });
   await ctx.addInitScript(
     ({ clip, failWith }) => {
       const state: any = { clip, mask: null, zoom: 1, blank: false, fail: failWith ?? null, offsetX: 0 };
       (window as any).__cam = {
-        set: (c: string) => {
+        set: async (c: string) => {
           state.clip = c;
           if (state.video) {
-            state.video.src = `/__clips/${c}.mp4`;
+            const blob = await (await fetch(`/__clips/${c}.mp4`)).blob();
+            state.video.src = URL.createObjectURL(blob);
             void state.video.play();
           }
         },
@@ -60,21 +63,25 @@ export async function injectCamera(ctx: BrowserContext, clip: string | null, fai
         },
         state,
       };
-      const md = navigator.mediaDevices ?? ((navigator as any).mediaDevices = {});
-      md.enumerateDevices = async () => (state.fail === 'NotFoundError' ? [] : [{ kind: 'videoinput', deviceId: 'fake', label: 'Injected camera', groupId: 'g', toJSON() {} } as any]);
-      md.getUserMedia = async () => {
+      const md: any = navigator.mediaDevices ?? ((navigator as any).mediaDevices = {});
+      const enumerate = async () => (state.fail === 'NotFoundError' ? [] : [{ kind: 'videoinput', deviceId: 'fake', label: 'Injected camera', groupId: 'g', toJSON() {} } as any]);
+      const gum = async () => {
         if (state.fail) throw new DOMException('Injected failure', state.fail);
         // "a|b" composes two clips side by side (two people on one camera).
         const names = String(state.clip).split('|');
-        const vids = names.map((n: string) => {
+        // Load each clip as a Blob (WebKit's media range requests do not work through the test route).
+        const vids = await Promise.all(names.map(async (n: string) => {
           const v = document.createElement('video');
           v.muted = true;
           v.loop = true;
           v.playsInline = true;
-          v.crossOrigin = 'anonymous';
-          v.src = `/__clips/${n}.mp4`;
+          const blob = await (await fetch(`/__clips/${n}.mp4`)).blob();
+          v.src = URL.createObjectURL(blob);
+          // Keep it in the DOM (invisible) so every engine keeps decoding it.
+          v.style.cssText = 'position:fixed;left:0;top:0;width:2px;height:2px;opacity:0.01;pointer-events:none';
+          (document.body ?? document.documentElement).appendChild(v);
           return v;
-        });
+        }));
         const v = vids[0];
         state.video = v;
         state.vids = vids;
@@ -99,6 +106,10 @@ export async function injectCamera(ctx: BrowserContext, clip: string | null, fai
           // Raw image left = the player's right side in the mirrored preview.
           if (state.mask === 'left') g.fillRect(0, 0, 320, 480);
           if (state.mask === 'right') g.fillRect(320, 0, 320, 480);
+          // Change one corner pixel every frame so canvas capture always emits frames (WebKit skips unchanged canvases).
+          state.n = (state.n ?? 0) + 1;
+          g.fillStyle = state.n % 2 ? '#010101' : '#020202';
+          g.fillRect(0, 0, 1, 1);
         };
         const tick = () => {
           draw();
@@ -107,6 +118,13 @@ export async function injectCamera(ctx: BrowserContext, clip: string | null, fai
         tick();
         return (c as any).captureStream(30) as MediaStream;
       };
+      // Define on the prototype too: WebKit ignores plain assignment on the instance.
+      for (const target of [md, (window as any).MediaDevices?.prototype].filter(Boolean)) {
+        try {
+          Object.defineProperty(target, 'getUserMedia', { value: gum, configurable: true, writable: true });
+          Object.defineProperty(target, 'enumerateDevices', { value: enumerate, configurable: true, writable: true });
+        } catch {}
+      }
     },
     { clip, failWith },
   );
@@ -140,6 +158,12 @@ export function realErrors(list: string[]) {
 
 export async function openPage(browser: Browser, url: string, opts: Parameters<Browser['newContext']>[0] = {}, setup?: (ctx: BrowserContext) => Promise<void>) {
   const ctx = await browser.newContext({ permissions: ['camera'], viewport: { width: 960, height: 540 }, ...opts });
+  // Test players are named "E2E ..." so they stay out of the public leaderboard (and get cleaned up).
+  await ctx.addInitScript(() => {
+    try {
+      if (!localStorage.getItem('throwhands.nick')) localStorage.setItem('throwhands.nick', 'E2E Player');
+    } catch {}
+  });
   if (setup) await setup(ctx);
   const page = await ctx.newPage();
   const consoleErrors: string[] = [];

@@ -1,6 +1,10 @@
 import { defineConfig } from '@playwright/test';
 
-export const GL_ARGS = ['--use-gl=angle', '--use-angle=swiftshader-webgl', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'];
+// The test server has an NVIDIA GTX 1650 Ti: ANGLE over EGL gives hardware WebGL (verified via WEBGL_debug_renderer_info).
+// PW_GL=swiftshader falls back to CPU rendering.
+export const GL_ARGS = process.env.PW_GL === 'swiftshader'
+  ? ['--use-gl=angle', '--use-angle=swiftshader-webgl', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist']
+  : ['--use-angle=gl-egl', '--ignore-gpu-blocklist', '--enable-gpu'];
 
 export default defineConfig({
   testDir: 'tests/e2e',

@@ -10,6 +10,8 @@
 </head>
 <body>
 <canvas id="game"></canvas>
+<!-- Camera video lives outside the HUD so it is always laid out and painted (Safari/WebKit stall streams in hidden videos). -->
+<video id="cam" playsinline muted autoplay></video>
 <div id="fx-layer"></div>
 
 <!-- Loading -->
@@ -123,7 +125,7 @@
   <div id="hint"></div>
   <div id="commentary"></div>
   <div id="cheers"></div>
-  <div id="preview-wrap"><video id="cam" playsinline muted autoplay></video><canvas id="skeleton"></canvas><div id="pose-fps"></div></div>
+  <div id="preview-wrap"><canvas id="skeleton"></canvas><div id="pose-fps"></div></div>
   <div class="hud-buttons">
     <button class="btn ghost small" id="btn-mute" title="Mute commentator">🔊</button>
     <button class="btn ghost small" id="btn-quit">Quit</button>
