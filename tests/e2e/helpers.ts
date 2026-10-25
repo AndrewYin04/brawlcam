@@ -8,7 +8,7 @@ export const CLIPS = path.join(ROOT, 'clips');
 export const FIXTURES = path.join(ROOT, 'tests/fixtures');
 export const BASE_URL = process.env.BASE_URL ?? 'https://144-202-71-213.sslip.io';
 /** Query string every game page in tests uses: CPU pose delegate (SwiftShader has no real GPU) and capsule fighters. */
-export const TQ = process.env.PW_GL === 'swiftshader' ? 'cpu&lowgfx&nocomment&aifixture' : 'nocomment&aifixture';
+export const TQ = process.env.PW_GL === 'swiftshader' ? 'cpu&lowgfx&nocomment&aifixture&notut' : 'nocomment&aifixture&notut';
 
 /** Launch a Chromium whose fake webcam plays the given clip (absolute path or name in clips/). */
 export async function launchWithClip(clip?: string, extraArgs: string[] = [], opts: { fakeUi?: boolean } = {}): Promise<Browser> {
@@ -24,7 +24,7 @@ export async function newCamContext(browser: Browser, opts: Parameters<Browser['
 
 /**
  * Injected camera (all browsers): getUserMedia returns a canvas stream that plays a clip.
- * window.__cam controls: set(name), mask('left'|'right'|null), zoom(f), blank(bool), fail(errorName|null).
+ * window.__cam controls: set(name), mask('left'|'right'|null), zoom(f), skew(k), blank(bool), fail(errorName|null).
  * Clips are served from local disk through a route, never deployed.
  */
 export async function injectCamera(ctx: BrowserContext, clip: string | null, failWith?: string) {
@@ -38,7 +38,7 @@ export async function injectCamera(ctx: BrowserContext, clip: string | null, fai
   await ctx.addInitScript({ content: 'window.__name = window.__name || ((f) => f);' });
   await ctx.addInitScript(
     ({ clip, failWith }) => {
-      const state: any = { clip, mask: null, zoom: 1, blank: false, fail: failWith ?? null, offsetX: 0 };
+      const state: any = { clip, mask: null, zoom: 1, blank: false, fail: failWith ?? null, offsetX: 0, skew: 0 };
       (window as any).__cam = {
         set: async (c: string) => {
           state.clip = c;
@@ -50,6 +50,8 @@ export async function injectCamera(ctx: BrowserContext, clip: string | null, fai
         },
         mask: (m: string | null) => (state.mask = m),
         zoom: (z: number) => (state.zoom = z),
+        // Horizontal skew pivoting at hip height: the upper body shifts sideways over the hips (a sideways lean).
+        skew: (k: number) => (state.skew = k),
         blank: (b: boolean) => (state.blank = b),
         fail: (f: string | null) => (state.fail = f),
         freeze: (t: number | null) => {
@@ -101,7 +103,9 @@ export async function injectCamera(ctx: BrowserContext, clip: string | null, fai
           } else if (!state.blank && v.readyState >= 2) {
             const z = state.zoom;
             const w = 640 * z, h = 480 * z;
+            if (state.skew) g.setTransform(1, 0, state.skew, 1, -state.skew * 330, 0);
             g.drawImage(v, (640 - w) / 2 + state.offsetX, (480 - h) / 2, w, h);
+            g.setTransform(1, 0, 0, 1, 0, 0);
           }
           // Raw image left = the player's right side in the mirrored preview.
           if (state.mask === 'left') g.fillRect(0, 0, 320, 480);

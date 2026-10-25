@@ -164,3 +164,28 @@ body.clean #cam { opacity: 0.01 !important; }
 @keyframes flash { to { opacity: 0; } }
 /* Hero renderer: smaller banner placed above the fighters so it never covers the hit. */
 body.heroes #banner { top: 12%; font-size: clamp(30px, 7vw, 76px); }
+
+/* Menu movement line */
+.move-line { font-size: 18px; margin: 10px 0 6px; padding: 10px 14px; border-radius: 12px; background: rgba(51, 181, 255, 0.12); border: 1px solid rgba(51, 181, 255, 0.35); }
+.move-line b { color: var(--p2, #33b5ff); }
+/* Movement tutorial (after the guard calibration) */
+.tut-card { pointer-events: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 18px 22px; text-align: center; max-width: 560px; margin: 16px; }
+.tut-card h2 { margin: 0 0 4px; }
+.tut-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; grid-template-areas: '. f .' 'l c r' '. b .'; gap: 8px; margin: 12px 0; }
+.tut-dir { border: 1px solid var(--line); border-radius: 12px; padding: 8px; font-size: 13px; display: flex; flex-direction: column; gap: 2px; align-items: center; transition: background 0.15s, border-color 0.15s; }
+.tut-dir span { color: var(--muted); font-size: 12px; }
+.tut-dir[data-dir='fwd'] { grid-area: f; } .tut-dir[data-dir='left'] { grid-area: l; } .tut-dir[data-dir='right'] { grid-area: r; } .tut-dir[data-dir='back'] { grid-area: b; }
+.tut-arrow { font-size: 26px; line-height: 1; opacity: 0.5; }
+.tut-dir.active { border-color: #33b5ff; background: rgba(51, 181, 255, 0.15); }
+.tut-dir.active .tut-arrow { opacity: 1; color: #33b5ff; }
+.tut-dir.done { border-color: var(--good); background: rgba(61, 255, 154, 0.12); }
+.tut-dir.done .tut-arrow { opacity: 1; color: var(--good); }
+.tut-bar { width: 100%; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.1); overflow: hidden; margin-top: 4px; }
+.tut-bar i { display: block; height: 100%; width: 0; background: var(--good); }
+.tut-live { grid-area: c; position: relative; border-radius: 50%; border: 2px dashed var(--line); aspect-ratio: 1; max-width: 110px; justify-self: center; width: 100%; }
+.tut-dot { position: absolute; left: 50%; top: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%; background: #ff3d6e; box-shadow: 0 0 12px #ff3d6e; transition: transform 0.08s; }
+/* In-match movement indicator */
+#move-ind { position: absolute; left: 50%; bottom: 52px; transform: translateX(-50%); display: grid; grid-template-columns: repeat(3, 22px); grid-template-rows: repeat(3, 22px); grid-template-areas: '. f .' 'l . r' '. b .'; pointer-events: none; opacity: 0.85; }
+#move-ind i { font-style: normal; font-size: 16px; display: flex; align-items: center; justify-content: center; color: rgba(255, 255, 255, 0.28); text-shadow: 0 1px 2px #000; transition: color 0.08s, transform 0.08s; }
+#move-ind i[data-d='fwd'] { grid-area: f; } #move-ind i[data-d='left'] { grid-area: l; } #move-ind i[data-d='right'] { grid-area: r; } #move-ind i[data-d='back'] { grid-area: b; }
+#move-ind i.on { color: #33b5ff; transform: scale(1.3); }

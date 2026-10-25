@@ -28,6 +28,7 @@ export const hooks = {
   events: [] as { t: number; type: string; [k: string]: unknown }[],
   localActions: [] as { t: number; kind: string; hand: string; player: number }[],
   calibrated: false,
+  tutorial: null as any,
   snapshot: null as unknown,
   errors: [] as string[],
   lastGesture: [] as unknown[],
@@ -289,13 +290,17 @@ function runCalibration(done: () => void) {
   $('calib-title').textContent = pose!.players > 1 ? 'Both players: get in your guard' : 'Get in your guard';
   const arc = $('calib-arc');
   const finish = () => {
-    calibrating = false;
-    hooks.calibrated = true;
-    $('calib').classList.add('hidden');
     pose!.recognizers.forEach((r) => {
       if (!r.calibrated) r.skipCalibration();
     });
-    done();
+    hooks.calibrated = true;
+    const end = () => {
+      calibrating = false;
+      $('calib').classList.add('hidden');
+      done();
+    };
+    if (params.has('notut') || tutorialDone) end();
+    else runMoveTutorial(end);
   };
   $('calib-skip').onclick = finish;
   pose!.onUpdate = () => {
@@ -315,6 +320,57 @@ function runCalibration(done: () => void) {
     msg.textContent = guidance ?? 'Hold it…';
     msg.classList.toggle('warn', !!guidance);
     if (pose!.recognizers.every((r) => r.calibrated)) finish();
+  };
+}
+
+// Movement tutorial (spec: teach movement in calibration). Each direction fills while the player does it;
+// it ends when all four have been done once, after 15 s, or on Skip.
+let tutorialDone = false;
+function runMoveTutorial(end: () => void) {
+  $('calib').querySelector('.calib-card')!.classList.add('hidden');
+  const card = $('tut');
+  card.classList.remove('hidden');
+  const dirs = ['fwd', 'back', 'left', 'right'] as const;
+  const held: Record<string, number> = { fwd: 0, back: 0, left: 0, right: 0 };
+  const els = Object.fromEntries(dirs.map((d) => [d, card.querySelector(`[data-dir="${d}"]`) as HTMLElement]));
+  dirs.forEach((d) => { els[d].classList.remove('done', 'active'); (els[d].querySelector('.tut-bar i') as HTMLElement).style.width = '0'; });
+  const NEED = 0.4; // seconds of each direction
+  const t0 = performance.now();
+  let last = t0;
+  hooks.tutorial = { active: true, done: [] as string[], outcome: '' };
+  let finished = false;
+  const stop = (outcome: string) => {
+    if (finished) return;
+    finished = true;
+    tutorialDone = true;
+    hooks.tutorial.active = false;
+    hooks.tutorial.outcome = outcome;
+    card.classList.add('hidden');
+    $('calib').querySelector('.calib-card')!.classList.remove('hidden');
+    pose!.onUpdate = null;
+    end();
+  };
+  $('tut-skip').onclick = () => stop('skipped');
+  pose!.onUpdate = () => {
+    const now = performance.now();
+    const dt = Math.min(0.2, (now - last) / 1000);
+    last = now;
+    const m = pose!.latest[0]?.move ?? [0, 0];
+    const dot = $('tut-dot');
+    dot.style.transform = `translate(${-m[0] * 34}px, ${-m[1] * 34}px)`;
+    const on: Record<string, boolean> = { fwd: m[1] > 0.3, back: m[1] < -0.3, left: m[0] > 0.3, right: m[0] < -0.3 };
+    for (const d of dirs) {
+      els[d].classList.toggle('active', on[d]);
+      if (on[d] && held[d] < NEED) {
+        held[d] += dt;
+        if (held[d] >= NEED) { els[d].classList.add('done'); hooks.tutorial.done.push(d); }
+      }
+      (els[d].querySelector('.tut-bar i') as HTMLElement).style.width = `${Math.min(100, (held[d] / NEED) * 100)}%`;
+    }
+    const left = Math.max(0, 15 - (now - t0) / 1000);
+    $('tut-time').textContent = String(Math.ceil(left));
+    if (dirs.every((d) => held[d] >= NEED)) setTimeout(() => stop('completed'), 400);
+    else if (left <= 0) stop('timeout');
   };
 }
 
@@ -448,6 +504,10 @@ function startLoop() {
           session!.input(i, g, acts);
         });
         hooks.lastGesture = pose.latest.map((g) => ({ present: g.present, blocking: g.blocking, xshield: g.xshield, move: g.move, legs: g.legs }));
+        // HUD movement indicator: light the arrows for the movement input detected right now (player 1).
+        const mv = pose.latest[0]?.move ?? [0, 0];
+        const ind = { fwd: mv[1] > 0.15, back: mv[1] < -0.15, left: mv[0] > 0.15, right: mv[0] < -0.15 } as Record<string, boolean>;
+        document.querySelectorAll<HTMLElement>('#move-ind i').forEach((el) => el.classList.toggle('on', ind[el.dataset.d!]));
       }
       const r = session.tick(dt);
       if (r) {

@@ -33,3 +33,33 @@ for (const [label, zoom, expectText] of [['too close', 2.4, 'Step back'], ['too 
     await b.close();
   });
 }
+
+test('movement tutorial: each direction lights up and fills, then the match starts', async () => {
+  const b = await chromium.launch({ args: GL_ARGS });
+  const q = TQ.replace('&notut', '');
+  const { page } = await openPage(b, `/?mode=practice&${q}`, {}, async (ctx) => injectCamera(ctx, 'guard_02'));
+  await page.waitForSelector('#tut:not(.hidden)', { timeout: 90_000 });
+  const shot = (n: string) => page.screenshot({ path: `test-results/tutorial-${n}.png` });
+  await shot('start');
+  const cam = (f: string, v: number) => page.evaluate(([f, v]) => (window as any).__cam[f](v), [f, v] as const);
+  // Advance: get bigger in the frame (step/lean toward the camera); retreat: smaller; strafe: lean the upper body sideways.
+  const steps: [string, string, number][] = [['fwd', 'zoom', 1.3], ['back', 'zoom', 0.78], ['left', 'skew', -0.22], ['right', 'skew', 0.22]];
+  for (const [dir, f, v] of steps) {
+    await cam(f, v);
+    await page.waitForFunction((d) => (window as any).__brawl.tutorial?.done.includes(d), dir, { timeout: 6_000 }).catch(() => {});
+    await shot(dir);
+    await cam(f, f === 'zoom' ? 1 : 0);
+    await page.waitForTimeout(500);
+  }
+  const tut = await page.evaluate(() => (window as any).__brawl.tutorial);
+  console.log('TUTORIAL', JSON.stringify(tut));
+  await page.waitForFunction(() => (window as any).__brawl.tutorial?.active === false, null, { timeout: 20_000 });
+  await page.waitForFunction(() => (window as any).__brawl.snapshot?.phase === 'fight', null, { timeout: 15_000 });
+  // In the match, the HUD movement indicator lights the direction you are moving.
+  await cam('zoom', 1.3);
+  await expect(page.locator('#move-ind i[data-d="fwd"].on')).toBeVisible({ timeout: 5_000 });
+  await shot('hud-fwd');
+  await cam('zoom', 1);
+  expect(tut.done.sort()).toEqual(['back', 'fwd', 'left', 'right']);
+  await b.close();
+});

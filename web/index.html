@@ -39,13 +39,13 @@
       <button class="btn ghost" data-action="leaderboard">🏆 Leaderboard</button>
       <button class="btn ghost" data-action="store">🛒 Store</button>
     </div>
+    <p class="move-line"><b>To move:</b> lean toward the camera to advance, lean back to retreat, lean left or right to circle.</p>
     <div class="howto">
       <div><b>Punch</b> jab, hook, or uppercut for real</div>
       <div><b>Block</b> forearms up in front of your face</div>
       <div><b>Shield</b> cross arms in an X (meter full)</div>
       <div><b>Uppercut super</b> drive a fist up (meter full)</div>
       <div><b>Energy blast</b> push both palms forward (meter full)</div>
-      <div><b>Move</b> lean left/right, step toward/away</div>
     </div>
     <p class="fineprint">No video ever leaves your device. Pose tracking runs in your browser. <a href="#" data-action="consent" style="color:var(--muted)">Motion data sharing (optional)</a> · <a href="#" data-action="motion" style="color:var(--muted)">For robotics labs</a><br />Seed-san model by VirtualCast, Inc. (VRM Public License 1.0). Built with Claude Code.</p>
   </div>
@@ -100,6 +100,18 @@
     <p id="calib-msg">Stand back so your upper body is visible, and raise both fists to your chin.</p>
     <button class="btn ghost small" id="calib-skip">Skip</button>
   </div>
+  <div class="tut-card hidden" id="tut">
+    <h2>Now try moving</h2>
+    <p class="muted" id="tut-sub">Lean or step in each direction once. <span id="tut-time">15</span> s</p>
+    <div class="tut-grid">
+      <div class="tut-dir" data-dir="fwd"><div class="tut-arrow">▲</div><b>Advance</b><span>lean or step toward the camera</span><div class="tut-bar"><i></i></div></div>
+      <div class="tut-dir" data-dir="left"><div class="tut-arrow">◀</div><b>Circle left</b><span>lean to your left</span><div class="tut-bar"><i></i></div></div>
+      <div class="tut-live"><div class="tut-dot" id="tut-dot"></div></div>
+      <div class="tut-dir" data-dir="right"><div class="tut-arrow">▶</div><b>Circle right</b><span>lean to your right</span><div class="tut-bar"><i></i></div></div>
+      <div class="tut-dir" data-dir="back"><div class="tut-arrow">▼</div><b>Retreat</b><span>lean or step back</span><div class="tut-bar"><i></i></div></div>
+    </div>
+    <button class="btn ghost small" id="tut-skip">Skip</button>
+  </div>
 </div>
 
 <!-- HUD -->
@@ -125,6 +137,7 @@
   <div id="hint"></div>
   <div id="commentary"></div>
   <div id="cheers"></div>
+  <div id="move-ind" title="Movement you are doing now"><i data-d="fwd">▲</i><i data-d="left">◀</i><i data-d="right">▶</i><i data-d="back">▼</i></div>
   <div id="preview-wrap"><canvas id="skeleton"></canvas><div id="pose-fps"></div></div>
   <div class="hud-buttons">
     <button class="btn ghost small" id="btn-mute" title="Mute commentator">🔊</button>

@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { launchWithClip, BASE_URL } from './helpers';
 
 // Fighter A's clip drives browser 1, fighter B's clip drives browser 2; they play a full best-of-3 online.
-const Q = '&cpu&lowgfx&skipcal&nocomment&aifixture';
+const Q = '&cpu&lowgfx&skipcal&nocomment&aifixture&notut';
 
 async function open(clip: string, path: string, share: 'webshare' | 'clipboard' = 'webshare') {
   const b = await launchWithClip(clip);

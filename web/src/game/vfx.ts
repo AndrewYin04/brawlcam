@@ -105,9 +105,10 @@ export class VFX {
 
   /** Ring-out KO streak: a bright beam shooting up where the fighter left the stage. */
   koStreak(pos: THREE.Vector3, color: THREE.ColorRepresentation) {
-    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.6, 14, 16, 1, true), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
-    m.position.copy(pos).setY(pos.y + 5);
-    this.add(m, new THREE.Vector3(0, 6, 0), 0.7, 0.4);
+    // A thin, colored streak (not a screen-filling column).
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.14, 9, 10, 1, true), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.75, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    m.position.copy(pos).setY(pos.y + 4);
+    this.add(m, new THREE.Vector3(0, 9, 0), 0.55, 0);
     this.burst(pos, color, 40, 9, 0.08);
   }
 

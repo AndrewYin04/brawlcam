@@ -227,7 +227,10 @@ export class MatchView {
         if (!slot) continue;
         // Smooth toward snapshot positions.
         const k = 1 - Math.exp(-dt * 18);
-        slot.pos.lerp(new THREE.Vector3(f.x, 0, f.z), k);
+        const target = new THREE.Vector3(f.x, 0, f.z);
+        // Teleports (new round, respawn) snap instead of gliding across the stage.
+        if (slot.pos.distanceTo(target) > 2.2) slot.pos.copy(target);
+        else slot.pos.lerp(target, k);
         slot.yaw += wrap(f.yaw - slot.yaw) * k;
         slot.avatar.root.position.copy(slot.pos);
         slot.avatar.root.rotation.y = slot.yaw;

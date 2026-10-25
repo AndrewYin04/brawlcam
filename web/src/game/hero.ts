@@ -45,8 +45,9 @@ function clips(): Promise<THREE.AnimationClip[]> {
 const PROPS = /Sword|Shield|Axe|Mug|Wand|Staff|Spellbook|Knife|Crossbow|Throwable/;
 const SCALE = 0.62; // KayKit heroes are ~2.25 m chibis; this makes them ~1.4 m, big-headed and readable
 // Native ground speed of the in-place clips at SCALE (m/s), used to scale playback so feet don't slide.
-const WALK_SPEED = 1.15;
-const RUN_SPEED = 3.1;
+const _qp = typeof location !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams();
+const WALK_SPEED = Number(_qp.get('walkspeed') ?? 1.15);
+const RUN_SPEED = Number(_qp.get('runspeed') ?? 3.1);
 
 /** Three-step toon ramp. */
 let toonRamp: THREE.DataTexture | null = null;

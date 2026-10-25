@@ -68,10 +68,11 @@ async function runScene(page: Page, sc: Scene) {
     const a = me[i - 1], b = me[i];
     if (!a.root || !b.root) continue;
     const rootSpeed = (dist(a.root, b.root) * 30);
-    for (const k of ['lFoot', 'rFoot']) {
-      if (!a[k] || !b[k]) continue;
-      const planted = b[k][1] - b.root[1] < 0.12; // foot near the ground
-      if (planted) {
+    // The planted foot is the lower of the two (and close to the ground); the swinging foot is allowed to move.
+    if (a.lFoot && b.lFoot && a.rFoot && b.rFoot) {
+      const k = b.lFoot[1] <= b.rFoot[1] ? 'lFoot' : 'rFoot';
+      const lowA = a.lFoot[1] <= a.rFoot[1] ? 'lFoot' : 'rFoot';
+      if (k === lowA && b[k][1] - b.root[1] < 0.15) {
         const d = dist(a[k], b[k]);
         slideSum += d; slideN++; slideMax = Math.max(slideMax, d);
       }

@@ -17,6 +17,7 @@ export interface Calibration {
   armLen: number; // meters (world), shoulder->elbow->wrist
   imgShoulderW: number; // normalized image units
   imgCenterX: number;
+  leanZ?: number; // meters: shoulders ahead of hips (toward the camera) in the guard stance; learned if missing
 }
 
 export const DEFAULT_CALIB: Calibration = { shoulderW: 0.34, armLen: 0.52, imgShoulderW: 0.22, imgCenterX: 0.5 };
@@ -72,8 +73,13 @@ export const GESTURE_CFG = {
   // movement
   leanDead: 0.035, // m
   leanFull: 0.1,
-  stepDead: 0.08, // fraction of calibrated shoulder width in image
-  stepFull: 0.2,
+  stepDead: 0.1, // fraction of calibrated shoulder width in image (rotation-corrected)
+  stepFull: 0.22,
+  // Forward/back by leaning the torso toward/away from the camera (shoulders vs hips, against the calibrated stance).
+  leanFwdDead: 0.055, // m
+  leanFwdFull: 0.12,
+  moveSmooth: 0.15, // s
+  moveQuietAfterStrike: 0.3, // s: torso motion right after a strike is the punch, not a step
   turnOn: 0.6, // rad torso yaw to switch target
   turnOff: 0.25,
   turnHold: 0.25,
@@ -136,11 +142,16 @@ export class GestureRecognizer {
   private turnSince = -1;
   private turnLatched = 0;
   private lastSeen = -9;
-  private calibFrames: { sw: number; arm: number; isw: number; cx: number }[] = [];
+  private calibFrames: { sw: number; arm: number; isw: number; cx: number; lz: number }[] = [];
   private calibStart = -1;
   private standingAnkleY: [number, number] | null = null;
   private legsBusyUntil = -9;
   private pointSince: Record<string, number | null> = {};
+  private leanZSamples: number[] = [];
+  private moveQuietUntil = -9;
+  private lastMoveT = -1;
+  private ratioS = 0;
+  private leanS = 0;
   /** Set to [] to collect per-frame candidate/suppression notes (tuning tools). */
   debugLog: string[] | null = null;
 
@@ -153,6 +164,8 @@ export class GestureRecognizer {
 
   skipCalibration(c?: Partial<Calibration>) {
     this.calib = { ...this.calib, ...c };
+    if (c?.leanZ == null) this.calib.leanZ = undefined;
+    this.leanZSamples = [];
     this.calibrated = true;
   }
 
@@ -446,10 +459,30 @@ export class GestureRecognizer {
     const midHip = mid(P[J.lHip], P[J.rHip]);
     const lean = MS[0] - midHip[0]; // + = leaning to the person's left
     const strafe = deadzone(lean, this.cfg.leanDead, this.cfg.leanFull);
-    const ratio = imgSW / this.calib.imgShoulderW - 1;
-    const fwd = deadzone(ratio, this.cfg.stepDead, this.cfg.stepFull);
-    // While striking or blocking, ignore movement noise from the torso.
-    const busy = out.actions.length > 0 || this.blocking;
+    // Shoulder width in the image, corrected for torso rotation (turning for a hook narrows the shoulders
+    // in the image; that is not a step back).
+    const yawNow = Math.atan2(-(lS[2] - rS[2]), lS[0] - rS[0]);
+    const ratioRaw = imgSW / Math.max(0.5, Math.cos(yawNow)) / this.calib.imgShoulderW - 1;
+    const leanRaw = MS[2] - midHip[2];
+    // Smooth both (about 0.15 s) so bobbing and punch recoil don't read as movement.
+    const k = this.lastMoveT < 0 ? 1 : Math.min(1, (t - this.lastMoveT) / this.cfg.moveSmooth);
+    this.lastMoveT = t;
+    this.ratioS += (ratioRaw - this.ratioS) * k;
+    this.leanS += (leanRaw - this.leanS) * k;
+    const ratio = this.ratioS;
+    const stepFwd = deadzone(ratio, this.cfg.stepDead, this.cfg.stepFull);
+    // Torso lean toward/away from the camera (works at a laptop where stepping isn't possible).
+    const leanZ = this.leanS;
+    if (this.calib.leanZ == null) {
+      // No guard calibration (skipped): learn the stance from the first half second.
+      this.leanZSamples.push(leanZ);
+      if (this.leanZSamples.length >= 15) this.calib.leanZ = [...this.leanZSamples].sort((a, b) => a - b)[7];
+    }
+    const leanFwd = this.calib.leanZ == null ? 0 : deadzone(leanZ - this.calib.leanZ, this.cfg.leanFwdDead, this.cfg.leanFwdFull);
+    const fwd = Math.abs(leanFwd) > Math.abs(stepFwd) ? leanFwd : stepFwd;
+    // While striking or blocking (and just after a strike), ignore movement noise from the torso.
+    if (out.actions.length > 0) this.moveQuietUntil = t + this.cfg.moveQuietAfterStrike;
+    const busy = out.actions.length > 0 || this.blocking || t < this.moveQuietUntil;
     out.move = busy ? [0, 0] : [strafe, fwd];
     if (this.cfg.moveMode === 'point') {
       // Hand-pointing prototype: one arm held straight and still points where to go (the other arm stays free).
@@ -527,14 +560,15 @@ export class GestureRecognizer {
     }
     if (this.calibStart < 0) this.calibStart = t;
     const arm = (len(sub(lS, P[J.lEl])) + len(sub(P[J.lEl], lW)) + len(sub(rS, P[J.rEl])) + len(sub(P[J.rEl], rW))) / 2;
-    this.calibFrames.push({ sw: len(sub(lS, rS)), arm, isw: imgSW, cx: imgCX });
+    const hipM = mid(P[J.lHip], P[J.rHip]);
+    this.calibFrames.push({ sw: len(sub(lS, rS)), arm, isw: imgSW, cx: imgCX, lz: MS[2] - hipM[2] });
     const progress = Math.min(1, (t - this.calibStart) / 3);
     if (progress >= 1 && this.calibFrames.length >= 10) {
-      const med = (k: 'sw' | 'arm' | 'isw' | 'cx') => {
+      const med = (k: 'sw' | 'arm' | 'isw' | 'cx' | 'lz') => {
         const a = this.calibFrames.map((f) => f[k]).sort((x, y) => x - y);
         return a[Math.floor(a.length / 2)];
       };
-      this.calib = { shoulderW: med('sw'), armLen: Math.max(0.4, med('arm')), imgShoulderW: med('isw'), imgCenterX: med('cx') };
+      this.calib = { shoulderW: med('sw'), armLen: Math.max(0.4, med('arm')), imgShoulderW: med('isw'), imgCenterX: med('cx'), leanZ: med('lz') };
       this.calibrated = true;
       return { progress: 1, guidance: null, done: true };
     }

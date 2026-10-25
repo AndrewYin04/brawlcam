@@ -133,7 +133,7 @@ test('8-fighter brawl on a phone-sized viewport: record FPS (real VRM fighters a
   for (const gfx of ['vrm', 'lowgfx']) {
     const b = await chromium.launch({ args: GL_ARGS });
     opened.push(b);
-    const q = gfx === 'lowgfx' ? `${TQ}` : 'cpu&nocomment';
+    const q = gfx === 'lowgfx' ? `${TQ}` : 'cpu&nocomment&notut';
     const { page } = await openPage(b, `/?mode=brawl&bots=7&skipcal&${q}`, { viewport: { width: 844, height: 390 }, isMobile: true, hasTouch: true }, (ctx) => injectCamera(ctx, 'jab_01'));
     await waitScreen(page, 'game', 90_000);
     await page.waitForFunction(() => (window as any).__brawl.snapshot?.phase === 'fight', null, { timeout: 60_000 });

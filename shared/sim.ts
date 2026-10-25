@@ -67,6 +67,7 @@ export interface Fighter extends FighterInit {
   combo: number;
   comboAt: number;
   comboTarget: number | null;
+  lastFwdInputAt?: number;
 }
 
 export interface Projectile {
@@ -130,6 +131,7 @@ export const TUNING = {
   hpMax: 100,
   moveSpeed: 2.4,
   engageDist: 1.3,
+  assistIdle: 1.5, // s without forward/back input before the duel assist walks you back into range
   minDist: 0.85,
   reach: { jab: 1.75, hook: 1.6, uppercut: 1.6, kick: 1.95, palm: 0, xshield: 0 } as Record<ActionKind, number>,
   speedMin: 1.5, // m/s, maps to 5 HP
@@ -414,10 +416,13 @@ export class Sim {
         const dx = tgt.x - f.x;
         const dz = tgt.z - f.z;
         const dist = Math.hypot(dx, dz) || 1;
-        // Duel assist: drift back to engage distance when the player is not stepping.
-        if (this.cfg.mode === 'duel' && Math.abs(fwd) < 0.2) {
+        // Duel assist: if the player hasn't moved forward/back for a while and has drifted out of range,
+        // walk them back in. It never overrides the player's own input and never pushes them away,
+        // so a retreat stays a retreat.
+        if (fwd !== 0) f.lastFwdInputAt = this.t;
+        if (this.cfg.mode === 'duel' && fwd === 0 && this.t - (f.lastFwdInputAt ?? -9) > TUNING.assistIdle) {
           const err = dist - TUNING.engageDist;
-          if (Math.abs(err) > 0.08) fwd = Math.max(-0.5, Math.min(0.5, err * 1.2));
+          if (err > 0.08) fwd = Math.min(0.5, err * 1.2);
         }
         const fx = dx / dist;
         const fz = dz / dist;
