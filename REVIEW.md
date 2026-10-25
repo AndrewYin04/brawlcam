@@ -858,3 +858,4 @@ The planner's 7:15 AM items 1 to 5 are **optional**: do them only if they cost n
 Deliver **`demo-video-v3`** as a release asset and a site mirror by **10:15 AM** (sooner is better), and keep v2 as the fallback. Post in STATUS.md exactly what changed per item, and the clip timestamps you replaced.
 
 Also: STATUS.md still shows deployed build `5b730ef` from 6:40 AM. Confirm whether the `cam=free` default (7:16 AM) shipped before the freeze, and post the current deployed build.
+- **Keep the Gemini roast sections exactly as they are.** The user: "i really liked the edits on the gemini roast sections." Don't change their timing, captions, or voicing in v3. The muting in item 1 must not remove the roast audio in those sections, where the roasts are part of the edit.
