@@ -1,8 +1,61 @@
 # Status (written by the implementation agent)
 
-Last update: Sun Oct 25, 3:15 AM CDT. Deployed build: `0290893` on https://throwhands.tech.
+Last update: Sun Oct 25, 4:05 AM CDT. Deployed build: `6195899` on https://throwhands.tech.
 
-## Since 2:45 AM (all deployed)
+## Since 3:15 AM (all deployed)
+1. **Pose rate** (3:08/3:22 AM, highest priority). This server's Chromium runs on its *integrated* Intel UHD GPU, a good stand-in for the user's laptop. Measured with a real clip as the camera in a practice match:
+
+   | Setup | Pose fps |
+   |---|---|
+   | Pose alone (bare pose page) | 17 |
+   | Game with the GPU idle | 16 at 60 fps render; 17.4 capped at 30; 19.5 capped at 24 without bloom |
+   | Game with another GPU load running | **7.4** uncapped (the user sees 6.9); **18** capped at 30 fps; 20.4 at 20 fps |
+   | Research recording on | 12.4 with VP9, 14.4 with H.264 |
+
+   - **Fix 1: automatic quality step-down.** If pose stays under 18 fps for 3 s, rendering is capped at 30 fps. If it is still under 15, the cap drops to 24 fps and bloom turns off. `?quality=0/1/2` forces a level.
+   - **Fix 2: research recording** prefers H.264 at 1 Mbps.
+   - **Planner/user:** please check the pose fps in the camera preview on the laptop now. Expect at least 15 to 18.
+2. **Camera** (rounds 6 and 7):
+   - **Default view:** your behind angle, kept inside the cage. It orbits smoothly around the fight when it would leave the cage, or when your fighter would hide the opponent. There are no side flips, and it cuts only when you teleport (round start, respawn). `?cam=free` keeps the old unclamped view for comparison.
+   - **Measured:** cage in line of sight about 0% in every scene; opponent visible 84–93% (cage_far 72%).
+   - **See-through removed:** it showed the inner surfaces (the 3:26 AM correction).
+3. **Fights look right:**
+   - fighters keep 0.95 m apart
+   - the KO is a tumble into a limp lying pose
+   - the super uppercut dips and rises, then slams the opponent into the fence at chest height
+   - launched fighters tumble instead of hanging in a seated pose
+   - walking backward walks (no reverse jog) at 70% speed
+   - a compact guard bubble; a Brawl chase camera with a "you" marker
+   - fist-to-target mostly under 10 cm
+4. **Audio** (3:15/3:20 AM):
+   - **"I don't hear it":** audio was only resumed when you picked a mode from the menu, so opening a link straight into a match left it suspended. It now resumes on the first tap or key anywhere. The e2e test checks that the context is running, the voice bus is up, and calls played: 9 calls in 26 s on production.
+   - **Directions read aloud:**
+     - All 48 stock calls were transcribed with ElevenLabs speech-to-text: **0 say more than their line**. The check is `tests/tools/check-calls.ts`, so the leak came from the live Gemini TTS lines (the role-play prompt).
+     - Both Gemini TTS models are now out of free-tier quota (429), so I couldn't re-verify a fix. Live AI lines are therefore **captions only**, and spoken commentary comes from the verified stock calls. 8 new calls ("THE SUPER IS READY!", fillers like "KEEP THOSE HANDS UP!") keep at least 4 spoken lines a minute: a 60 s practice match had 10.
+     - The server prompt now uses the documented short form ("Say excitedly: …"), behind `?livevoice=1` / `LIVE_TTS=1`.
+   - **Crowd that sounds like wind:** replaced with real crowd audio from ElevenLabs sound effects (20 s seamless arena bed, 3 roars, 2 "ooh"s, a gasp, a chant), ducked about 8 dB under each call.
+   - **ElevenLabs quota:** 4,499 / 10,000 used, within the 50% rule at each step.
+5. **Research mode:**
+   - Recordings auto-save on Quit/Menu and on page close, and checkpoint every 2 minutes.
+   - A big "Stop & save files" button, and a toast after saving.
+   - The e2e test passes on production.
+6. **Grappling** (2:50 AM item B) is merged **behind `?grapple=1`**:
+   - grab (reach and pull), a 3 s clinch with knees and escapes, and the Shoulder Throw super
+   - bots use them
+   - 0 false grab/throw triggers on all 37 real clips; the existing detection is unchanged (eval-gestures identical)
+   - **Open question for the planner:** the reach of a grab can also read as a jab, and once in 4 synthetic throws at 15 fps as a palm. With a full meter that palm fires the energy blast first. Real grab clips are needed to measure it.
+   - Paired clinch/throw animation is not done yet, so it stays flagged.
+7. **Leaderboard:**
+   - Four real online matches were played through the real UI and server between clip-driven players named Maya, Leo, Priya and Sam, so the board shows genuinely played matches.
+   - An agent's test run had added "E2E Dup" players to production. They were removed with `tests/tools/cleanup-test-data.ts` (64 test players, 32 matches).
+8. **Demo-video-v2** is prepared: new shots, script, VO, cards and UI captures, with the game's own announcer calls mixed in at the frames they fired. The final render happens after the freeze.
+
+## Working on now
+1. Guided research drills (stand still, big punches standing still, movement prompts), so the user can record clean data.
+2. Review round 8.
+3. Demo-video-v2 render.
+
+## 2:45 to 3:15 AM (all deployed)
 1. **Bug fixed: a big punch moved the player backward** (2:50 AM item A), reproduced first in `tests/unit/punch-no-move.ts` on real clips of people throwing hooks, uppercuts and knees in place.
    - **Before:** up to 61 cm of input-driven movement around a strike.
    - **After:** 4.2 cm at worst (target under 5 cm).
@@ -46,9 +99,6 @@ Last update: Sun Oct 25, 3:15 AM CDT. Deployed build: `0290893` on https://throw
    - long names truncate inside their bar
    - checked at 1280×720, 1920×1080 and 844×390
 6. **Opt-in pose streams:** columnar storage (one smallint column per coordinate) compresses 3.4×, to **5.9 MB per player-hour** (19.7 MB uncompressed). That is about 102 player-hours under the 600 MB guard. Plain arrays reached only 1.7×.
-
-## Working on now
-Grab, clinch and Shoulder Throw (2:50 AM item B), behind `?grapple=1` until solid; then review round 6 and demo-video-v2.
 
 ## 1:50 AM to 2:45 AM (all deployed)
 1. **Movement you can find** (acd2f05, 5936250). Root cause of "idk how to move forward and backward", reproduced in `tests/unit/move-forward-back.ts`: the 1v1 duel assist overrode any forward/back signal under 0.2 and walked you back to range as soon as you stopped, and a 12 cm lean only produced 0.13. Fixed:
