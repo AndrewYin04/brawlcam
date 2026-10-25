@@ -52,6 +52,8 @@ export class MatchView {
   private hitStopUntil = 0;
   private pendingHits: { at: number; e: SimEvent }[] = [];
   announcer = new Announcer();
+  /** Set by the app while calibration/the tutorial runs. */
+  calibrating = false;
   private fallCamUntil = 0;
   private fallTarget: number | null = null;
   private koFeed: HTMLElement;
@@ -554,7 +556,8 @@ export class MatchView {
       ($(`${p}-hp`) as HTMLElement).style.width = '0%';
       return;
     }
-    name.textContent = f.name + (f.bot ? ' 🤖' : '') + (f.pr || f.bot ? '' : ' (not in frame)');
+    // "(not in frame)" only during a fight: during calibration and the tutorial no input reaches the match yet.
+    name.textContent = f.name + (f.bot ? ' 🤖' : '') + (f.pr || f.bot || this.snap?.phase !== 'fight' || this.calibrating ? '' : ' (not in frame)');
     const hp = $(`${p}-hp`) as HTMLElement;
     hp.style.width = `${f.hp}%`;
     hp.classList.toggle('low', f.hp < 30);

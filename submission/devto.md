@@ -4,7 +4,7 @@ published: false
 tags: gamedev, webdev, javascript, ai
 ---
 
-At HackTX 2026 we built **Throw Hands**, a browser fighting game where your webcam tracks your pose, a 3D superhero copies your arms, torso, and head, and your real punches, blocks, and gestures fight a bot, a friend on the same camera, or friends anywhere online. It is live at https://throwhands.tech. This post is about the parts that were harder than they looked.
+At HackTX 2026 we built **Throw Hands**, a browser fighting game where your webcam tracks your pose, a 3D fighter in a UFC-style octagon copies your arms, torso, and head and walks where you step, and your real punches, guards, and gestures fight a bot, a friend on the same camera, or friends anywhere online. It is live at https://throwhands.tech. This post is about the parts that were harder than they looked.
 
 ## The stack
 
@@ -28,7 +28,7 @@ We rewrote strikes as **peak detection**: a strike is a local maximum of elbow a
 
 ## 3. Blocks, and an X the camera cannot see
 
-A block looked like a guard until we measured both on video: in a block the wrists sit about 0.1 m higher and 0.15 to 0.2 m further forward, close together. The "cross your arms in an X" shield was stranger: pose tracking cannot separate tightly crossed wrists, so the X never showed up as crossed. We recognize it as what the model *does* report: wrists touching above the face, elbows raised and spread. Raising both arms into a block also used to fire two jabs, so two-handed motions that end at face height now count as defense, and at chest height as an energy-blast palm push.
+A block looked like a guard until we measured both on video: in a block the wrists sit about 0.1 m higher and 0.15 to 0.2 m further forward, close together. The "cross your arms in an X" Iron Wall was stranger: pose tracking cannot separate tightly crossed wrists, so the X never showed up as crossed. We recognize it as what the model *does* report: wrists touching above the face, elbows raised and spread. Raising both arms into a block also used to fire two jabs, so two-handed motions that end at face height now count as defense, and at chest height as an energy-blast palm push.
 
 ## 4. One simulation for N players
 

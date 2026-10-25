@@ -295,6 +295,7 @@ function beginLocal(s: LocalSession, camera: 'behind' | 'side' | 'wide', mode: s
 
 function runCalibration(done: () => void) {
   calibrating = true;
+  if (view) view.calibrating = true;
   pose!.recognizers.forEach((r) => r.beginCalibration());
   $('calib').classList.remove('hidden');
   $('calib-title').textContent = pose!.players > 1 ? 'Both players: get in your guard' : 'Get in your guard';
@@ -306,6 +307,7 @@ function runCalibration(done: () => void) {
     hooks.calibrated = true;
     const end = () => {
       calibrating = false;
+      if (view) view.calibrating = false;
       $('calib').classList.add('hidden');
       done();
     };

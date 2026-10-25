@@ -29,16 +29,18 @@ const CARDS: Record<string, string> = {
   problem: `<div class="k">The problem</div><h2>Game night needs a console,<br>an accessory, and one room.</h2><p>Your friends are on other campuses, in other cities. Everyone already has a webcam and a browser.</p>`,
   ai: `<div class="k">How AI plays a role</div><h2>AI is the controller</h2>
     <div class="flow"><div class="n">Webcam</div><div class="a">→</div><div class="n">Pose model<br><small style="color:#9aa6c8">in your browser</small></div><div class="a">→</div><div class="n">Gesture engine<br><small style="color:#9aa6c8">punch · block · supers</small></div><div class="a">→</div><div class="n">Server simulation<br><small style="color:#9aa6c8">fair hits online</small></div></div>
-    <div class="grid" style="margin-top:26px"><div class="c"><b>Meta Muse Spark + Muse Image</b><span>Fighter Forge and rivalry cards</span></div><div class="c"><b>Gemini + Gemini TTS</b><span>Live spoken fight commentary</span></div></div>
+    <div class="grid" style="margin-top:26px;grid-template-columns:repeat(3,1fr)"><div class="c"><b>Meta Muse Spark + Muse Image</b><span>Fighter Forge and rivalry cards</span></div><div class="c"><b>Gemini + Gemini TTS</b><span>Live fight commentary lines</span></div><div class="c"><b>ElevenLabs</b><span>Announcer calls for big moments, made in advance</span></div></div>
     <p style="font-size:22px">No video ever leaves your device: only joint positions travel.</p>`,
   tools: `<div class="k">Tools, harnesses, models</div><h2>How we built it</h2>
     <div class="grid">
       <div class="c"><b>Claude Code</b><span>Wrote and tested the game, server, and tools with us</span></div>
       <div class="c"><b>Playwright harness</b><span>Pro fighters' shadowboxing footage as the webcam in headless browsers; checks both screens match on every tick</span></div>
       <div class="c"><b>Vultr</b><span>Runs the game, every online room, and the AI proxy</span></div>
-      <div class="c"><b>Tiger Data</b><span>Match events, Elo leaderboard, motion-data counts</span></div>
+      <div class="c"><b>Tiger Data</b><span>Match events, Elo leaderboard, compressed opt-in pose streams</span></div>
+      <div class="c"><b>Review loop</b><span>Every visual change is captured frame by frame and scored by fresh-context reviewers</span></div>
+      <div class="c"><b>Fighters</b><span>Quaternius CC0 characters and animations, toon-shaded, IK so fists land</span></div>
     </div>
-    <div style="margin-top:14px"><span class="tag">0 mismatches across 2,160 shared ticks</span><span class="tag">6/6 jabs at 10-30 fps</span><span class="tag">three.js · MediaPipe · VRM</span></div>`,
+    <div style="margin-top:14px"><span class="tag">0 mismatches across 2,160 shared ticks</span><span class="tag">fist-to-target measured on every hit frame</span><span class="tag">three.js · MediaPipe</span></div>`,
   tests: `<div class="k">Tested end to end, every user path</div><h2>Real fighters' footage as the webcam</h2>
     <pre style="font:20px/1.45 ui-monospace,Menlo,monospace;background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.12);border-radius:14px;padding:18px 22px;margin:0;color:#c9d4ff;white-space:pre-wrap">$ npx playwright test online        # against the live server
 ONLINE {"samples":2160,"mismatches":0,"p95ArrivalSkewMs":29,
@@ -49,7 +51,9 @@ $ npx playwright test wso brawl practice supers
   <span style="color:#3dff9a">✓</span> winner stays on: 8 browsers, 4 matches, cheers, reconnect
   <span style="color:#3dff9a">✓</span> 8 browsers, 8 fighter clips: 0 state mismatches
   <span style="color:#3dff9a">✓</span> won by KO · lost by KO · won on time · drawn round
-  <span style="color:#3dff9a">✓</span> shield blocks all damage for 3 s; blast can be blocked</pre>`,
+  <span style="color:#3dff9a">✓</span> Iron Wall blocks all damage for 2.5 s; blast can be blocked
+  <span style="color:#3dff9a">✓</span> guard drains, breaks, dizzy; cage slam, no ring-outs
+  <span style="color:#3dff9a">✓</span> lean / step to move; a big punch never moves you</pre>`,
   business: `<div class="k">What's next</div><h2>How it makes money</h2>
     <div class="grid" style="grid-template-columns:repeat(3,1fr)"><div class="c"><b>Cosmetics</b><span>Skins, auras, AI-forged fighters; $5/month season pass</span></div><div class="c"><b>Ranked play</b><span>Elo matchmaking and seasons</span></div><div class="c"><b>Motion data</b><span>Opt-in, anonymized strike and block sequences for robotics labs</span></div></div>`,
   close: `<div class="k">Pull up a friend</div><h1 style="font-size:110px">THROW<br><span>HANDS</span></h1><div class="url" style="margin-top:20px">throwhands.tech</div><p style="font-size:22px">Built at HackTX 2026 with Claude Code</p>`,
