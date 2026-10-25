@@ -83,8 +83,15 @@ export const GESTURE_CFG = {
   // Forward/back by leaning the torso toward/away from the camera (shoulders vs hips, against the calibrated stance).
   leanFwdDead: 0.055, // m
   leanFwdFull: 0.12,
+  leanBackDead: 0.085, // m
+  leanBackFull: 0.15,
   moveSmooth: 0.15, // s
-  moveQuietAfterStrike: 0.3, // s: torso motion right after a strike is the punch, not a step
+  moveQuietAfterStrike: 0.35, // s: torso motion around a strike is the punch, not a step
+  armBusySpeed: 0.9,
+  moveQuietAfterDetect: 0.65, // s: recovery after a detected strike (lean-back, re-squaring) is not movement // m/s: a hand this fast means a strike is starting (its wind-up and twist are not movement)
+  moveHoldLookback: 0.2, // s: during a strike, movement holds its value from this long before the onset
+  fwdPersist: 0.2, // s: forward/back intent must last this long before it moves the fighter
+  stepMaxYaw: (35 * Math.PI) / 180, // ignore shoulder width when the torso is twisted more than this
   turnOn: 0.6, // rad torso yaw to switch target
   turnOff: 0.25,
   turnHold: 0.25,
@@ -163,6 +170,10 @@ export class GestureRecognizer {
   private hipXSamples: number[] = [];
   private hipXS = -1;
   private moveQuietUntil = -9;
+  private heldMove: [number, number] = [0, 0];
+  private moveHist: { t: number; m: [number, number] }[] = [];
+  private fwdSign = 0;
+  private fwdSince = 0;
   private lastMoveT = -1;
   private ratioS = 0;
   private leanS = 0;
@@ -505,7 +516,8 @@ export class GestureRecognizer {
     // Smooth both (about 0.15 s) so bobbing and punch recoil don't read as movement.
     const k = this.lastMoveT < 0 ? 1 : Math.min(1, (t - this.lastMoveT) / this.cfg.moveSmooth);
     this.lastMoveT = t;
-    this.ratioS += (ratioRaw - this.ratioS) * k;
+    // A twisted torso (|yaw| > 35 deg) makes shoulder width unreliable: keep the last good value.
+    if (Math.abs(yawNow) < this.cfg.stepMaxYaw) this.ratioS += (ratioRaw - this.ratioS) * k;
     this.leanS += (leanRaw - this.leanS) * k;
     const ratio = this.ratioS;
     const stepFwd = deadzone(ratio, this.cfg.stepDead, this.cfg.stepFull);
@@ -516,12 +528,35 @@ export class GestureRecognizer {
       this.leanZSamples.push(leanZ);
       if (this.leanZSamples.length >= 15) this.calib.leanZ = [...this.leanZSamples].sort((a, b) => a - b)[7];
     }
-    const leanFwd = this.calib.leanZ == null ? 0 : deadzone(leanZ - this.calib.leanZ, this.cfg.leanFwdDead, this.cfg.leanFwdFull);
+    // Leaning back needs a bit more than leaning in: boxers sway back after punches without meaning to retreat.
+    const lz = this.calib.leanZ == null ? 0 : leanZ - this.calib.leanZ;
+    const leanFwd = this.calib.leanZ == null ? 0 : lz >= 0 ? deadzone(lz, this.cfg.leanFwdDead, this.cfg.leanFwdFull) : deadzone(lz, this.cfg.leanBackDead, this.cfg.leanBackFull);
     const fwd = Math.abs(leanFwd) > Math.abs(stepFwd) ? leanFwd : stepFwd;
-    // While striking or blocking (and just after a strike), ignore movement noise from the torso.
-    if (out.actions.length > 0) this.moveQuietUntil = t + this.cfg.moveQuietAfterStrike;
-    const busy = out.actions.length > 0 || this.blocking || t < this.moveQuietUntil;
-    out.move = busy ? [0, 0] : [strafe, fwd];
+    const torsoImgDbg = Math.hypot((frame.image[11][0] + frame.image[12][0]) / 2 - (frame.image[23][0] + frame.image[24][0]) / 2, (frame.image[11][1] + frame.image[12][1]) / 2 - (frame.image[23][1] + frame.image[24][1]) / 2);
+    // Strikes: the wind-up and twist start before a strike is detected (at its peak). Gate from the strike's onset
+    // (a hand starts moving fast) until 0.35 s after it, and hold movement at its value from just before the onset.
+    const armActive = out.actions.length > 0 || handInfo.some((h) => h.speed > this.cfg.armBusySpeed);
+    const wasQuiet = t < this.moveQuietUntil;
+    if (armActive) this.moveQuietUntil = Math.max(this.moveQuietUntil, t + this.cfg.moveQuietAfterStrike);
+    // After a detected strike the body recovers (leans back, re-squares): longer quiet window.
+    if (out.actions.length > 0) this.moveQuietUntil = Math.max(this.moveQuietUntil, t + this.cfg.moveQuietAfterDetect);
+    if (armActive && !wasQuiet) {
+      const before = this.moveHist.find((h) => h.t >= t - this.cfg.moveHoldLookback) ?? this.moveHist[this.moveHist.length - 1];
+      this.heldMove = before ? [before.m[0], before.m[1]] : [0, 0];
+    }
+    // Forward/back intent must persist briefly before it moves the fighter (filters single-frame jolts).
+    const fwdSign = Math.sign(fwd);
+    if (fwdSign !== this.fwdSign) {
+      this.fwdSign = fwdSign;
+      this.fwdSince = t;
+    }
+    const fwdOut = fwdSign !== 0 && t - this.fwdSince < this.cfg.fwdPersist ? 0 : fwd;
+    const live: [number, number] = [strafe, fwdOut];
+    this.moveHist.push({ t, m: live });
+    while (this.moveHist.length && t - this.moveHist[0].t > 0.6) this.moveHist.shift();
+    // During the strike window forward/back is zero (holding a pre-strike value carried stale input through combos);
+    // strafe keeps its pre-strike value so circling while jabbing still works.
+    out.move = this.blocking ? [0, 0] : t < this.moveQuietUntil ? [this.heldMove[0], 0] : live;
     if (this.cfg.moveMode === 'point') {
       // Hand-pointing prototype: one arm held straight and still points where to go (the other arm stays free).
       let pm: [number, number] = [0, 0];
@@ -556,7 +591,7 @@ export class GestureRecognizer {
       this.turnSince = -1;
     }
 
-    out.debug = { yaw, lean, ratio, lExt: handInfo[0].ext, rExt: handInfo[1].ext, lEl: handInfo[0].elbow, rEl: handInfo[1].elbow, lSp: handInfo[0].speed, rSp: handInfo[1].speed };
+    out.debug = { yaw, lean, ratio, stepFwd, leanFwd, leanZ: leanZ - (this.calib.leanZ ?? 0), torso: torsoImgDbg, lExt: handInfo[0].ext, rExt: handInfo[1].ext, lEl: handInfo[0].elbow, rEl: handInfo[1].elbow, lSp: handInfo[0].speed, rSp: handInfo[1].speed };
     return out;
   }
 
