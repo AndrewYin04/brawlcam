@@ -880,6 +880,12 @@ export class HeroFighter {
   }
 
   /** Points used for camera occlusion tests: head, chest, hands, feet. */
+  /** Knocked down, tumbling or getting up (camera framing keeps a fighter on the floor in view). */
+  isDown() {
+    const n = this.oneShot?.name;
+    return this.wasAirborne || n === 'knockback' || n === 'getUp' || n === 'death' || n === 'land';
+  }
+
   samplePoints(): THREE.Vector3[] {
     const out: THREE.Vector3[] = [];
     for (const n of ['Head', 'spine_03', 'hand_l', 'hand_r', 'foot_l', 'foot_r', 'pelvis']) {

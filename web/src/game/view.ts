@@ -122,6 +122,7 @@ export class MatchView {
               break;
             }
           }
+          if (e.kind === 'super_uppercut' && !e.shielded) this.showBanner('SUPER UPPERCUT!', 1200, true);
           this.announcer.onEvent(e, this.snap);
           const tgt = this.slots.get(e.target);
           const att = this.slots.get(e.attacker);
@@ -193,7 +194,7 @@ export class MatchView {
             if (!USE_HEROES) this.vfx.pillar(s.pos, col);
             else this.vfx.speedLines();
             this.vfx.groundRing(s.pos, col, 1.2);
-            this.showBanner('SUPER UPPERCUT!', 1200, true);
+            // The banner waits for the uppercut to land (an Iron Wall can counter it: review round 9/10, shield scene).
             this.slowmoUntil = this.time + 1.2;
           } else {
             this.vfx.groundRing(s.pos, col, 1.5);
@@ -335,9 +336,11 @@ export class MatchView {
         // Teleports (new round, respawn) snap instead of gliding across the stage. A fighter about to be hit holds
         // still until the fist lands (the knockback starts at the contact frame).
         const awaitingHit = this.pendingHits.some((p) => (p.e as any).target === f.id);
-        if (slot.pos.distanceTo(target) > 2.2) {
+        if (slot.pos.distanceTo(target) > 1.0) {
+          // Nothing moves a metre in one frame (a super launch is ~0.1 m): this is a teleport (round start, respawn,
+          // a scripted placement). Snap, and cut the camera when you or your opponent moved.
           slot.pos.copy(target);
-          if (f.id === myId) this.camCut = true; // your fighter teleported (round start, respawn): cut, don't sweep
+          if (f.id === myId || f.id === this.slots.get(myId)?.snap.tg || this.slots.size === 2) this.camCut = true;
         }
         else if (!awaitingHit) slot.pos.lerp(target, k);
         slot.yaw += wrap(f.yaw - slot.yaw) * k;
@@ -487,6 +490,24 @@ export class MatchView {
         pos = mid.clone().addScaledVector(right, side * (4.2 + span * 0.9)).addScaledVector(towardMe, 1.4).setY(1.7 + span * 0.15);
         look = mid.clone();
       }
+    }
+    // KO shot (review round 10: your back hid the downed opponent): a side angle on your side of the fight line,
+    // perpendicular to it, framing you and the body on the floor.
+    if (USE_HEROES && me && opp && this.opts.camera === 'behind' && (opp.snap.hp <= 0 || me.snap.hp <= 0) && this.snap && this.snap.f.length === 2) {
+      const a = me.avatar.root.position.clone();
+      const b2 = opp.avatar.root.position.clone();
+      const mid = a.clone().add(b2).multiplyScalar(0.5);
+      const axis = b2.clone().sub(a).setY(0);
+      if (axis.lengthSq() > 1e-4) {
+        axis.normalize();
+        const perp = new THREE.Vector3(axis.z, 0, -axis.x);
+        const side = Math.sign(this.arena.camera.position.clone().sub(mid).dot(perp)) || 1;
+        pos = mid.clone().addScaledVector(perp, side * 4.0).addScaledVector(axis, -1.0).setY(2.3);
+        look = mid.clone().setY(0.7);
+      }
+    } else if (USE_HEROES && me && opp && this.opts.camera === 'behind' && !this.slowmo && (me.avatar instanceof HeroFighter) && me.avatar.isDown()) {
+      // You are knocked down or tumbling: aim between the fighters so you stay in frame (round 10, getting_hit).
+      look = look.clone().lerp(me.avatar.root.position.clone().setY(0.6), 0.45);
     }
     // Ring-out: the camera follows the falling fighter for a moment.
     if (this.time < this.fallCamUntil && this.fallTarget != null) {
