@@ -430,8 +430,9 @@ export class HeroFighter {
       g.closePath();
       g.stroke();
       g.fill();
-      this.marker = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false }));
-      this.marker.scale.setScalar(0.28);
+      // Fixed screen size (not shrinking or growing with distance), kept above the head bone every frame.
+      this.marker = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false, sizeAttenuation: false }));
+      this.marker.scale.setScalar(0.035);
       this.marker.position.y = 2.25;
       this.marker.renderOrder = 10;
       this.root.add(this.marker);
@@ -653,6 +654,12 @@ export class HeroFighter {
 
     // ---- strike: lunge + IK onto the target, contact measurement ----
     this.updateStrike(dt);
+    if (this.marker?.visible && this.bones.Head) {
+      // Follow the head (lunges, tumbles and knockbacks move the body away from the root).
+      const h = this.bones.Head.getWorldPosition(new THREE.Vector3());
+      h.y += 0.42;
+      this.marker.position.copy(this.root.worldToLocal(h));
+    }
     // ---- grappling: arms onto the other fighter (clinch), or a two-handed reach (grab/throw startup) ----
     this.applyGrapple(opts.alive && !fullBody);
 

@@ -161,6 +161,8 @@ export class MatchView {
           this.vfx.burst(cp, 0xffc53d, 20, 3.5, 0.05);
           this.arena.shake = Math.min(1.5, this.arena.shake + 0.3 + strength * 0.5);
           sfx.sfxPunch(Math.min(1, strength));
+          // A hard slam gets the slow-motion side camera (review round 9: the slam happened behind your fighter).
+          if (e.speed >= 5) this.slowmoUntil = Math.max(this.slowmoUntil, this.time + 0.9);
           break;
         }
         case 'throw' as any: {
@@ -260,6 +262,9 @@ export class MatchView {
         }
         case 'round_start':
           this.lastCountdown = -1;
+          // Tips from the previous round (or the warm-up) don't carry over.
+          clearTimeout(this.hintTimer);
+          $('hint').classList.remove('show');
           this.showBanner(`ROUND ${e.n}`, 900);
           break;
         case 'fight':
@@ -553,37 +558,27 @@ export class MatchView {
         this.camSwing *= 0.5;
       }
     }
-    // Never inside or against a fighter: keep a minimum distance from both bodies (more in slow motion, when the
-    // victim tumbles), measured to where they are drawn.
-    if (USE_HEROES) {
-      const minD = this.slowmo ? 3.0 : 1.4;
-      for (const sl of this.slots.values()) {
-        if (!(sl.avatar instanceof HeroFighter) || !sl.avatar.root.visible) continue;
-        const body = sl.avatar.root.position.clone().add(sl.avatar.body.position).setY(0);
-        const d = pos.clone().setY(0).sub(body);
-        const len = d.length();
-        if (len < minD) {
-          if (len < 1e-3) d.set(0, 0, 1);
-          pos.addScaledVector(d.normalize(), minD - len);
-        }
-      }
-    }
+    if (USE_HEROES && this.opts.camera === 'behind') pos = this.constrainCamera(pos, look, me, opp);
     // Ease into (and out of) the slow-motion side camera instead of whipping across the arena.
     if (this.slowmo !== this.wasSlowmo) this.camEaseUntil = this.time + 0.8;
     this.wasSlowmo = this.slowmo;
     this.arena.setCamera(pos, look, dt, this.camCut, this.time < this.camEaseUntil ? 2.2 : 5);
-    // The eased camera itself must also stay clear of the bodies (its path can cross a fighter while easing).
-    if (USE_HEROES) {
-      const minD = this.slowmo ? 2.8 : 1.3;
+    // The eased camera itself must also obey the rules (its path can cross a fighter or the fight line while easing).
+    if (USE_HEROES && this.opts.camera === 'behind') {
+      const cp = this.constrainCamera(this.arena.camPos.clone(), this.arena.camLook, me, opp, false);
+      this.arena.camPos.copy(cp);
+      this.arena.camera.position.copy(cp);
+      this.arena.camera.lookAt(this.arena.camLook);
+    } else if (USE_HEROES) {
       const cp = this.arena.camPos;
       for (const sl of this.slots.values()) {
         if (!(sl.avatar instanceof HeroFighter) || !sl.avatar.root.visible) continue;
         const body = sl.avatar.root.position.clone().add(sl.avatar.body.position).setY(0);
         const d = cp.clone().setY(0).sub(body);
         const len = d.length();
-        if (len < minD) {
+        if (len < 1.3) {
           if (len < 1e-3) d.set(0, 0, 1);
-          cp.addScaledVector(d.normalize(), minD - len);
+          cp.addScaledVector(d.normalize(), 1.3 - len);
         }
       }
       this.arena.camera.position.x = cp.x;
@@ -594,6 +589,85 @@ export class MatchView {
     this.camCut = false;
     this.updateVisibility(dt);
     void s;
+  }
+
+  private camTmp = new THREE.PerspectiveCamera();
+  /**
+   * Camera rules for the fight view (review round 9), applied to the target and to the eased camera:
+   * 1. stay on your side of the fight line (also in slow motion), so you are the near fighter;
+   * 2. stay clear of every fighter's body in 3D (airborne, tumbling ones included);
+   * 3. keep both fighters inside the frame (pull back, or rise when the cage is in the way).
+   */
+  private constrainCamera(pos: THREE.Vector3, look: THREE.Vector3, me: Slot | undefined, opp: Slot | undefined, frame = true) {
+    const p = pos.clone();
+    const A = this.arena.stage ? apothem(this.arena.stage.radius) - 0.35 : Infinity;
+    const clampCage = (v: THREE.Vector3) => {
+      if (CAM_MODE === 'free' || !isFinite(A)) return;
+      for (let k = 0; k < 8; k++) {
+        const ang = ((k + 0.5) / 8) * Math.PI * 2 + Math.PI / 8;
+        const over = v.x * Math.cos(ang) + v.z * Math.sin(ang) - A;
+        if (over > 0) (v.x -= Math.cos(ang) * over), (v.z -= Math.sin(ang) * over);
+      }
+    };
+    const pts = (sl: Slot | undefined) => (sl && sl.avatar instanceof HeroFighter && sl.avatar.root.visible ? sl.avatar.samplePoints() : sl ? [sl.pos.clone().setY(1 + (sl.snap.y ?? 0))] : []);
+    // 1. Your side of the fight line.
+    const shown = (sl: Slot) => sl.avatar.root.visible;
+    if (me && opp && shown(me) && shown(opp)) {
+      const u = me.pos.clone().sub(opp.pos).setY(0);
+      if (u.lengthSq() > 1e-4) {
+        u.normalize();
+        const mid = me.pos.clone().add(opp.pos).multiplyScalar(0.5);
+        const need = this.slowmo ? 0.6 : me.pos.clone().sub(mid).dot(u) + 0.6;
+        const have = p.clone().sub(mid).dot(u);
+        if (have < need) p.addScaledVector(u, need - have);
+      }
+    }
+    // 2. Clear of every body point in 3D.
+    const minD = this.slowmo ? 2.2 : 1.15;
+    for (let iter = 0; iter < 3; iter++) {
+      for (const sl of this.slots.values()) {
+        for (const q of pts(sl)) {
+          const d = p.clone().sub(q);
+          const len = d.length();
+          if (len < minD) {
+            d.y = 0;
+            if (d.lengthSq() < 1e-4) d.copy(p.clone().sub(look).setY(0));
+            if (d.lengthSq() < 1e-4) d.set(0, 0, 1);
+            p.addScaledVector(d.normalize(), minD - len);
+          }
+        }
+      }
+      clampCage(p);
+    }
+    // 3. Both fighters in frame.
+    // (Points behind the camera are skipped and the rise is capped: a body at the camera's feet must not lift it top-down.)
+    if (frame && me && opp && shown(me) && shown(opp)) {
+      const cam = this.camTmp;
+      cam.fov = this.arena.camera.fov;
+      cam.aspect = this.arena.camera.aspect;
+      cam.near = 0.05;
+      cam.far = 100;
+      cam.updateProjectionMatrix();
+      const all = [...pts(me), ...pts(opp)];
+      for (let step = 0; step < 10; step++) {
+        cam.position.copy(p);
+        cam.lookAt(look);
+        cam.updateMatrixWorld();
+        let worst = 0;
+        for (const q of all) {
+          const n = q.clone().project(cam);
+          if (n.z > 1) continue; // behind the camera: rule 2 handles bodies that close
+          worst = Math.max(worst, Math.abs(n.x), Math.abs(n.y));
+        }
+        if (worst <= 0.88) break;
+        const back = p.clone().sub(look).setY(0).normalize();
+        const before = p.clone();
+        p.addScaledVector(back, 0.35);
+        clampCage(p);
+        if (p.distanceTo(before) < 0.1) p.y = Math.min(3.0, p.y + 0.3); // the cage stops pulling back: rise instead
+      }
+    }
+    return p;
   }
 
   /** Review metrics (section 11): cage occlusion, opponent visibility, camera jumps. */
