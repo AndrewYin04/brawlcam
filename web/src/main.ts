@@ -28,6 +28,12 @@ export const hooks = {
   snapshot: null as unknown,
   errors: [] as string[],
   lastGesture: [] as unknown[],
+  online: null as null | { room: string; slot: number },
+  matchOver: null as unknown,
+  cheers: 0,
+  rivalry: null as unknown,
+  /** Recent distinct snapshots with local arrival time (epoch ms), for sync assertions in tests. */
+  snapLog: [] as { t: number; at: number; round: number; timer: number; phase: string; hp: number[] }[],
 };
 (window as any).__brawl = hooks;
 window.addEventListener('error', (e) => hooks.errors.push(String(e.message)));
@@ -45,6 +51,7 @@ let pendingStart: (() => void) | null = null;
 let calibrating = false;
 let resultsShown = false;
 let loopStarted = false;
+let resultsTimer = 0;
 
 export function show(screen: Screen) {
   hooks.screen = screen;
@@ -281,7 +288,74 @@ function showResults() {
     d.querySelector('span')!.textContent = f.name;
     stats.appendChild(d);
   }
+  // Online extras: Elo change, rivalry card, host-only rematch.
+  const online = session.kind === 'online' ? (session as any) : null;
+  $('res-share').classList.add('hidden');
+  $('res-card').classList.add('hidden');
+  $('res-rematch').textContent = 'Rematch';
+  ($('res-rematch') as HTMLButtonElement).disabled = false;
+  if (online) {
+    const d = online.eloDelta?.[String(mine[0])];
+    if (typeof d === 'number') $('res-sub').textContent += ` Elo ${d >= 0 ? '+' : ''}${d}.`;
+    if (!online.isHost) {
+      $('res-rematch').textContent = 'Waiting for host…';
+      ($('res-rematch') as HTMLButtonElement).disabled = true;
+    }
+    const humans = snap.f.filter((f) => !f.bot);
+    if (humans.length === 2 && !brawl) void makeRivalryCard(online.matchId, humans[0], humans[1], winner);
+  }
   show('results');
+}
+
+async function makeRivalryCard(matchId: string, a: { name: string; rw: number; id: number }, b: { name: string; rw: number; id: number }, winner: number | null) {
+  const box = $('res-card');
+  box.classList.remove('hidden');
+  box.innerHTML = '<p class="muted">Making your rivalry card…</p>';
+  const highlights = hooks.events.filter((e) => e.type === 'super' || e.type === 'ko').slice(-6).map((e) => `${e.type} by slot ${(e as any).id ?? (e as any).attacker}`).join('; ');
+  let card: any = null;
+  try {
+    const r = await fetch('/api/rivalry', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ matchId, a: a.name, b: b.name, scoreA: a.rw, scoreB: b.rw, winner: winner === a.id ? a.name : winner === b.id ? b.name : null, highlights }) });
+    card = r.ok ? await r.json() : null;
+  } catch {}
+  hooks.rivalry = card;
+  box.innerHTML = '';
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'border:1px solid var(--line);border-radius:14px;overflow:hidden;margin:10px auto;max-width:320px;background:#0d1020';
+  if (card?.image) {
+    const img = document.createElement('img');
+    img.src = card.image;
+    img.alt = 'Rivalry card art';
+    img.style.cssText = 'width:100%;display:block;aspect-ratio:3/4;object-fit:cover';
+    wrap.appendChild(img);
+  }
+  const cap = document.createElement('div');
+  cap.style.cssText = 'padding:10px 12px;text-align:left';
+  const title = document.createElement('b');
+  title.textContent = `${a.name} ${a.rw} – ${b.rw} ${b.name}`;
+  const line = document.createElement('div');
+  line.className = 'muted';
+  line.textContent = card?.summary ?? 'Rematch?';
+  cap.append(title, line);
+  wrap.appendChild(cap);
+  box.appendChild(wrap);
+  const share = $('res-share');
+  share.classList.remove('hidden');
+  share.onclick = async () => {
+    const url = card?.id ? `${location.origin}/api/rivalry/${card.id}` : location.origin;
+    const data = { title: 'Throw Hands rivalry', text: `${a.name} ${a.rw}-${b.rw} ${b.name}. ${card?.summary ?? ''}`, url: card?.image ? location.origin + card.image : url };
+    if (navigator.share) {
+      try {
+        await navigator.share(data);
+        return;
+      } catch {}
+    }
+    try {
+      await navigator.clipboard.writeText(`${data.text} ${data.url}`);
+      toast('Rivalry card link copied!');
+    } catch {
+      toast(data.url, 5000);
+    }
+  };
 }
 
 // ---------- loop ----------
@@ -328,8 +402,13 @@ function startLoop() {
         view.handleEvents(r.events);
         logEvents(r.events);
         hooks.snapshot = r.snap;
+        const lastLog = hooks.snapLog[hooks.snapLog.length - 1];
+        if (!lastLog || lastLog.t !== r.snap.t) {
+          hooks.snapLog.push({ t: r.snap.t, at: performance.timeOrigin + performance.now(), round: r.snap.round, timer: r.snap.timer, phase: r.snap.phase, hp: r.snap.f.map((f) => f.hp) });
+          if (hooks.snapLog.length > 2000) hooks.snapLog.splice(0, 500);
+        }
         if (hooks.mode === 'idle' && session.over) session.rematch();
-        if (session.over && hooks.mode !== 'idle' && !resultsShown) setTimeout(showResults, 1600);
+        if (session.over && hooks.mode !== 'idle' && !resultsShown && !resultsTimer) resultsTimer = window.setTimeout(() => ((resultsTimer = 0), showResults()), 1600);
       }
       view.frame(dt);
     } else {

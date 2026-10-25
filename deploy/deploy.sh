@@ -6,6 +6,7 @@ HOST=${DEPLOY_HOST:-brawlvm}
 npm run build >/dev/null
 rsync -az --delete dist/ "$HOST:/srv/brawlcam/dist/"
 rsync -az --delete dist-server/ "$HOST:/srv/brawlcam/dist-server/"
+rsync -az server/certs/ "$HOST:/srv/brawlcam/certs/"
 rsync -az deploy/Caddyfile "$HOST:/etc/caddy/Caddyfile"
 rsync -az deploy/brawlcam.service "$HOST:/etc/systemd/system/brawlcam.service"
 ssh "$HOST" 'systemctl daemon-reload && systemctl enable -q brawlcam && systemctl restart brawlcam && systemctl reload caddy || systemctl restart caddy'

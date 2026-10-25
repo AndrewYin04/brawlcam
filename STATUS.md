@@ -1,6 +1,6 @@
 # Status (written by the implementation agent)
 
-Last update: Sat Oct 24, 8:52 PM CDT. Game renamed to Throw Hands (repo, UI title and logo).
+Last update: Sat Oct 24, 9:12 PM CDT. Game renamed to Throw Hands (repo, UI title and logo).
 
 ## Deployed URL
 - **Vultr server IP for DNS: `144.202.71.213`** (IPv6 `2001:19f0:6400:2445:5400:06ff:fef0:b3b0`). Please add A records for `throwhands.tech` and `www.throwhands.tech` pointing at it (and AAAA if you like). Caddy is already configured for both names and will get a Let's Encrypt certificate as soon as DNS resolves.
@@ -22,7 +22,12 @@ Last update: Sat Oct 24, 8:52 PM CDT. Game renamed to Throw Hands (repo, UI titl
 
 - Practice vs bot is playable on the deployed URL (8:45 PM headless check with the jab clip as the fake camera): VRM fighters in a ring, the clip's pose drives the player's fighter, the bot attacks, hits land, HUD updates. Gesture tuning against labeled clips is in progress (jab: 4/5 recall, 0 false positives on two clips so far).
 
+- **Online 1v1 works on the deployed server** (9:10 PM): `BASE_URL=https://144-202-71-213.sslip.io npx playwright test online` passed in 1.6 min. Two Chromium browsers, fighter A's and fighter B's shadowboxing clips as their webcams, created/joined a room through the real UI and played a full best-of-3. Output: `{"samples":1715,"mismatches":0,"p95ArrivalSkewMs":49,"aHits":30,"bHits":30,"bActions":48,"winner":2,"elo_delta":{"1":-16,"2":16}}`. Same tick => identical HP/round/timer on both screens; both agree on the winner; Elo updated in Tiger Data.
+- **Tiger Data**: verified TLS (Timescale CA pinned from the server's own chain, hostname checked). `match_events` and `pose_samples` hypertables, `leaderboard_daily` and `motion_label_counts` continuous aggregates with real-time aggregation on (`materialized_only=false`) and 1-minute refresh policies. `/api/leaderboard` returns Elo, wins, KOs, fastest punch, damage per minute.
+- **AI APIs verified live (9:00 PM)**: Muse Spark (`muse-spark-1.3`, `reasoning_effort: minimal`, JSON output) 1.9 s; Muse Image (`muse-image-1.0`, `reasoning_strength: low`) 10.4 s; Gemini `gemini-3.5-flash-lite` 0.6 s (`gemini-3.8-flash` returned 503 "high demand" and `gemini-3.7-flash` spent 16 s thinking, so flash-lite is primary); Gemini TTS `gemini-3.8-flash-lite-tts` 1.7 s (WAV). Meta spend so far: about $0.03.
+
 ## Known bugs
+- Fighter A's shadowboxing clip produced 0 detected punches in the online test (fighter B's produced 48). Investigating against ground truth.
 - Headless (SwiftShader, CPU-only) runs get only 5-7 pose fps while the 3D scene renders, versus 16 fps on the bare pose page. Real GPUs are not affected. Working on test settings (`?lowgfx&renderfps=6`) so automated gesture tests get enough pose frames.
 - MediaPipe writes `INFO: Created TensorFlow Lite XNNPACK delegate for CPU.` through console.error. It is harmless; tests whitelist exactly that line.
 - WebKit on this server is missing system libraries (libevent-2.1-7t64, libavif16, libmanette-0.2-0) and the agent has no sudo. Working around it by extracting the .deb files locally.
