@@ -672,3 +672,27 @@ Guidance for the video:
 Best Pitch is **1 minute per team, spoken only: no slides, no prep, no demos** (props are OK only if they need no setup). The audience votes by QR code, Sunday 5:30 to 6:00 PM in WEL 2.224. The deck at `submission/pitch/` cannot be used there.
 
 Instead, write **`submission/pitch-1min.md`**: a spoken script of about 140 to 150 words (under 60 s at a natural pace), ordered: hook (about 8 s), problem, solution, what makes it different, and a close with "throwhands.tech". Mark one physical beat the user can do on stage with no setup (for example, throwing a real hook while saying "your body is the controller"). Keep it school-appropriate. Also include a 30-second version in case they are cut short.
+
+## 2026-10-25 5:35 AM CDT: "the camera is twitching a lot" (the user, default ?cam=behind)
+The planner read `web/src/game/view.ts` (lines 450–598). These are suspected causes; **measure first and confirm each** (rule 3):
+1. **Strike-triggered swing:** `striking` (any of your strikes in the last 0.45 s) raises `camVisBias` at 90°/s up to 35°, and it decays at 25°/s. Every punch swings the camera sideways and back, so a punching player gets constant back-and-forth.
+2. **Visibility feedback loop:** the bias grows when `oppVisible < 0.8` and shrinks otherwise. Swinging changes visibility, which changes the swing, with no hysteresis or hold time, so it can hunt.
+3. **Yaw noise amplification:** the target position is built from `me.yaw` (pose- and lock-driven, noisy) at 2.6 m behind and 1.4 m right. 1° of yaw noise is about 4.5 cm of camera motion.
+4. **Unsmoothed constraints after the smoother:** the "your fighter nearer than the opponent" rule hard-snaps `pos` and halves `camSwing`; after `setCamera`, the minimum body distance pushes `camera.position` directly every frame. Lunges and close exchanges then jump the camera without easing.
+5. **Look-target jitter:** `look` lerps toward the opponent's position, which jumps with knockback and snapshots, and it has no smoothing of its own.
+
+**Reproduce:** drive the game with the user's research sessions (real motion) in the review capture. Log the camera position, look point, and swing per frame. Metrics:
+- camera angular velocity p95
+- **direction reversals per second** (yaw-rate sign flips above a small threshold)
+- frame-to-frame position jerk
+
+Target: no reversals from noise while the user stands and punches, and p95 angular velocity under about 30°/s outside KOs and slow motion.
+
+**Fix direction:**
+- Remove the strike-triggered swing, or make it small (under 10°), slow, and only for heavy hits.
+- Give the visibility bias hysteresis (start under 0.6, stop over 0.85) and hold each decision at least 1 s.
+- Build the camera's base direction from a heavily smoothed fighter-to-opponent axis, not `me.yaw`.
+- Apply every constraint (cage, body distance, the near-fighter rule) to the target before one critically damped spring for position, and a second for the look point. No direct writes to `camera.position` after smoothing.
+- Keep the angle the user likes (behind, slightly over the right shoulder).
+
+Before and after: a 30 s clip of the same scene, plus the metrics, in STATUS.md.
