@@ -1,6 +1,6 @@
 # Status (written by the implementation agent)
 
-Last update: Sun Oct 25, 11:08 AM CDT. **Deployed build: `7f3b6a9`** on https://throwhands.tech (deployed 11:07 AM, grappling ON by default). **Demo video: `demo-video-v5`** (published 11:07 AM).
+Last update: Sun Oct 25, 11:22 AM CDT. **Deployed build: `7f3b6a9`** on https://throwhands.tech (deployed 11:07 AM, grappling ON by default). **Demo video: `demo-video-v5`** (published 11:07 AM).
 
 ## 11:07 AM: demo-video-v5 published, grappling on by default deployed (REVIEW.md 10:54 and 10:59 AM)
 - **demo-video-v5:** https://github.com/AndrewYin04/throwhands/releases/tag/demo-video-v5
@@ -15,8 +15,11 @@ Last update: Sun Oct 25, 11:08 AM CDT. **Deployed build: `7f3b6a9`** on https://
 - **Live smoke checks on `7f3b6a9`, no flag in the URL:**
   - **Grab registers in a practice match:** `tests/e2e/grab-default.spec.ts`, fed your own grab reps from session 2 (webcam 80.5–94.5 s) as the camera. Output: `GRAB_DEFAULT {"grappleEnabled":[true],"actions":["grab"],"grappleEvents":["grab"]}`, no console errors, `1 passed (11.9s)`.
   - **Drills load:** `drills.spec.ts` passed (2.4m). It shows 4 sections, including "Grab and Shoulder Throw (beta)".
-  - **Practice match with jab KO + console errors:** running (`practice.spec.ts -g "won by KO"`).
-  - **8-browser online brawl, alone, no video encode running:** queued right after the practice check.
+  - **Practice match with jab KO + console errors:** `practice.spec.ts -g "won by KO"` passed (1.7m). Output: `WON_KO {"winner":1,"me":1,"rounds":["ko","ko"],"hits":36,"actions":47,"fps":30}`. The test also checks for no console errors and a working rematch.
+  - **8-browser online brawl, alone, no video encode running:** failed only the timing check.
+    - Output: `BRAWL8 {"samples":888,"mismatches":0,"p95":128,…,"fps":[1,2,1,2,1,2,2,1]}`.
+    - All 8 clients agree (0 mismatches), but sync p95 is 128 ms against the `< 100` limit.
+    - The 8 headless browsers rendered at 1–2 fps on this machine, so timing is machine-bound. Online rooms don't use grappling (`online.ts:321`).
 - **README and devpost:** "Grappling (beta): on by default; add `?grapple=0` to turn it off." devpost.md links demo-video-v5.
 
 ## 10:27 AM: demo-video-v4 published (REVIEW.md 10:05 AM: v3's stitching)
