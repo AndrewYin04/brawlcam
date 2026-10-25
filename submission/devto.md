@@ -50,6 +50,15 @@ The tests also found real bugs: Brawl players walking themselves out of the ring
 
 All keys stay on the server, every AI call has a fallback, and automated tests use recorded responses.
 
+## 7. Tune on a real player, not just clips
+
+Downloaded shadowboxing clips got gestures working, but the first real laptop session broke movement: leaning back moved the fighter *forward*. We added a guided drill mode: one prompt at a time (stand still, throw a big hook, step back...), the prompt as the label, and opt-in recording of the body points plus the player's own webcam video. Three sessions later:
+
+- **Replay first.** The recorded frames, with their exact capture times, replay through the same recognizer. The replay matched the live game's recorded output number for number, so every fix could be reproduced before it was written. (One trap: our server clamped frame times to its own clock, and a laptop clock running ahead collapsed nine frames onto one millisecond. Store capture time separately.)
+- **Laptops hide the hips.** The torso-lean signal measured shoulders against hip depth, but at a laptop the hips are out of frame and their depth is a guess. Forward/back now reads apparent body size (rotation-corrected shoulder width) against "your spot": the median size over the last 10 s the player stood settled. Stepping back went from never registering to 3 of 3.
+- **Big punches are not small punches.** Real big hooks open the elbow to 160° and sweep the wrist about 1 m; a 150° elbow cap called them jabs. Classifying big swings by the whole motion (sweep, rise, torso turn) took hooks from 0/4 to 3/4 and uppercuts from 0/3 to 3/3, with no change on the labeled clips.
+- **The video is the ground truth.** Some misses were reps where no punch was thrown. Contact sheets from the player's webcam settled each one.
+
 ## What's next
 
 More fighters and arenas, ranked seasons, and an opt-in program where players share anonymized, game-labeled motion sequences (coordinates only, never video) with humanoid-robotics labs. That same data could eventually train a gesture model to replace our rules.
