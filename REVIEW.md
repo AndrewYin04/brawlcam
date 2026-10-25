@@ -431,3 +431,11 @@ Make the drills **prompt-by-prompt** instead of reps on a beat:
 - **Order:** randomized moves (jab L/R, hook L/R, straight, uppercut, block, X-cross, palm, knee, kick, step and lean in each direction), each about 6 times, so the player can't anticipate. The "stand still" (20 s) and "big punches while standing still" blocks stay as their own sections at the start, because bug A needs them.
 - **Calm pacing:** a progress bar ("23 / 90"), and a pause on Space.
 - The live per-move tally and the end summary stay as specified above.
+
+### 3:05 AM: the user's first research session, and a saving bug
+- **Data available now:** Tiger `research_frames`, session `50c46d79…` (1,706 frames, 2:53:12 to 2:56:34 AM CDT). The user played in research mode without pressing marker keys; use it for bug A where the user stood still and punched (look at `move` during strikes). Note the rate: 1,706 frames over about 202 s is about 8.4 fps. Check whether that is the pose rate on the user's laptop or the upload sampling, and report it.
+- **Bug: the local files were never saved.** They download only when the user clicks "Stop & save files" on the REC bar, and the user left without clicking it, so the video was lost. Fixes:
+  - save automatically when the session ends: leaving the match, Quit, `pagehide`/`beforeunload` (where the browser allows), and the end of a drill run
+  - make the button large, and add a toast after saving: "Saved to your Downloads folder: throwhands-research-….webm and .jsonl"
+  - for long sessions, also offer saving every 2 minutes while recording, so a crash loses at most 2 minutes
+  - in drill mode, save automatically when the script finishes
