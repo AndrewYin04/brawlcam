@@ -41,10 +41,13 @@ test('guided research drills: prompts one at a time, labels from the script, res
   const summary = await page.evaluate(() => (window as any).__brawl.drills);
   await page.waitForTimeout(2000);
   console.log('DRILLS', JSON.stringify({ summary, downloads }));
-  expect(summary.length).toBe(3);
-  expect(summary[0].drift).toBeLessThan(40); // standing still: little movement input
-  expect(summary[1].hit).toBeGreaterThanOrEqual(3); // big punches detected
-  expect(summary[2].hit).toBeGreaterThanOrEqual(8); // movement prompts detected
+  // Sections by name: with grappling on (the default since Oct 25) a "Grab and Shoulder Throw" section is added.
+  const sec = (re: RegExp) => summary.find((x: any) => re.test(x.section));
+  expect(summary.length).toBeGreaterThanOrEqual(3);
+  expect(summary.length).toBeLessThanOrEqual(4);
+  expect(sec(/^Stand still/).drift).toBeLessThan(40); // standing still: little movement input
+  expect(sec(/^Big punches/).hit).toBeGreaterThanOrEqual(3); // big punches detected
+  expect(sec(/^Movement/).hit).toBeGreaterThanOrEqual(8); // movement prompts detected
   expect(downloads.some((d) => d.endsWith('.jsonl'))).toBe(true);
   await b.close();
 });
