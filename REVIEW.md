@@ -667,3 +667,8 @@ Guidance for the video:
 - Crop to the user's upper body. Don't show anything else in the room that identifies where they live.
 - The `.webm` files stay out of the repo, as with all research data.
 - If the user records a fresh, better-lit session after the latest fixes, prefer that for the PiP.
+
+### 5:30 AM: pitching format (from the HackTX26 Pitching Document linked in the handbook)
+Best Pitch is **1 minute per team, spoken only: no slides, no prep, no demos** (props are OK only if they need no setup). The audience votes by QR code, Sunday 5:30 to 6:00 PM in WEL 2.224. The deck at `submission/pitch/` cannot be used there.
+
+Instead, write **`submission/pitch-1min.md`**: a spoken script of about 140 to 150 words (under 60 s at a natural pace), ordered: hook (about 8 s), problem, solution, what makes it different, and a close with "throwhands.tech". Mark one physical beat the user can do on stage with no setup (for example, throwing a real hook while saying "your body is the controller"). Keep it school-appropriate. Also include a 30-second version in case they are cut short.
