@@ -528,7 +528,8 @@ export class MatchView {
         // Opponent hidden behind you: swing toward your fighter's left (camera moves right of the line), a bit at a time.
         // ...and during your own strike, so the fist landing is in view rather than behind your back.
         const striking = !!me.snap.atk && me.snap.atk.age < 0.45;
-        if (this.camStats.oppVisible < 0.8 || striking) this.camVisBias = Math.min(35, this.camVisBias + (striking ? 90 : 60) * dt);
+        const maxBias = this.camStats.oppVisible < 0.6 ? 55 : 35; // mostly hidden (e.g. pinned on the far fence): swing wider
+        if (this.camStats.oppVisible < 0.8 || striking) this.camVisBias = Math.min(maxBias, this.camVisBias + (striking ? 90 : 60) * dt);
         else this.camVisBias = Math.max(0, this.camVisBias - 25 * dt);
         want += want >= 0 ? this.camVisBias : -this.camVisBias; // +angle widens the over-the-shoulder offset
         this.camSwing += (want - this.camSwing) * Math.min(1, dt * 3);
