@@ -101,6 +101,7 @@ function buildClips(): Promise<Map<string, THREE.AnimationClip>> {
     m.set('cast', get('Spell_Simple_Shoot'));
     m.set('dizzy', get('Idle_No_Loop')); // upright, head shaking; a sway is layered on top
     m.set('blockHit', get('Hit_Chest'));
+    m.set('crouch', get('Crouch_Idle_Loop')); // Shoulder Throw (grappling beta): the thrower's hips drop
     return m;
   });
   return clipSet;
@@ -165,6 +166,47 @@ function bodyMaterial(map: THREE.Texture | null, tint: THREE.Color, look: Look) 
 
 type Strike = { kind: string; hand: 'L' | 'R'; t0: number; contactT: number; target: HeroFighter | null; lunge: number; recorded: boolean };
 
+/**
+ * Shoulder Throw choreography (grappling beta, REVIEW.md 7:05 AM spec), in seconds from the throw's start (the
+ * 'super' {kind: throw} event). The sim resolves the throw TUNING.throwStartup (0.3 s) after it starts.
+ * grip -> turn-in (the thrower turns its back into the target, hips drop) -> load and arc over the shoulder ->
+ * slam flat on the back -> stay down -> get up. The view drives the clock and the roots; the hero poses the bodies.
+ */
+export const THROW_T = { grip: 0.12, arc: 0.3, slam: 0.8, getUp: 1.95, getUpRate: 1.15, release: 2.0, end: 3.4 };
+/** Thrown fighter's hip path over the thrower, as [time, u (m along the thrower-to-target line from the thrower's
+ *  start), hip height (m), forward pitch (deg: 0 standing, 270 flat on the back, head toward the thrower), sideways
+ *  offset (m, toward the gripping shoulder on the far side from the camera, so the thrown body never hides the
+ *  thrower's head; its head goes down beside the thrower's body, not
+ *  through it)]. */
+const ARC_KEYS: [number, number, number, number, number][] = [
+  [0.0, 0.3, 1.05, 60, 0],
+  [0.15, 0.06, 1.38, 112, 0.14],
+  [0.27, -0.3, 1.38, 180, 0.3],
+  [0.39, -0.72, 0.9, 240, 0.22],
+  [0.5, -1.06, 0.1, 270, 0],
+];
+/** Hip position (u, height) and pitch (radians) of the thrown fighter at time t after the arc starts (0..0.5 s). */
+export function throwArc(t: number, landU: number) {
+  const k = ARC_KEYS;
+  const tt = THREE.MathUtils.clamp(t, 0, k[k.length - 1][0]);
+  let i = 0;
+  while (i < k.length - 2 && tt > k[i + 1][0]) i++;
+  const [t0, u0, y0, p0] = k[i];
+  const [t1, u1, y1, p1] = k[i + 1];
+  const s = (tt - t0) / Math.max(1e-6, t1 - t0);
+  // Catmull-Rom through the keys (smooth arc, no corners).
+  const g = (j: number, c: number) => k[THREE.MathUtils.clamp(j, 0, k.length - 1)][c];
+  const cr = (c: number, a: number, b: number) => {
+    const m0 = (b - g(i - 1, c)) * 0.5;
+    const m1 = (g(i + 2, c) - a) * 0.5;
+    const s2 = s * s, s3 = s2 * s;
+    return (2 * s3 - 3 * s2 + 1) * a + (s3 - 2 * s2 + s) * m0 + (-2 * s3 + 3 * s2) * b + (s3 - s2) * m1;
+  };
+  // The landing spot comes from the sim (TUNING.throwLand, clamped inside the cage): stretch the far half to it.
+  const far = (k[k.length - 1][1] - 0.24 - landU) * Math.max(0, Math.min(1, (tt - 0.16) / 0.34));
+  return { u: cr(1, u0, u1) - far, y: Math.max(0.1, cr(2, y0, y1)), pitch: (cr(3, p0, p1) * Math.PI) / 180, lat: cr(4, k[i][4], k[i + 1][4]) };
+}
+
 const _q = new THREE.Quaternion();
 const _q2 = new THREE.Quaternion();
 const _v = new THREE.Vector3();
@@ -220,6 +262,14 @@ export class HeroFighter {
   edgeDist = 99;
   /** Grappling (behind ?grapple=1): clinched with whom (and holding or held), or reaching for a grab/throw. */
   grapple: { with: HeroFighter | null; holder: boolean; reaching: HeroFighter | null } = { with: null, holder: false, reaching: null };
+  /**
+   * Shoulder Throw in progress (grappling beta; set by the view every frame, null otherwise). t: seconds since the throw
+   * started (THROW_T). u: unit vector from the thrower toward the target at the start; a0: the thrower's start position;
+   * landU: where the target lands along u (negative: behind the thrower's start facing).
+   */
+  throwSeq: { role: 'thrower' | 'thrown'; t: number; other: HeroFighter; u: THREE.Vector3; side: THREE.Vector3; a0: THREE.Vector3; d0: number; landU: number } | null = null;
+  private thrownLying = false;
+  private throwGetUp = false;
   /** Not drawn at all (e.g. the drills' stand-in opponent). */
   hidden = false;
   modelName: HeroModel;
@@ -280,7 +330,7 @@ export class HeroFighter {
     this.mixer = new THREE.AnimationMixer(model);
     for (const [name, clip] of clips) {
       const a = this.mixer.clipAction(clip);
-      if (!['idle', 'walk', 'run', 'dizzy', 'airborne'].includes(name)) {
+      if (!['idle', 'walk', 'run', 'dizzy', 'airborne', 'crouch'].includes(name)) {
         a.setLoop(THREE.LoopOnce, 1);
         a.clampWhenFinished = true;
       }
@@ -451,6 +501,7 @@ export class HeroFighter {
 
   flinchFrom(dirWorld: THREE.Vector3, amount: number) {
     if (!this.wasAlive) return; // knocked out: the death clip keeps playing
+    if (this.throwSeq?.role === 'thrown') return; // the Shoulder Throw choreography owns the body
     this.flinch = Math.min(1, this.flinch + amount);
     this.flinchDir.copy(dirWorld).setY(0).normalize();
     if (amount >= 0.6) this.play(amount >= 0.95 ? 'knockback' : Math.random() < 0.5 ? 'hitHead' : 'hitChest', 0.05, this.livePose ? 0.6 : 1);
@@ -540,9 +591,14 @@ export class HeroFighter {
 
     // ---- KO / get-up ----
     if (!opts.alive && this.wasAlive) {
-      // KO: the knockback tumble (knees buckle, body folds, lands) and stay down on its last frame.
-      this.play('knockback', 0.05, 1, 1, 0.9);
-      this.oneShot!.until = Infinity; // stay down (clamped on the last frame) until revived
+      if (this.thrownLying && this.oneShot) {
+        // Knocked out by a Shoulder Throw: already flat on the back; stay there.
+        this.oneShot.until = Infinity;
+      } else {
+        // KO: the knockback tumble (knees buckle, body folds, lands) and stay down on its last frame.
+        this.play('knockback', 0.05, 1, 1, 0.9);
+        this.oneShot!.until = Infinity; // stay down (clamped on the last frame) until revived
+      }
       this.koTime = time;
     }
     if (opts.alive && !this.wasAlive) {
@@ -550,7 +606,23 @@ export class HeroFighter {
       this.actions.get('death')?.fadeOut(0.15);
       this.play('getUp', 0.12, 1, 1, 1.4);
       this.koTime = -1;
+      this.thrownLying = false;
     }
+    // Shoulder Throw, thrown side: LayToIdle's first frame (flat on the back) is held from the start of the arc (the
+    // body group pitches it over the thrower's shoulder) through the down time, then plays as the get-up.
+    const ts = this.throwSeq;
+    if (ts?.role === 'thrown' && ts.t >= THROW_T.arc && !this.thrownLying && !this.throwGetUp) {
+      this.play('getUp', 0, 1, 1, 0); // time scale 0: held (until = Infinity)
+      this.thrownLying = true;
+    }
+    if (this.thrownLying && opts.alive && this.wasAlive && (!ts || ts.role !== 'thrown' || ts.t >= THROW_T.getUp)) {
+      const a = this.actions.get('getUp')!;
+      a.setEffectiveTimeScale(THROW_T.getUpRate);
+      if (this.oneShot) this.oneShot.until = time + ((a.getClip().duration - a.time) / THROW_T.getUpRate) * 0.92;
+      this.thrownLying = false;
+      this.throwGetUp = true;
+    }
+    if (!ts || ts.role !== 'thrown') this.throwGetUp = false;
     this.wasAlive = opts.alive;
     if (!opts.alive && this.koTime >= 0 && time - this.koTime > 1.0 && this.oneShot?.name === 'knockback') {
       this.play('death', 0.35, 1, 1, 1);
@@ -558,7 +630,7 @@ export class HeroFighter {
       this.oneShot!.until = Infinity;
     }
     // While knocked out, the death clip (clamped on its last frame) always plays; nothing may replace it.
-    if (!opts.alive && this.oneShot?.name !== 'knockback' && this.oneShot?.name !== 'death') {
+    if (!opts.alive && this.oneShot?.name !== 'knockback' && this.oneShot?.name !== 'death' && !this.thrownLying) {
       this.play('knockback', 0.05, 1, 1, 0.9);
       this.oneShot!.until = Infinity;
     }
@@ -613,10 +685,24 @@ export class HeroFighter {
       this.actions.get(this.oneShot.name)?.fadeOut(0.18);
       this.oneShot = null;
     }
+    // Shoulder Throw, thrower side: the hips drop (the crouch clip blended over locomotion) for the turn-in, the throw
+    // and the follow-through over the downed opponent, then back to stance.
+    const crouchA = this.actions.get('crouch');
+    if (crouchA) {
+      const cw = ts?.role === 'thrower' && opts.alive && !fullBody ? throwerCrouch(ts.t) : 0;
+      this.crouchW += (cw - this.crouchW) * (1 - Math.exp(-dt * 20));
+      if (this.crouchW < 0.005) this.crouchW = 0;
+      crouchA.setEffectiveWeight(this.crouchW);
+      if (this.crouchW > 0) for (const n of ['idle', 'walk', 'run'] as const) this.actions.get(n)?.setEffectiveWeight(this.loco[n] * (1 - this.crouchW));
+    }
 
     this.mixer.update(dt);
+    if (ts) this.restoreClipPose();
+    else if (this.poseRec.size) this.poseRec.clear();
     this.body.position.set(0, opts.airborne, this.lungeNow);
+    if (ts?.role === 'thrown' && ts.t < THROW_T.slam) this.throwBody(ts);
     this.root.updateMatrixWorld(true);
+    if (ts?.role === 'thrown' && ts.t >= THROW_T.arc && ts.t < THROW_T.slam) this.thrownLimbs(ts);
 
     // Dizzy: wobbly sway over the dizzy loop (stars are drawn above the head).
     if (opts.dizzy && opts.alive) {
@@ -635,7 +721,7 @@ export class HeroFighter {
     }
 
     // ---- live pose layered on torso, head and arms ----
-    const wantPose = this.livePose && this.joints && opts.alive && !fullBody && !opts.dizzy ? (oneShotActive ? 1 - (this.oneShot!.overrideArms ?? 1) : 1) : 0;
+    const wantPose = this.livePose && this.joints && opts.alive && !fullBody && !opts.dizzy && !ts ? (oneShotActive ? 1 - (this.oneShot!.overrideArms ?? 1) : 1) : 0;
     this.poseWeight += (wantPose - this.poseWeight) * (1 - Math.exp(-dt * 14));
     if (this.joints && this.poseWeight > 0.01) this.applyPose(this.joints, this.poseWeight);
 
@@ -650,7 +736,7 @@ export class HeroFighter {
       }
     }
     // Guard for clip-driven fighters: forearms up in front of the face.
-    if (opts.blocking && !this.livePose && opts.alive && !fullBody) this.blockPose();
+    if (opts.blocking && !this.livePose && opts.alive && !fullBody && !ts) this.blockPose();
 
     // ---- strike: lunge + IK onto the target, contact measurement ----
     this.updateStrike(dt);
@@ -661,7 +747,8 @@ export class HeroFighter {
       this.marker.position.copy(this.root.worldToLocal(h));
     }
     // ---- grappling: arms onto the other fighter (clinch), or a two-handed reach (grab/throw startup) ----
-    this.applyGrapple(opts.alive && !fullBody);
+    this.applyGrapple(opts.alive && !fullBody && !ts);
+    if (ts?.role === 'thrower' && opts.alive && !fullBody) this.throwerPose(ts);
 
     // Wrists straight along the forearm (a fist in a glove), not bent back like a claw.
     if (opts.alive && !fullBody) {
@@ -670,18 +757,22 @@ export class HeroFighter {
         if (la && hd && mid) rotateBoneTowards(hd, dirOf(hd, mid), dirOf(la, hd), 0.85);
       }
     }
+    if (ts) this.recordPose();
     // ---- body offsets: airborne height, tumble, flinch, lunge ----
     this.flinch = Math.max(0, this.flinch - dt * 3.5);
-    const local = this.flinchDir.clone().applyQuaternion(this.root.quaternion.clone().invert());
-    this.body.position.x = local.x * this.flinch * 0.12;
-    this.body.position.z = this.lungeNow + local.z * this.flinch * 0.12;
-    // Tumble pivots around the hips (1 m up), not the feet.
-    // Near the fence the tumble is limited so the body never swings through the chain-link or over the rail.
-    const room = THREE.MathUtils.clamp((this.edgeDist - 0.25) / 0.9, 0.15, 1);
-    const th = airborne ? Math.min(this.tumble, Math.PI * 1.6 * room) : 0;
-    this.body.rotation.x = -th;
-    this.body.position.y = opts.airborne + 1.0 * (1 - Math.cos(th));
-    this.body.position.z += 1.0 * Math.sin(th);
+    const inArc = ts?.role === 'thrown' && ts.t < THROW_T.slam; // the throw choreography placed the body (throwBody)
+    if (!inArc) {
+      const local = this.flinchDir.clone().applyQuaternion(this.root.quaternion.clone().invert());
+      this.body.position.x = local.x * this.flinch * 0.12;
+      this.body.position.z = this.lungeNow + local.z * this.flinch * 0.12;
+      // Tumble pivots around the hips (1 m up), not the feet.
+      // Near the fence the tumble is limited so the body never swings through the chain-link or over the rail.
+      const room = THREE.MathUtils.clamp((this.edgeDist - 0.25) / 0.9, 0.15, 1);
+      const th = airborne ? Math.min(this.tumble, Math.PI * 1.6 * room) : 0;
+      this.body.rotation.x = -th;
+      this.body.position.y = opts.airborne + 1.0 * (1 - Math.cos(th));
+      this.body.position.z += 1.0 * Math.sin(th);
+    }
 
     // ---- gear ----
     this.glowBoost = Math.max(0, this.glowBoost - dt * 3);
@@ -722,9 +813,17 @@ export class HeroFighter {
         c.position.set(Math.cos(a) * 0.22, Math.sin(a * 2) * 0.03, Math.sin(a) * 0.22);
       });
     }
-    this.shadow.scale.setScalar(THREE.MathUtils.clamp(1 - opts.airborne / 3, 0.25, 1));
-    this.shadow.position.z = this.body.position.z; // shadow and ring follow a lunge
-    this.ring.position.z = this.body.position.z;
+    if (inArc) {
+      // Thrown: the shadow and ring stay under the hips as they arc over the thrower.
+      this.shadow.scale.setScalar(THREE.MathUtils.clamp(1 - (this.throwHip.y - 0.9) / 2, 0.4, 1));
+      this.shadow.position.set(this.throwHip.x, 0.012, this.throwHip.z);
+      this.ring.position.set(this.throwHip.x, 0.015, this.throwHip.z);
+    } else {
+      this.shadow.scale.setScalar(THREE.MathUtils.clamp(1 - opts.airborne / 3, 0.25, 1));
+      this.shadow.position.x = this.ring.position.x = 0;
+      this.shadow.position.z = this.body.position.z; // shadow and ring follow a lunge
+      this.ring.position.z = this.body.position.z;
+    }
     this.root.visible = !this.hidden && (opts.alive || this.koTime >= 0);
   }
 
@@ -798,6 +897,110 @@ export class HeroFighter {
       goal.addScaledVector(this.root.getWorldPosition(new THREE.Vector3()).sub(goal).setY(0).normalize(), 0.08);
       const pole = this.root.localToWorld(new THREE.Vector3(side === 'l' ? 0.6 : -0.6, 0.5, -0.2));
       twoBoneIK(ua, la, hd, goal, pole, this.grappleW, this.len['ua' + side], this.len['la' + side], 0.07);
+    }
+  }
+
+  private crouchW = 0;
+  /**
+   * The mixer only writes a bone whose animated value changed since its last write (three's PropertyMixer.apply). In a
+   * hit-stop (dt 0) or a held clip it leaves last frame's bone rotations in place, and the throw's additive rotations
+   * (the thrower's hinge, the thrown fighter's leg bend) would pile up frame after frame: the reviewer saw the thrower's
+   * head fold through its own legs during the slam's hit-stop. During a throw, each bone's clip pose is kept and
+   * restored when the mixer skipped it, so those rotations always start from the clip pose.
+   */
+  private poseRec = new Map<THREE.Object3D, { base: THREE.Quaternion; wrote: THREE.Quaternion }>();
+  private restoreClipPose() {
+    for (const b of Object.values(this.bones)) {
+      if (!b) continue;
+      const r = this.poseRec.get(b);
+      if (r && b.quaternion.equals(r.wrote)) b.quaternion.copy(r.base); // skipped by the mixer: back to the clip pose
+      else if (r) r.base.copy(b.quaternion);
+      else this.poseRec.set(b, { base: b.quaternion.clone(), wrote: new THREE.Quaternion(NaN, NaN, NaN, NaN) });
+    }
+  }
+  private recordPose() {
+    for (const [b, r] of this.poseRec) r.wrote.copy(b.quaternion);
+  }
+  /** Thrown fighter's hip position in the root frame during the throw (shadow and ring follow it). */
+  private throwHip = new THREE.Vector3();
+
+  /**
+   * Shoulder Throw, thrown side: place the body so its hips follow the arc over the thrower's shoulder and the body
+   * pitches forward head-over-heels (0 -> 270 deg), ending flat on its back with the head toward the thrower.
+   * Before the arc (grip and turn-in) the standing body is pulled in onto the thrower's back, leaning forward.
+   */
+  private throwBody(ts: NonNullable<HeroFighter['throwSeq']>) {
+    let u: number, y: number, a: number, lat = 0;
+    const c = new THREE.Vector3();
+    if (ts.t < THROW_T.arc) {
+      const s = smooth(ts.t / THROW_T.arc);
+      // Loaded onto the thrower's back: leaning 60 deg over it, hips lifted (feet leave the floor), matching the arc's
+      // first key so the switch to the held lying clip does not snap the torso.
+      const ls = smooth((ts.t - 0.08) / (THROW_T.arc - 0.08));
+      u = THREE.MathUtils.lerp(ts.d0, 0.3, s);
+      y = THREE.MathUtils.lerp(0.9, 1.05, ls);
+      a = ((60 * Math.PI) / 180) * ls;
+      c.set(0, 0.9, 0); // standing hips
+    } else {
+      const k = throwArc(ts.t - THROW_T.arc, ts.landU);
+      u = k.u;
+      y = k.y;
+      lat = k.lat;
+      a = Math.PI / 2 + k.pitch; // the held clip lies on its back: +90 deg stands it up
+      c.set(0, 0.1, -0.24); // its hips (LayToIdle's first frame)
+    }
+    const hipW = ts.a0.clone().addScaledVector(ts.u, u).addScaledVector(ts.side, lat).setY(y);
+    this.root.updateMatrixWorld(true);
+    const hipL = this.root.worldToLocal(hipW);
+    this.throwHip.copy(hipL);
+    this.body.rotation.set(a, 0, 0);
+    this.body.position.copy(hipL).sub(c.applyEuler(this.body.rotation));
+  }
+
+  /** Thrown, in the air: legs trail (hips and knees bend as the body whips over) and the gripped arm reaches back to
+   *  the thrower's shoulder, so the two stay attached through the arc. */
+  private thrownLimbs(ts: NonNullable<HeroFighter['throwSeq']>) {
+    const s = THREE.MathUtils.clamp((ts.t - THROW_T.arc) / (THROW_T.slam - THROW_T.arc), 0, 1);
+    // Knees and hips start bent (as the standing legs were at the load, so the switch to the held lying clip doesn't
+    // straighten them in one frame), bend more as the body whips over, and are straight for the slam.
+    const bend = s < 0.3 ? 0.6 + 0.4 * (s / 0.3) : Math.max(0, Math.cos(((s - 0.3) / 0.57) * (Math.PI / 2)));
+    const side = new THREE.Vector3(1, 0, 0).applyQuaternion(this.body.getWorldQuaternion(new THREE.Quaternion()));
+    for (const sd of ['l', 'r'] as const) {
+      rotateWorld(this.bones['thigh_' + sd], side, -0.55 * bend * (sd === 'l' ? 1 : 0.8));
+      rotateWorld(this.bones['calf_' + sd], side, 0.9 * bend * (sd === 'l' ? 0.8 : 1));
+    }
+    // The gripped (right) arm stays on the thrower's shoulder until just before the slam.
+    const o = ts.other.bones;
+    const ua = this.bones.upperarm_r, la = this.bones.lowerarm_r, hd = this.bones.hand_r;
+    const anchor = o.clavicle_l ?? o.neck_01;
+    if (ua && la && hd && anchor) {
+      const w = 1 - smooth((s - 0.7) / 0.3);
+      const pole = this.body.localToWorld(new THREE.Vector3(-0.6, 0.0, 0.3));
+      twoBoneIK(ua, la, hd, anchor.getWorldPosition(new THREE.Vector3()), pole, w, this.len.uar, this.len.lar, 0.07);
+    }
+  }
+
+  /** Shoulder Throw, thrower side: hands grip the target's collar and sleeve, the back hinges forward to load and
+   *  pull the target over the shoulder, then the thrower stays bent over the downed target, and returns to stance. */
+  private throwerPose(ts: NonNullable<HeroFighter['throwSeq']>) {
+    const t = ts.t;
+    const side = new THREE.Vector3(1, 0, 0).applyQuaternion(this.root.quaternion);
+    const beta = throwerHinge(t);
+    rotateWorld(this.bones.spine_01, side, beta * 0.35);
+    rotateWorld(this.bones.spine_02, side, beta * 0.35);
+    rotateWorld(this.bones.spine_03, side, beta * 0.3);
+    rotateWorld(this.bones.Head, side, -beta * 0.45); // eyes stay on the opponent
+    const wg = t < 1.55 ? smooth(t / THROW_T.grip) : 1 - smooth((t - 1.55) / 0.35);
+    if (wg < 0.01) return;
+    const o = ts.other.bones;
+    for (const sd of ['l', 'r'] as const) {
+      const ua = this.bones['upperarm_' + sd], la = this.bones['lowerarm_' + sd], hd = this.bones['hand_' + sd];
+      // Left hand on the collar, right hand on the sleeve (the arm that goes over the shoulder).
+      const anchor = sd === 'l' ? o.neck_01 : o.upperarm_r;
+      if (!ua || !la || !hd || !anchor) continue;
+      const goal = anchor.getWorldPosition(new THREE.Vector3());
+      const pole = this.root.localToWorld(new THREE.Vector3(sd === 'l' ? 0.55 : -0.55, 0.1, 0.5));
+      twoBoneIK(ua, la, hd, goal, pole, wg, this.len['ua' + sd], this.len['la' + sd], 0.07);
     }
   }
 
@@ -883,7 +1086,7 @@ export class HeroFighter {
   /** Knocked down, tumbling or getting up (camera framing keeps a fighter on the floor in view). */
   isDown() {
     const n = this.oneShot?.name;
-    return this.wasAirborne || n === 'knockback' || n === 'getUp' || n === 'death' || n === 'land';
+    return this.wasAirborne || n === 'knockback' || n === 'getUp' || n === 'death' || n === 'land' || this.throwSeq?.role === 'thrown';
   }
 
   samplePoints(): THREE.Vector3[] {
@@ -945,6 +1148,22 @@ export class HeroFighter {
 function smooth(x: number) {
   const t = THREE.MathUtils.clamp(x, 0, 1);
   return t * t * (3 - 2 * t);
+}
+
+/** Thrower's crouch-clip weight over the throw (hips drop in the turn-in, stay low over the downed opponent). */
+function throwerCrouch(t: number) {
+  if (t < 1.45) return 0.6 * smooth((t - 0.04) / 0.22);
+  return 0.6 * (1 - smooth((t - 1.45) / 0.45));
+}
+
+/** Thrower's forward hinge (radians): loads at the turn-in, pulls deep through the arc, stays bent over the target. */
+function throwerHinge(t: number) {
+  const deg = Math.PI / 180;
+  if (t < 0.3) return 22 * deg * smooth((t - 0.08) / 0.22);
+  if (t < 0.62) return (22 + 46 * smooth((t - 0.3) / 0.32)) * deg;
+  if (t < 0.85) return (68 - 23 * smooth((t - 0.62) / 0.23)) * deg;
+  if (t < 1.45) return 45 * deg;
+  return 45 * deg * (1 - smooth((t - 1.45) / 0.45));
 }
 
 function dirOf(a: THREE.Object3D, b: THREE.Object3D) {

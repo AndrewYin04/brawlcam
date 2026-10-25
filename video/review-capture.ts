@@ -49,6 +49,9 @@ const SCENES: Scene[] = [
   // Grappling (beta, ?grapple=1): the bot grabs you into a clinch and knees; then a Shoulder Throw.
   { name: 'clinch', seconds: 6, cfg: duel([P('guard_02')], { botLevel: -1, grapple: true }), cues: [[0.5, 'moveId', 2, 'grab', 'B'], [2.0, 'moveId', 2, 'kick', 'R'], [2.8, 'moveId', 2, 'kick', 'L']] },
   { name: 'throw', seconds: 6, cfg: duel([P('guard_02')], { botLevel: -1, grapple: true, meter: 100 }), cues: [[0.5, 'moveId', 2, 'grab', 'B'], [1.6, 'moveId', 2, 'throw', 'B', true]] },
+  // Shoulder Throw from range (no clinch first: the camera settles into the side shot during the grip), and one that KOs.
+  { name: 'throw_range', seconds: 5, cfg: duel([P('guard_02')], { botLevel: -1, grapple: true, meter: 100 }), cues: [[0, 'place', 1, 0, -0.6], [0, 'place', 2, 0, 0.6], [0.6, 'moveId', 2, 'throw', 'B', true]] },
+  { name: 'throw_ko', seconds: 5, cfg: duel([P('guard_02')], { botLevel: -1, grapple: true, meter: 100 }), cues: [[0, 'setHp', 1, 20], [0.4, 'moveId', 2, 'grab', 'B'], [1.4, 'moveId', 2, 'throw', 'B', true]] },
   { name: 'brawl8', seconds: 4, cfg: { mode: 'brawl', camera: 'wide', players: [P('jab_01')], bots: 7, botLevel: 2, meter: 50 }, warmup: 30 * 3.6 },
 ];
 

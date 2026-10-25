@@ -217,6 +217,8 @@ export class GrappleDetector {
   private lastThrow = -9;
   /** Features of the last grab (tuning tools). */
   lastGrabInfo: Record<string, number | boolean> | null = null;
+  /** The latest frame's features (read-only: the ?debug=1 overlay shows the Shoulder Throw's stages from them). */
+  last: GrappleFeatures | null = null;
 
   reset() {
     this.riseAt = { L: -9, R: -9 };
@@ -271,6 +273,7 @@ export class GrappleDetector {
   }
 
   update(f: GrappleFeatures): ('grab' | 'throw')[] {
+    this.last = f;
     const c = this.cfg;
     const out: ('grab' | 'throw')[] = [];
     this.hist.push({ t: f.t, L: f.extL, R: f.extR, gap: f.gap / Math.max(0.15, f.sw), yL: f.yL ?? 0, yR: f.yR ?? 0 });

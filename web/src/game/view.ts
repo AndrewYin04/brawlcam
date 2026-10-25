@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { Arena } from './arena';
 import { FighterAvatar } from './avatar';
-import { HeroFighter, HERO_MODELS } from './hero';
+import { HeroFighter, HERO_MODELS, THROW_T, throwArc } from './hero';
 import { apothem } from './stage';
 import { Announcer } from './announcer';
 
@@ -21,7 +21,7 @@ import { VFX, SPRITE_SPARKS } from './vfx';
 import * as sfx from './audio';
 import { unpackJoints, type Joints } from '../../../shared/joints';
 import { proceduralJoints } from '../../../shared/animate';
-import type { Snapshot, FighterSnap, SimEvent } from '../../../shared/sim';
+import { TUNING, type Snapshot, type FighterSnap, type SimEvent } from '../../../shared/sim';
 
 export interface ViewOptions {
   /** Fighter ids controlled on this device (camera follows the first). */
@@ -62,6 +62,19 @@ export class MatchView {
   private fallTarget: number | null = null;
   private koFeed: HTMLElement;
   onEvent: ((e: SimEvent) => void) | null = null;
+  /**
+   * Shoulder Throw in progress (grappling beta, REVIEW.md 7:05 AM): the choreography clock (THROW_T, advanced by the
+   * animation dt so the slam's hit-stop freezes it), both fighters, the line between them at the start (u, a0, d0),
+   * where the target lands (landU along u, plus a small sideways offset lat), and one held side camera. The throw's hit,
+   * 'throw' and K.O. events are held until the slam so the impact, damage number and banner land with the body.
+   */
+  private throwSeq: {
+    att: number; tgt: number; t: number; u: THREE.Vector3; a0: THREE.Vector3; d0: number; yawA: number; yawT: number; sign: number;
+    landU: number; lat: THREE.Vector3; resolved: boolean; slammed: boolean; held: SimEvent[];
+    camFrom: THREE.Vector3; lookFrom: THREE.Vector3; camPos: THREE.Vector3; camLook: THREE.Vector3;
+  } | null = null;
+  /** After a throw: the thrown fighter turns back toward the thrower gently instead of spinning in a frame or two. */
+  private slowTurn = new Map<number, number>();
 
   constructor(arena: Arena, opts: ViewOptions) {
     this.arena = arena;
@@ -108,11 +121,18 @@ export class MatchView {
 
   handleEvents(events: SimEvent[]) {
     for (const e of events) {
-      this.onEvent?.(e);
+      const slamReplay = !!(e as any).__throwSlam;
+      if (!slamReplay) this.onEvent?.(e);
+      // Shoulder Throw: its hit, 'throw' and K.O. events wait for the slam (the body is still in the air until then).
+      if (!slamReplay && this.holdForThrow(e)) continue;
       // Announcer for everything except hits and KOs (those are announced when they land on screen, below).
       if (e.type !== 'hit' && e.type !== 'ko') this.announcer.onEvent(e, this.snap);
       switch (e.type) {
         case 'hit': {
+          if (slamReplay) {
+            this.throwSlamHit(e);
+            break;
+          }
           // Hero renderer: the strike animation reaches the target a moment after the sim registers the hit;
           // start the strike now (aimed at the target) and play the impact on the contact frame.
           const attS = this.slots.get(e.attacker);
@@ -171,13 +191,19 @@ export class MatchView {
           break;
         }
         case 'throw' as any: {
-          // Shoulder Throw lands: slam on the mat, dust, shake, banner (the announcer calls it).
+          // Shoulder Throw lands: slam on the mat, dust, shake, banner (the announcer calls it). With the hero renderer
+          // this runs at the slam (the body hits the mat), not when the sim resolves the throw.
           const ev = e as any;
           const p = new THREE.Vector3(ev.x ?? 0, 0.1, ev.z ?? 0);
-          this.vfx.burst(p, 0xc9b79c, 16, 3, 0.06);
+          if (slamReplay) {
+            const tg = this.slots.get(ev.target);
+            if (tg?.avatar instanceof HeroFighter && tg.avatar.bones.spine_02) p.copy(tg.avatar.bones.spine_02.getWorldPosition(new THREE.Vector3())).setY(0.1);
+            this.vfx.burst(p, 0xc9b79c, 26, 3.4, 0.07);
+            this.vfx.burst(p.clone().setY(0.3), 0xffffff, 10, 2.2, 0.04);
+          } else this.vfx.burst(p, 0xc9b79c, 16, 3, 0.06);
           this.vfx.groundRing(p, 0xffc53d, 1.0);
           this.arena.shake = Math.min(1.5, this.arena.shake + 1.0);
-          this.showBanner('SHOULDER THROW!', 1100, true);
+          this.showBanner('SHOULDER THROW!', 1300, true);
           sfx.sfxPunch(1);
           break;
         }
@@ -190,6 +216,7 @@ export class MatchView {
           const col = s.snap.color;
           if ((e.kind as string) === 'throw') {
             s.avatar.glowBoost = 1.2; // the throw's banner and slam come with the 'throw' event
+            this.startThrow(e.id);
             break;
           } else if (e.kind === 'ironwall') {
             this.vfx.shockwave(s.pos.clone().setY(1), 0xffc53d, 2);
@@ -266,6 +293,7 @@ export class MatchView {
           break;
         }
         case 'round_start':
+          this.endThrow();
           this.lastCountdown = -1;
           // Tips from the previous round (or the warm-up) don't carry over.
           clearTimeout(this.hintTimer);
@@ -313,7 +341,179 @@ export class MatchView {
   }
 
   get slowmo() {
-    return this.time < this.slowmoUntil || (this.snap?.slow ?? 0) === 1;
+    // A Shoulder Throw plays at full speed (its slam has a hit-stop instead of the sim's slow motion).
+    return this.time < this.slowmoUntil || (!this.throwSeq && (this.snap?.slow ?? 0) === 1);
+  }
+
+  /** Hold a Shoulder Throw's hit / 'throw' / K.O. events until the slam; end the throw if it was cancelled. */
+  private holdForThrow(e: SimEvent): boolean {
+    const ts = this.throwSeq;
+    if (!ts) return false;
+    const ev = e as any;
+    if ((e.type === 'whiff' && ev.kind === 'throw' && ev.attacker === ts.att) || ((e.type as string) === 'grab_cancel' && ev.k === 't' && ev.id === ts.att)) {
+      this.endThrow();
+      return false;
+    }
+    if (ts.slammed) return false;
+    if (e.type === 'hit' && ev.kind === 'throw' && ev.attacker === ts.att) {
+      if (ev.shielded) {
+        this.endThrow(); // the Iron Wall stopped it
+        return false;
+      }
+      ts.tgt = ev.target;
+      ts.held.push(e);
+      return true;
+    }
+    if ((e.type as string) === 'throw' && ev.id === ts.att) {
+      ts.tgt = ev.target;
+      const L = new THREE.Vector3(ev.x, 0, ev.z).sub(ts.a0);
+      ts.landU = L.dot(ts.u);
+      ts.lat = L.addScaledVector(ts.u, -ts.landU).setY(0);
+      ts.resolved = true;
+      ts.held.push(e);
+      return true;
+    }
+    if (e.type === 'ko' && ev.target === ts.tgt) {
+      ts.held.push(e);
+      return true;
+    }
+    return false;
+  }
+
+  /** The throw's hit, shown when the body hits the mat: damage at the body, hit-stop, flash, shake. No flinch clip. */
+  private throwSlamHit(e: Extract<SimEvent, { type: 'hit' }>) {
+    this.announcer.onEvent(e, this.snap);
+    const tgt = this.slots.get(e.target);
+    const att = this.slots.get(e.attacker);
+    const p = new THREE.Vector3(e.x, e.y, e.z);
+    if (tgt?.avatar instanceof HeroFighter && tgt.avatar.bones.pelvis) p.copy(tgt.avatar.bones.pelvis.getWorldPosition(new THREE.Vector3())).setY(0.25);
+    const col = att ? att.snap.color : '#fff';
+    // Impact sparks on the body at the mat; the damage number floats over the legs, away from the thrower (no ring
+    // in the air over the fighters: REVIEW.md 7:05 AM item 5).
+    this.vfx.burst(p, col, 34, 5, 0.07);
+    this.vfx.burst(p, 0xffffff, 8, 3, 0.03);
+    const away = this.throwSeq ? this.throwSeq.u.clone().negate() : new THREE.Vector3();
+    this.vfx.label(p.clone().addScaledVector(away, 0.45).setY(0.85), String(e.damage), 'fx-super');
+    if (att) att.avatar.glowBoost = 0.8;
+    this.arena.shake = Math.min(1.5, this.arena.shake + 0.6);
+    this.hitStopUntil = this.time + 0.15;
+    this.vfx.flash();
+    sfx.sfxSuper();
+  }
+
+  /** Shoulder Throw started (the 'super' event): line up the choreography and the held side camera. */
+  private startThrow(attId: number) {
+    if (!USE_HEROES) return;
+    const a = this.slots.get(attId);
+    if (!a || !(a.avatar instanceof HeroFighter)) return;
+    let tg = a.snap.tg != null && a.snap.tg !== attId ? this.slots.get(a.snap.tg) : undefined;
+    if (!tg) {
+      let best = Infinity;
+      for (const sl of this.slots.values()) {
+        const d = sl.pos.distanceTo(a.pos);
+        if (sl !== a && sl.snap.alive && d < best) (best = d), (tg = sl);
+      }
+    }
+    if (!tg || !(tg.avatar instanceof HeroFighter)) return;
+    this.endThrow();
+    const u = tg.pos.clone().sub(a.pos).setY(0);
+    const d0 = Math.max(0.35, u.length());
+    if (u.lengthSq() < 1e-6) u.set(Math.sin(a.yaw), 0, Math.cos(a.yaw));
+    u.normalize();
+    const a0 = a.pos.clone().setY(0);
+    const landU = -TUNING.throwLand;
+    // One side camera, perpendicular to the throw, on the side the camera is already on: the clinch's shot (a throw
+    // from the clinch needs no camera move at all), wide enough for the target's feet on the mat.
+    const side = this.sideOf(a.pos, tg.pos);
+    const shot = this.sideShot(a.pos, tg.pos, side);
+    const camLook = shot.look;
+    const camPos = shot.pos;
+    const id = [...this.slots.entries()].find(([, sl]) => sl === tg)![0];
+    this.throwSeq = {
+      att: attId, tgt: id, t: 0, u, a0, d0, yawA: Math.atan2(u.x, u.z), yawT: Math.atan2(-u.x, -u.z), sign: side, landU, lat: new THREE.Vector3(),
+      resolved: false, slammed: false, held: [], camFrom: this.arena.camPos.clone(), lookFrom: this.arena.camLook.clone(), camPos, camLook,
+    };
+    // From the clinch the camera is already on (about) this side shot and settles in place. From anywhere else (a throw
+    // from range), cut to the side shot once, at the start, instead of swinging round during the grip and turn-in.
+    if (this.arena.camPos.distanceTo(camPos) > 0.6) {
+      this.throwSeq.camFrom.copy(camPos);
+      this.throwSeq.lookFrom.copy(camLook);
+    }
+    this.throwWait = 0;
+  }
+  private throwWait = 0;
+  /**
+   * Side-on shot of two fighters (clinch and Shoulder Throw; grappling beta): perpendicular to the line from a to b,
+   * centred between them, on `side` of that line, framing about 5.6 m by 3.3 m (a Shoulder Throw lands the target's
+   * feet about 2.4 m from the pair's centre, and its legs pass 2.5 m up).
+   */
+  private sideShot(a: THREE.Vector3, b: THREE.Vector3, side: number) {
+    const u = b.clone().sub(a).setY(0);
+    if (u.lengthSq() < 1e-6) u.set(0, 0, 1);
+    u.normalize();
+    const perp = new THREE.Vector3(u.z, 0, -u.x);
+    const mid = a.clone().add(b).multiplyScalar(0.5).setY(0);
+    const cam = this.arena.camera;
+    const vHalf = Math.tan(THREE.MathUtils.degToRad(cam.fov / 2));
+    const dist = Math.max(3.3 / (2 * vHalf), 5.6 / (2 * vHalf * cam.aspect));
+    return { pos: mid.clone().addScaledVector(perp, side * dist).setY(1.4), look: mid.clone().setY(1.1) };
+  }
+  /** Which side of the line from a to b the camera is on now (+1 / -1), for sideShot. */
+  private sideOf(a: THREE.Vector3, b: THREE.Vector3) {
+    const u = b.clone().sub(a).setY(0);
+    const perp = new THREE.Vector3(u.z, 0, -u.x);
+    return Math.sign(this.arena.camera.position.clone().sub(a.clone().add(b).multiplyScalar(0.5)).dot(perp)) || 1;
+  }
+  /** Easing back to the normal camera from a clinch or throw side shot until this time, from this camera pose. */
+  private grappleEaseUntil = 0;
+  private grappleEase: { pos: THREE.Vector3; look: THREE.Vector3 } | null = null;
+  private startGrappleEase() {
+    this.grappleEase = { pos: this.arena.camPos.clone(), look: this.arena.camLook.clone() };
+    this.camEaseUntil = this.grappleEaseUntil = this.time + GRAPPLE_EASE_S;
+  }
+  /** Clinch side camera in use: [holder id, held id, side], so the side is chosen once per clinch. */
+  private clinchCam: [number, number, number] | null = null;
+
+  /** Unit vector across the throw away from the held camera's side (the arc passes behind the thrower's head). */
+  private throwSide(ts: NonNullable<MatchView['throwSeq']>) {
+    return new THREE.Vector3(ts.u.z, 0, -ts.u.x).multiplyScalar(-ts.sign);
+  }
+
+  private endThrow() {
+    const ts = this.throwSeq;
+    if (!ts) return;
+    this.throwSeq = null;
+    for (const id of [ts.att, ts.tgt]) {
+      const sl = this.slots.get(id);
+      if (sl?.avatar instanceof HeroFighter) sl.avatar.throwSeq = null;
+    }
+    this.slowTurn.set(ts.tgt, this.time + 0.9);
+    this.startGrappleEase();
+    // Cut short before the slam (round reset, a cancel after it resolved): show what was held.
+    if (!ts.slammed && ts.held.length) this.handleEvents(ts.held.map((e) => ({ ...(e as any), __throwSlam: true }) as SimEvent));
+  }
+
+  /** Advance the throw clock (animation time: the slam's hit-stop freezes it), fire the slam, end it. */
+  private tickThrow(animDt: number, dt: number) {
+    const ts = this.throwSeq;
+    if (!ts) return;
+    if (!this.slots.has(ts.att) || !this.slots.has(ts.tgt)) return this.endThrow();
+    ts.t += animDt;
+    if (!ts.resolved && ts.t >= THROW_T.arc) {
+      // Hold the loaded pose until the sim resolves the throw; give up if it never does.
+      ts.t = THROW_T.arc;
+      this.throwWait += dt;
+      if (this.throwWait > 0.6) return this.endThrow();
+    }
+    if (ts.resolved && !ts.slammed && ts.t >= THROW_T.slam) {
+      ts.slammed = true;
+      const held = ts.held;
+      ts.held = [];
+      this.handleEvents(held.filter((e) => e.type !== 'ko').map((e) => ({ ...(e as any), __throwSlam: true }) as SimEvent));
+      // A throw that knocks out: "SHOULDER THROW!" first, then the K.O. call and banner a beat later.
+      for (const e of held) if (e.type === 'ko') this.pendingHits.push({ at: this.time + 0.7, e: { ...(e as any), __throwSlam: true, __delayed: true } as SimEvent });
+    }
+    if (this.throwSeq === ts && ts.t >= THROW_T.end) this.endThrow();
   }
 
   /** Per-frame render. dt in real seconds. */
@@ -328,6 +528,7 @@ export class MatchView {
     }
     const s = this.snap;
     const animDt = this.time < this.hitStopUntil ? 0 : this.slowmo ? dt * 0.3 : dt;
+    this.tickThrow(animDt, dt);
     if (s) {
       const myId = this.opts.localIds[0];
       const me = s.f.find((f) => f.id === myId);
@@ -340,14 +541,30 @@ export class MatchView {
         // Teleports (new round, respawn) snap instead of gliding across the stage. A fighter about to be hit holds
         // still until the fist lands (the knockback starts at the contact frame).
         const awaitingHit = this.pendingHits.some((p) => (p.e as any).target === f.id);
-        if (slot.pos.distanceTo(target) > 1.0) {
+        const ts = this.throwSeq;
+        const thrown = !!ts && f.id === ts.tgt;
+        if (thrown && ts) {
+          // Shoulder Throw: pulled in onto the thrower's back, then over the shoulder to the landing spot (the sim has
+          // already moved it there). The thrown fighter keeps its facing until it is back on its feet.
+          const arcS = THREE.MathUtils.clamp((ts.t - THROW_T.arc) / (THROW_T.slam - THROW_T.arc), 0, 1);
+          const arc = ts.t >= THROW_T.arc && ts.t < THROW_T.slam ? throwArc(ts.t - THROW_T.arc, ts.landU) : null;
+          const ur = ts.t < THROW_T.arc ? THREE.MathUtils.lerp(ts.d0, 0.3, sm(ts.t / THROW_T.arc)) : arc ? arc.u - 0.24 * arcS : ts.landU;
+          slot.pos.copy(ts.a0).addScaledVector(ts.u, ur).addScaledVector(ts.lat, sm(arcS)).addScaledVector(this.throwSide(ts), arc ? arc.lat : 0);
+          slot.yaw = ts.yawT;
+        } else if (slot.pos.distanceTo(target) > 1.0) {
           // Nothing moves a metre in one frame (a super launch is ~0.1 m): this is a teleport (round start, respawn,
           // a scripted placement). Snap, and cut the camera when you or your opponent moved.
           slot.pos.copy(target);
           if (f.id === myId || f.id === this.slots.get(myId)?.snap.tg || this.slots.size === 2) this.camCut = true;
         }
         else if (!awaitingHit) slot.pos.lerp(target, k);
-        slot.yaw += wrap(f.yaw - slot.yaw) * k;
+        if (ts && f.id === ts.att && ts.t < THROW_T.release) {
+          // The thrower turns its back into the target (toward the camera side), and holds until the follow-through.
+          slot.yaw = ts.yawA + ts.sign * Math.PI * sm((ts.t + 0.02) / 0.3);
+        } else if (!thrown) {
+          const turnK = this.time < (this.slowTurn.get(f.id) ?? 0) ? 1 - Math.exp(-dt * 5) : k;
+          slot.yaw += wrap(f.yaw - slot.yaw) * turnK;
+        }
         slot.avatar.root.position.copy(slot.pos);
         slot.avatar.root.rotation.y = slot.yaw;
         if (slot.avatar instanceof HeroFighter) slot.avatar.hidden = this.opts.camera === 'drill' && f.id !== myId; // drills: only you
@@ -384,7 +601,15 @@ export class MatchView {
           const clA = fa.cl ? this.slots.get(fa.cl)?.avatar : undefined;
           const tgA = fa.gr && f.tg != null ? this.slots.get(f.tg)?.avatar : undefined;
           slot.avatar.grapple = { with: clA instanceof HeroFighter ? clA : null, holder: !!fa.ch, reaching: fa.gr && tgA instanceof HeroFighter ? tgA : null };
-          slot.avatar.update(animDt, this.time, { shield: 0, meterFull: f.meter >= 100, airborne: awaitingHit ? 0 : f.y, alive: !!f.alive || awaitingHit, blocking: !!f.b, guard: fa.gd ?? 100, dizzy: (fa.dz ?? 0) > 0, ironWall: (fa.iw ?? 0) > 0 });
+          // Shoulder Throw choreography (both fighters); the thrown one counts as standing until it hits the mat.
+          const other = ts ? this.slots.get(thrown ? ts.att : ts.tgt)?.avatar : undefined;
+          const role = ts && other instanceof HeroFighter ? (thrown ? 'thrown' : f.id === ts.att && ts.t < THROW_T.release ? 'thrower' : null) : null;
+          if (ts && role && other instanceof HeroFighter) {
+            const arcS = THREE.MathUtils.clamp((ts.t - THROW_T.arc) / (THROW_T.slam - THROW_T.arc), 0, 1);
+            slot.avatar.throwSeq = { role, t: ts.t, other, u: ts.u, side: this.throwSide(ts), a0: ts.a0.clone().addScaledVector(ts.lat, sm(arcS)), d0: ts.d0, landU: ts.landU };
+          } else slot.avatar.throwSeq = null;
+          const inAir = thrown && !!ts && !ts.slammed;
+          slot.avatar.update(animDt, this.time, { shield: 0, meterFull: f.meter >= 100, airborne: awaitingHit || thrown ? 0 : f.y, alive: !!f.alive || awaitingHit || inAir, blocking: !!f.b, guard: fa.gd ?? 100, dizzy: (fa.dz ?? 0) > 0, ironWall: (fa.iw ?? 0) > 0 });
         } else {
           slot.avatar.setJoints(joints);
           slot.avatar.update(animDt, this.time, { shield: f.iw, meterFull: f.meter >= 100, airborne: f.y, alive: !!f.alive || s.f.length <= 2 });
@@ -428,6 +653,36 @@ export class MatchView {
       this.arena.setCamera(pos, look, dt);
       this.updateVisibility(dt);
       return;
+    }
+    const ts = this.throwSeq;
+    if (ts && USE_HEROES && (this.slots.size <= 2 || this.opts.localIds.includes(ts.att) || this.opts.localIds.includes(ts.tgt))) {
+      // Shoulder Throw: settle into one side camera during the grip (orbiting, not cutting), then hold it still through
+      // the turn-in, the arc, the slam, the down time and the get-up.
+      const k = sm(ts.t / 0.28);
+      const c = ts.camLook;
+      const f0 = ts.camFrom.clone().sub(c), f1 = ts.camPos.clone().sub(c);
+      const a0 = Math.atan2(f0.x, f0.z), a1 = Math.atan2(f1.x, f1.z);
+      const ang = a0 + wrap(a1 - a0) * k;
+      const r = THREE.MathUtils.lerp(Math.hypot(f0.x, f0.z), Math.hypot(f1.x, f1.z), k);
+      const camPos = c.clone().add(new THREE.Vector3(Math.sin(ang) * r, THREE.MathUtils.lerp(f0.y, f1.y, k), Math.cos(ang) * r));
+      this.arena.setCamera(camPos, ts.lookFrom.clone().lerp(c, k), dt, true);
+      this.updateVisibility(dt);
+      return;
+    }
+    // Clinch (grappling beta): ease into the side shot that a Shoulder Throw from the clinch will hold, so the throw
+    // starts without a camera move. Only for your own clinch (or any clinch in a 1v1).
+    const cl = [...this.slots.values()].find((sl) => (sl.snap as any).cl != null && (sl.snap as any).ch && (this.slots.size <= 2 || this.opts.localIds.includes(sl.snap.id) || this.opts.localIds.includes((sl.snap as any).cl)));
+    const held = cl ? this.slots.get((cl.snap as any).cl) : undefined;
+    if (USE_HEROES && cl && held && this.opts.camera !== 'wide') {
+      if (!this.clinchCam || this.clinchCam[0] !== cl.snap.id || this.clinchCam[1] !== held.snap.id) this.clinchCam = [cl.snap.id, held.snap.id, this.sideOf(cl.pos, held.pos)];
+      const shot = this.sideShot(cl.pos, held.pos, this.clinchCam[2]);
+      this.arena.setCamera(shot.pos, shot.look, dt, false, 4);
+      this.updateVisibility(dt);
+      return;
+    }
+    if (this.clinchCam) {
+      this.clinchCam = null;
+      this.startGrappleEase(); // ease back from the clinch shot
     }
     if (this.opts.camera === 'side' || !me) {
       // Both fighters side-on.
@@ -587,9 +842,15 @@ export class MatchView {
     // Ease into (and out of) the slow-motion side camera instead of whipping across the arena.
     if (this.slowmo !== this.wasSlowmo) this.camEaseUntil = this.time + 0.8;
     this.wasSlowmo = this.slowmo;
-    this.arena.setCamera(pos, look, dt, this.camCut, this.time < this.camEaseUntil ? 2.2 : 5);
+    if (this.grappleEase && this.time < this.grappleEaseUntil && !this.camCut) {
+      // Back from a clinch / throw side shot: slow in, slow out, from where the side shot left the camera.
+      const k = sm(1 - (this.grappleEaseUntil - this.time) / GRAPPLE_EASE_S);
+      this.arena.setCamera(this.grappleEase.pos.clone().lerp(pos, k), this.grappleEase.look.clone().lerp(look, k), dt, true);
+    } else this.arena.setCamera(pos, look, dt, this.camCut, this.time < this.camEaseUntil ? 2.2 : 5);
     // The eased camera itself must also obey the rules (its path can cross a fighter or the fight line while easing).
-    if (USE_HEROES && this.opts.camera === 'behind') {
+    // Not while easing back from a clinch or Shoulder Throw side shot (grappling beta): from side-on, the fight-line rule
+    // would jump the camera up to a metre in one frame (a cut); the target pose above is still constrained.
+    if (USE_HEROES && this.opts.camera === 'behind' && this.time >= this.grappleEaseUntil) {
       const cp = this.constrainCamera(this.arena.camPos.clone(), this.arena.camLook, me, opp, false);
       this.arena.camPos.copy(cp);
       this.arena.camera.position.copy(cp);
@@ -818,6 +1079,15 @@ export class MatchView {
 function verb(kind: string, ringout: boolean) {
   if (ringout) return 'rang out';
   return ({ super_uppercut: 'super-uppercut', uppercut: 'uppercut', hook: 'hooked', jab: 'jabbed', kick: 'kicked', blast: 'blasted' } as Record<string, string>)[kind] ?? 'KO’d';
+}
+
+/** Seconds to ease from a clinch / Shoulder Throw side shot back to the normal camera. */
+const GRAPPLE_EASE_S = 1.0;
+
+/** Smoothstep on 0..1 (clamped). */
+function sm(x: number) {
+  const t = Math.min(1, Math.max(0, x));
+  return t * t * (3 - 2 * t);
 }
 
 function wrap(a: number) {
