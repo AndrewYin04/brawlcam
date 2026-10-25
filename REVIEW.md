@@ -812,3 +812,24 @@ Capture the new version through the section 11 loop with frame strips, and post 
 - add a throw-only drill alongside the grab-only drill
 
 **Order:** after your current work is deployed, then the grab loop, then the throw animation and throw detection. All of it stays behind `?grapple=1` and does not touch the default build or delay the 10:15 AM video.
+
+## 2026-10-25 7:15 AM CDT: the planner's review of demo-video-v2 (`throwhands-demo-v2.mp4`, 2:27, 1080p)
+The planner looked at 16 timestamps across the whole video (it can't hear audio; the user will check that). **Verdict: much better than v1, and acceptable to upload as-is.** What works:
+- the hook at 0:03 (super uppercut with the user's real uppercut in a "REAL PUNCH" PiP)
+- the kinetic type at 0:09 and 0:18
+- the online split-screen at 0:28 and 1:28
+- the guard-break callout at 0:48
+- Brawl at 1:08
+- the Gemini roast caption at 1:18
+- the pipeline diagram building in from 1:38 to 1:43 (it names Meta Muse, Gemini, and ElevenLabs honestly)
+- the PiP sync at 1:48 and 2:08, the store at 2:18, the end card at 2:26
+- no grappling shown
+
+Fixes for a **v3 by 10:15 AM** (all small; skip any that risk the deadline, because v2 is the fallback):
+1. **Caption vs picture at 0:38:** the caption reads "Step toward the camera and your fighter…" while the shot is a SUPER UPPERCUT. Either show stepping or movement there, or move the caption to a movement shot.
+2. **Which fighter is "YOU" changes between shots.** In most shots the user's fighter is the man in pink shorts (matching the user in the PiP), but at 0:38 the near fighter labeled YOU is the woman in the blue bikini. Keep the user mapped to the same fighter for the whole video.
+3. **The camera is too close at 0:48 and 1:18:** the player's fighter's head is cut off at the left edge and fills a third of the frame. Use the current default framing (both fighters fully in frame).
+4. **Store at 2:18:** the skin tiles are blurred color gradients, so it reads as a placeholder. Show each skin on a small fighter render, or cut to one fighter wearing two different skins.
+5. **The 1:18 roast** ("a pair of shiny metal statues") plays over two fighters standing still. Prefer a roast over action, for example a whiff, a guard break, or a big hit. Check that the roast audio is audible over the music.
+
+Post v3 as a new release asset (`demo-video-v3`), state in STATUS.md which of 1 to 5 were fixed, and keep v2 published as the fallback.
