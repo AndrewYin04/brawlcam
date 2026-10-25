@@ -246,3 +246,39 @@ Seen: acd2f05 added lean forward/back, the duel-assist fix, the 15 s movement tu
   - report the detection rate in STATUS.md
 
   Then run the section 11 loop's walk/strafe scenes.
+
+## 2026-10-25 2:16 AM CDT: data collection (the user chose research mode plus opt-in streams). No player video.
+Seen: 78659ed (human-proportioned Quaternius fighters, IK contact, arm's-length range). Good. The user then asked to collect video and the 33 points for testing and model training. Constraints that make "always on" unacceptable:
+- the menu promises "No video ever leaves your device"
+- Meta's rules forbid collecting personal data without express written consent
+- the free Tiger tier is small (about 750 MiB per service per a 2025 changelog; check it); the database is 12 MB today
+
+Video does not go into Postgres.
+
+### 1. Research mode (build next: it gives real ground truth for tuning gestures)
+- **Entry:** `?research=1`. A full-screen consent step every session states plainly what happens: "Records your camera video to a file on this device, and sends your body-point coordinates, labeled research, to our server. Video is never uploaded." Nothing starts without an explicit checkbox.
+- **Records, synchronized by timestamp:**
+  - the camera video via `MediaRecorder` (480p, 30 fps), saved only as a local download
+  - a JSONL file with one line per frame: time, the 33 world landmarks plus 33 image landmarks with visibility, detected actions with their scores, movement input, and game events (hits, blocks, guard breaks)
+  - marker keys: **Space** = "I did a move and it did not register"; **F** = "it fired a move I did not do"; **1 to 9** = "I just did move N" (jab, hook, uppercut, block, X, palm, kick, step left/right, step forward/back)
+- **Server copy:** the landmark, action, and marker stream also goes to a new Tiger hypertable `research_frames`, keyed by a random session UUID and tagged `research`, with a compression policy (`segmentby` session_id, ordered by time). It never contains video.
+- **End of session:** both files download (`throwhands-research-<time>.webm` and `.jsonl`). The user will copy recordings to the server. Use them as test fixtures stored outside the repo, and report per-move recall and precision from the markers in TESTING.md.
+
+### 2. Opt-in continuous pose streams (after step-sideways, the guard, and the octagon)
+- **Behind the existing motion-data consent** (off by default), whole sessions are streamed instead of only short labeled snippets: landmarks downsampled to 15 fps, packed as compact numeric arrays (not verbose JSON), batched every 2 s, and capped at 10 minutes per session. Anonymous: a random session UUID, no player ID, no video.
+- **Storage:**
+  - a Tiger hypertable `pose_streams` with compression (`segmentby` session_id) and a continuous aggregate for minutes per label and per day
+  - a storage guard: stop accepting stream inserts when `pg_database_size()` passes 600 MB, and log it
+  - report the measured MB per player-hour before and after compression in STATUS.md
+- **Showcase for the Tiger Data prize:** add frames stored, compressed size, and compression ratio to the motion-data page.
+- **Update all user-facing text so it stays true:** the consent screen ("continuous body-point coordinates during play"), the menu footer, the README, and `submission/devpost.md`.
+
+### Order from here
+1. Research mode
+2. Step sideways (2:00 AM)
+3. Guard redesign (1:50 AM)
+4. UFC octagon (1:35 AM)
+5. Opt-in streams
+6. Credits
+
+Run the section 11 loop after visual changes; the freeze is 7:30 AM. Update STATUS.md (last update 1:50 AM) with 78659ed's review-loop scores and fist-to-target numbers.
