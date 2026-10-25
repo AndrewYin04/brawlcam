@@ -785,3 +785,51 @@ The user meant **grabs misread as a strike**, not false grabs: "grabs where I in
 Report each grab rep's outcome as **grab / strike-instead (which) / nothing**, with counts.
 
 False grabs (non-grab moves read as grab) are now a **no-regression guard**, not a target: keep them at today's level (0 on the 37 clips and on `ee6f97a0`; report the rate on the drill negatives). Everything else in the 6:35 AM and 6:37 AM notes stands: finish and deploy current work first; the grab-only drill; held-out validation; no changes to non-grapple code paths; don't delay the video.
+
+## 2026-10-25 7:05 AM CDT: Shoulder Throw: "the animation looks weird/off", and the user isn't sure their throw triggers (grabs trigger more often now, good)
+The planner watched `https://throwhands.tech/media/review/throw.mp4` (6 s) frame by frame. Problems:
+1. **No grip, no load (2.0 s):** under the "SHOULDER THROW!" banner the two fighters stand **upright, back to back**. The thrower never turns into the opponent, bends at the hips, or pulls them onto its shoulder, and neither fighter's hands hold the other.
+2. **The flip happens in place, apart from the thrower (2.5 s):** the thrown fighter is upside down beside the thrower, with no contact, while the thrower stands with its guard up as if nothing is happening. A shoulder throw arcs the opponent **over** the thrower's back and shoulder.
+3. **The landing (3.0 s):** the thrown fighter lands crouched on hands, knees, and feet instead of flat on its back. **It is standing again by 3.6 s**, about 0.6 s later, so there is no slam to read.
+4. **Camera:** three different angles in about 1.5 s (2.0, 2.5, and 3.0 s), which is disorienting. Hold one side camera through the whole throw.
+5. **The banner and the "25" damage ring cover the fighters at 2.0 s.**
+
+**What it should look like** (a judo seoi-nage, simplified):
+- **Grip:** the thrower's hands on the opponent's arm or collar, via IK onto the opponent's bones.
+- **Turn-in:** the thrower turns its back into the opponent and drops its hips low (about 0.3 s).
+- **Load and arc:** the opponent's hips ride over the thrower's back; its body arcs head-over-heels over the thrower's shoulder (about 0.5 s), still attached through the grip, with legs trailing.
+- **Slam:** the opponent lands flat on its back in front of the thrower, with a heavy impact, dust, a ring, a 0.15 s hit-stop, and camera shake.
+- **Down time:** the opponent stays down at least 1.0 s, then plays a get-up clip (the sim's `throwStun` is 0.8 s; extend it to match).
+- **Thrower:** finishes kneeling or crouched over the opponent, then returns to stance.
+- **Camera:** one held side camera for the whole throw; the banner sits above the fighters' heads, not over them.
+
+Capture the new version through the section 11 loop with frame strips, and post `throw.mp4` again for the user to watch.
+
+**Throw triggering:** the user can't tell whether their throws register. STATUS has throw 0/4 in drills and 4% recall on real clips. Requests:
+- add the **throw stage to the `?debug=1` overlay** ("grab ✓ → twist 42° / 60° → hinge 8% / 15%", "meter not full", "cooldown")
+- run the **same tuning loop as the grab** (6:35 and 6:40 AM targets: at least 90% of intended throws detected as a throw, at most 5% misread as a strike) on the user's throw reps
+- for the low, upward-looking camera, the twist and hinge cues likely need image-space alternatives, as the grab did
+- add a throw-only drill alongside the grab-only drill
+
+**Order:** after your current work is deployed, then the grab loop, then the throw animation and throw detection. All of it stays behind `?grapple=1` and does not touch the default build or delay the 10:15 AM video.
+
+## 2026-10-25 7:15 AM CDT: the planner's review of demo-video-v2 (`throwhands-demo-v2.mp4`, 2:27, 1080p)
+The planner looked at 16 timestamps across the whole video (it can't hear audio; the user will check that). **Verdict: much better than v1, and acceptable to upload as-is.** What works:
+- the hook at 0:03 (super uppercut with the user's real uppercut in a "REAL PUNCH" PiP)
+- the kinetic type at 0:09 and 0:18
+- the online split-screen at 0:28 and 1:28
+- the guard-break callout at 0:48
+- Brawl at 1:08
+- the Gemini roast caption at 1:18
+- the pipeline diagram building in from 1:38 to 1:43 (it names Meta Muse, Gemini, and ElevenLabs honestly)
+- the PiP sync at 1:48 and 2:08, the store at 2:18, the end card at 2:26
+- no grappling shown
+
+Fixes for a **v3 by 10:15 AM** (all small; skip any that risk the deadline, because v2 is the fallback):
+1. **Caption vs picture at 0:38:** the caption reads "Step toward the camera and your fighter…" while the shot is a SUPER UPPERCUT. Either show stepping or movement there, or move the caption to a movement shot.
+2. **Which fighter is "YOU" changes between shots.** In most shots the user's fighter is the man in pink shorts (matching the user in the PiP), but at 0:38 the near fighter labeled YOU is the woman in the blue bikini. Keep the user mapped to the same fighter for the whole video.
+3. **The camera is too close at 0:48 and 1:18:** the player's fighter's head is cut off at the left edge and fills a third of the frame. Use the current default framing (both fighters fully in frame).
+4. **Store at 2:18:** the skin tiles are blurred color gradients, so it reads as a placeholder. Show each skin on a small fighter render, or cut to one fighter wearing two different skins.
+5. **The 1:18 roast** ("a pair of shiny metal statues") plays over two fighters standing still. Prefer a roast over action, for example a whiff, a guard break, or a big hit. Check that the roast audio is audible over the music.
+
+Post v3 as a new release asset (`demo-video-v3`), state in STATUS.md which of 1 to 5 were fixed, and keep v2 published as the fallback.
