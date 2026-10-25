@@ -167,6 +167,7 @@ async function boot() {
   startLoop();
   // Research recording: explicit consent every session before anything is recorded.
   if (research.enabled) (hooks as any).researchConsent = await research.consent();
+  if (research.active && research.drills) void startMode('drills');
   const auto = params.get('mode');
   const room = params.get('room');
   if (room) import('./net/online').then((m) => m.joinRoom(room.toUpperCase()));
@@ -254,6 +255,25 @@ export async function startMode(mode: string) {
     beginLocal(new LocalSession('duel', [{ name: 'Player 1', color: FIGHTER_COLORS[0] }, { name: 'Player 2', color: FIGHTER_COLORS[1] }], 0, 1, [], over), 'side', mode);
   } else if (mode === 'brawl') {
     beginLocal(new LocalSession('brawl', [me], Number(params.get('bots') ?? 5), Number(params.get('botlevel') ?? 1), [], over), 'wide', mode);
+  } else if (mode === 'drills') {
+    // Guided research drills: only your fighter (a passive dummy is hidden), front camera, no HUD, no time limit.
+    tutorialDone = true;
+    document.body.classList.add('drill-mode');
+    const s = new LocalSession('duel', [me], 1, -1, [], { ...over, roundSeconds: 120 });
+    beginLocal(s, 'drill', mode);
+    const wait = setInterval(() => {
+      if (!calibrating && (s as any).sim?.phase === 'fight') {
+        clearInterval(wait);
+        const keep = setInterval(() => ((s as any).sim.roundTimer = 120), 1000);
+        void import('./drills').then(({ runDrills }) =>
+          runDrills(pose!, () => {
+            clearInterval(keep);
+            document.body.classList.remove('drill-mode');
+            backToMenu();
+          }),
+        );
+      }
+    }, 300);
   }
 }
 
@@ -272,7 +292,7 @@ function teardown() {
   view = null;
 }
 
-export function beginSession(s: Session, camera: 'behind' | 'side' | 'wide', mode: string, skipCalibration = false) {
+export function beginSession(s: Session, camera: 'behind' | 'side' | 'wide' | 'drill', mode: string, skipCalibration = false) {
   teardown();
   resultsShown = false;
   hooks.mode = mode;
@@ -296,7 +316,7 @@ export function beginSession(s: Session, camera: 'behind' | 'side' | 'wide', mod
   else s.start();
 }
 
-function beginLocal(s: LocalSession, camera: 'behind' | 'side' | 'wide', mode: string) {
+function beginLocal(s: LocalSession, camera: 'behind' | 'side' | 'wide' | 'drill', mode: string) {
   s.infiniteMeter = params.has('infmeter');
   beginSession(s, camera, mode, mode === 'demo');
 }

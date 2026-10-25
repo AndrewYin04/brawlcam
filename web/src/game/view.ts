@@ -25,7 +25,7 @@ export interface ViewOptions {
   /** Live joints for local fighters (zero latency); falls back to snapshot joints. */
   localJoints: (id: number) => Joints | null;
   /** 'behind' = over-the-shoulder 1v1, 'side' = both fighters side-on, 'wide' = three-quarter arena view. */
-  camera: 'behind' | 'side' | 'wide';
+  camera: 'behind' | 'side' | 'wide' | 'drill';
 }
 
 interface Slot {
@@ -323,6 +323,7 @@ export class MatchView {
         slot.yaw += wrap(f.yaw - slot.yaw) * k;
         slot.avatar.root.position.copy(slot.pos);
         slot.avatar.root.rotation.y = slot.yaw;
+        if (this.opts.camera === 'drill' && f.id !== myId) slot.avatar.root.scale.setScalar(0.0001); // drills: only you
         let joints: Joints | null = null;
         // Your own fighter mirrors your live pose immediately (also during calibration and the countdown).
         if (this.opts.localIds.includes(f.id)) {
@@ -380,6 +381,14 @@ export class MatchView {
     const portrait = this.arena.camera.aspect < 1;
     let pos: THREE.Vector3;
     let look: THREE.Vector3;
+    if (this.opts.camera === 'drill' && me) {
+      // Drills: a mirror-like front view of your whole body.
+      const fwd = new THREE.Vector3(Math.sin(me.yaw), 0, Math.cos(me.yaw));
+      pos = me.pos.clone().addScaledVector(fwd, 3.6).setY(1.35);
+      look = me.pos.clone().setY(0.95);
+      this.arena.setCamera(pos, look, dt);
+      return;
+    }
     if (this.opts.camera === 'side' || !me) {
       // Both fighters side-on.
       const a = [...this.slots.values()];

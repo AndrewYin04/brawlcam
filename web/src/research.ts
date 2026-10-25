@@ -17,13 +17,28 @@ class Research {
   active = false;
   sessionId = '';
   private lines: string[] = [];
-  private batch: { t: number; lm: number[]; acts: string[]; mv: number[]; mk: string | null }[] = [];
+  private batch: { t: number; lm: number[]; acts: string[]; mv: number[]; mk: string | null; lb?: string | null; rp?: number }[] = [];
+  /** Current drill prompt label and rep number (labels come from the drill script, not keys). */
+  private label: string | null = null;
+  private rep = 0;
+  /** Drills subscribe to every pose frame. */
+  frameListener: ((t: number, people: any[], outs: any[]) => void) | null = null;
+  /** Guided drills requested on the consent screen (or ?drills=1). */
+  drills = typeof location !== 'undefined' && new URLSearchParams(location.search).has('drills');
+  setLabel(label: string | null, rep: number) {
+    this.label = label;
+    this.rep = rep;
+  }
+  markRep(label: string, rep: number, detected: boolean) {
+    if (this.active) this.lines.push(JSON.stringify({ at: Date.now() - this.startedAt, rep_end: { label, rep, detected } }));
+  }
   private pendingMarker: string | null = null;
   private recorder: MediaRecorder | null = null;
   private chunks: Blob[] = [];
   private startedAt = 0;
   private sendTimer = 0;
   stats = { frames: 0, sent: 0, markers: 0, sendErrors: 0 };
+  saveVideo = true;
   private checkpointTimer = 0;
   private part = 0;
 
@@ -41,19 +56,25 @@ class Research {
           <li>Keys while playing: <b>Space</b> = I did a move and it did not register · <b>F</b> = it fired a move I did not do · <b>1–9</b> = I just did ${MOVES.map((m, i) => `${i + 1} ${m.replace('_', ' ')}`).join(', ')}.</li>
         </ul>
         <label style="display:flex;gap:8px;align-items:center;margin:12px 0"><input type="checkbox" id="rc-ok" /> I agree to record this session as described.</label>
-        <div class="row"><button class="btn primary" id="rc-start" disabled>Start recording</button><button class="btn ghost" id="rc-no">No thanks (play normally)</button></div>
+        <label style="display:flex;gap:8px;align-items:center;margin:4px 0 12px"><input type="checkbox" id="rc-video" checked /> Also save the camera video on this device</label>
+        <div class="row"><button class="btn primary" id="rc-start" disabled>Start recording</button><button class="btn" id="rc-drills" disabled>Guided drills (about 3 minutes)</button><button class="btn ghost" id="rc-no">No thanks (play normally)</button></div>
       </div>`;
       document.body.appendChild(el);
       const ok = el.querySelector<HTMLInputElement>('#rc-ok')!;
       const start = el.querySelector<HTMLButtonElement>('#rc-start')!;
-      ok.onchange = () => (start.disabled = !ok.checked);
-      start.onclick = () => {
+      const drillsBtn = el.querySelector<HTMLButtonElement>('#rc-drills')!;
+      ok.onchange = () => (start.disabled = drillsBtn.disabled = !ok.checked);
+      const go = (drills: boolean) => {
         if (!ok.checked) return;
+        this.saveVideo = el.querySelector<HTMLInputElement>('#rc-video')!.checked;
         el.remove();
         this.active = true;
+        this.drills = this.drills || drills;
         this.sessionId = crypto.randomUUID();
         resolve(true);
       };
+      start.onclick = () => go(false);
+      drillsBtn.onclick = () => go(true);
       el.querySelector<HTMLButtonElement>('#rc-no')!.onclick = () => {
         el.remove();
         this.enabled = false;
@@ -67,7 +88,7 @@ class Research {
     if (!this.active || this.recorder || this.startedAt) return;
     this.startedAt = Date.now();
     const stream = video.srcObject as MediaStream | null;
-    if (stream && typeof MediaRecorder !== 'undefined') {
+    if (stream && typeof MediaRecorder !== 'undefined' && this.saveVideo) {
       // H.264 first: it is usually hardware-encoded (measured: pose 14.4 fps with H.264 vs 12.4 with VP9 while recording).
       const type = ['video/webm;codecs=h264', 'video/mp4;codecs=avc1', 'video/webm;codecs=vp8', 'video/webm;codecs=vp9', 'video/webm', 'video/mp4'].find((t) => MediaRecorder.isTypeSupported(t));
       try {
@@ -95,7 +116,9 @@ class Research {
         line.xshield = o.xshield;
       }
       if (mk) line.marker = mk;
+      if (this.label) Object.assign(line, { label: this.label, rep: this.rep });
       this.lines.push(JSON.stringify(line));
+      this.frameListener?.(t, people, outs);
       this.stats.frames++;
       if (p)
         this.batch.push({
@@ -104,6 +127,8 @@ class Research {
           acts: (o?.actions ?? []).map((a) => `${a.kind}:${a.hand}:${a.speed.toFixed(2)}`),
           mv: o ? [+o.move[0].toFixed(2), +o.move[1].toFixed(2)] : [0, 0],
           mk,
+          lb: this.label,
+          rp: this.rep,
         });
     };
     addEventListener('keydown', this.onKey);

@@ -185,6 +185,8 @@ const server = http.createServer(async (req, res) => {
           acts: (Array.isArray(f.acts) ? f.acts : []).slice(0, 8).map((a: unknown) => String(a).slice(0, 32)),
           mv: (Array.isArray(f.mv) ? f.mv : [0, 0]).slice(0, 2).map(num),
           mk: f.mk == null ? null : String(f.mk).slice(0, 32),
+          lb: f.lb == null ? null : String(f.lb).slice(0, 32),
+          rp: Number.isFinite(Number(f.rp)) ? Math.max(0, Math.min(1000, Math.round(Number(f.rp)))) : null,
         }));
       const ok = await db.insertResearchFrames(b.sessionId, frames);
       return send(res, ok ? 200 : 503, { stored: ok ? frames.length : 0 });
