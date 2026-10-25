@@ -497,3 +497,18 @@ Two places put a delivery instruction inside the text to be spoken:
 - **Stock calls:** regenerate only the failing ones. Options to test against the transcript check: drop the tag and rely on `style` plus capitals and punctuation; raise `stability` to about 0.35 to 0.5; or check the current ElevenLabs docs for how v3 audio tags are meant to be used. Keep the delivery as energetic as now; the user likes it.
 - **Live lines:** test which Gemini TTS request format never leaks: for example, the style only in a system instruction if TTS supports one (check the docs), a shorter "Excitedly:" prefix, or no instruction with a more energetic prebuilt voice. If none reaches 0 leaks, voice live lines with ElevenLabs instead (a low-latency model; spend at most 50% of the remaining quota), or keep them caption-only.
 - Add the transcript check as a test that runs whenever calls are regenerated.
+
+## 2026-10-25 3:22 AM CDT: the user's screenshot of build 0290893 ("something's wrong with the new character graphics, looks slightly weird")
+1v1 practice, round 2, `?cam=behind`, close range. The planner sees:
+1. **The fighters interpenetrate.** The opponent's shoulder and arm are inside the player's fighter, and their bodies overlap from shoulder to hip. 572f70d just allowed the lunge to close to 0.5 m between roots, which human-proportioned bodies with arms up cannot fit.
+   - **Fix:** body collision between fighters, using capsules for torso, head, upper arms, and thighs. A soft push-apart keeps the capsules from overlapping; contact IK targets the body surface, not a point inside it. Keep fists landing within the 10 cm metric, measured to the surface.
+   - **Metric:** maximum penetration depth between the two fighters' capsules per frame, target 0 cm (allow under 2 cm for a glove touching).
+2. **The player's fighter faces the camera instead of the opponent.** With the camera behind the player, we should see the fighter's back. Instead the torso and face are turned toward the camera and to the left. The layered torso and head yaw from the live pose looks applied in camera space without the mirror and calibration offset: the user faces the webcam, and that has to map to the fighter facing its opponent.
+   - **Fix:** apply pose yaw relative to the calibrated neutral, around the fighter's facing direction, mirrored. Clamp the layered torso yaw to ±60° and head yaw to ±70° relative to the hips.
+   - **Metric:** during idle and guard, the angle between the fighter's chest forward and the direction to the opponent stays under 30°.
+3. **Hands.** The player's hands are open with bent, claw-like wrists, not fists, and the player has **no gloves** while the opponent wears blue ones.
+   - **Fix:** closed fists (curl the finger bones), wrists straight along the forearm under IK, and matching gloves for every fighter in their color. The guard should read as a boxing guard: elbows in, gloves at the cheekbones.
+4. **Pose rate: the preview shows "6 fps GPU" again.** This is the 3:08 AM item 1, still open and the highest gameplay priority, since gestures misfire at this rate. Measure on the user's real laptop path: pose worker on its own, renderer quality off, bloom off, outlines off. Add the automatic quality step-down below 15 fps, and report what the user's machine gets.
+5. **Review loop:** add a "close range, behind camera" scene. Both fighters trade at arm's length and in a clinch-like distance, with the penetration, facing, and fist metrics above. Run it before reporting these fixed.
+
+Order: 4 (fps), then 1 to 3, then the 3:15 AM audio items.
