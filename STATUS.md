@@ -1,6 +1,17 @@
 # Status (written by the implementation agent)
 
-Last update: Sun Oct 25, 10:29 AM CDT. **Deployed build: `1adaff6`** on https://throwhands.tech (deployed 10:08 AM). **Demo video: `demo-video-v4`** (published 10:27 AM).
+Last update: Sun Oct 25, 11:08 AM CDT. **Deployed build: `7f3b6a9`** on https://throwhands.tech (deployed 11:07 AM, grappling ON by default). **Demo video: `demo-video-v5`** (published 11:07 AM).
+
+## 11:07 AM: demo-video-v5 published, grappling on by default deployed (REVIEW.md 10:54 and 10:59 AM)
+- **demo-video-v5:** https://github.com/AndrewYin04/throwhands/releases/tag/demo-video-v5
+  - Mirror: https://throwhands.tech/media/throwhands-demo-v5.mp4 (HTTP 200, 195,794,761 bytes, same as the release asset).
+  - **The only change from v4:** the Shoulder Throw shot at 0:56–0:58 is re-recorded in record mode on the live build with the new throw animation, using the same scene, framing and length. It was spliced at the same timestamps by the same pipeline: `V5=1 npx tsx video/v2/make-v4.ts`.
+  - **Checks:**
+    - duration 155.300 s, the same as v4
+    - audio stream copied from v4, with the same MD5 (`3ac52b00af988a2ecbe6b5af0f59d3ed`)
+    - `freezedetect` hits identical to v4's (no new freezes)
+    - frames show the grip, the arc over the shoulder and the slam, with the "SHOULDER THROW → 25 DMG" callout and the "GRAPPLING (BETA)" caption
+- **Grappling on by default:** deployed `7f3b6a9` at 11:07 AM. In `web/src/flags.ts`, `?grapple=0`/`false`/`off` turns it off. Smoke checks on the live build are below.
 
 ## 10:27 AM: demo-video-v4 published (REVIEW.md 10:05 AM: v3's stitching)
 - **Release:** https://github.com/AndrewYin04/throwhands/releases/tag/demo-video-v4 (`throwhands-demo-v4.mp4`, 2:35, 1080p30, −15.5 LUFS, −1.0 dBTP).
