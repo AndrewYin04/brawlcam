@@ -750,3 +750,25 @@ The user: instead of "what a fight" the same way every match, there should be a 
 - **Tests:** a unit test that the context picks the right category, and that 5 consecutive simulated match ends produce at least 4 distinct lines.
 
 **Priority:** after the grab fixes (6:00 AM). It's small and makes every match feel less repetitive, so do it before the 7:30 AM freeze if possible.
+
+## 2026-10-25 6:35 AM CDT: the user's grab target: tune on their footage until ≥ 90% detected, ≤ 5% false
+The user: "the grab is still not activating when it should be. I finally saw it activate but it took a bunch of tries." They asked you to keep testing on their footage until the grab reaches **at least 90% true positives**. They also said "5% false negative"; the planner reads that as **a false-grab rate of 5% or less** (a non-grab move detected as a grab), since 90% recall already means up to 10% misses. Targets:
+- **Recall:** at least 90% of the user's labeled grab reps detected as grab (stretch: 95%).
+- **False grabs:** at most 5% of labeled non-grab reps (every punch, block, X, palm, kick, and movement rep in all drill sessions) detected as grab. Also 0 false grabs on the 37 real clips and on the user's free-play session `ee6f97a0` (no grabs in it).
+- **No regressions:** the jab, straight, hook, uppercut, block, and palm drill numbers and `eval-gestures` must not get worse. Report them each iteration.
+
+**Data:**
+- the user's drill sessions: `fda75d56`, `2dd3adbd`, and the 10-51-07 session, in `research_frames` and `~/hacktx26/research/` (grab and throw reps, plus every non-grab rep as negatives)
+- the free-play session `ee6f97a0`
+- the downloaded clinch and uppercut clips
+
+**Not enough positives yet:** about 8 to 16 labeled grabs, too few to measure 90% reliably. So:
+- **Add a grab-only drill** (`?research=1&drills=grab&grapple=1`): 20 GRAB prompts interleaved with 10 jabs, hooks, and guard-ups as distractors, randomized. The planner will ask the user to record it twice, and to send the files.
+- **Hold out data to avoid overfitting to a few reps:** tune on the older sessions plus the clips; report final numbers on a held-out session (the next one the user records). Report recall and false-grab rate with counts (for example 27/30).
+
+**The loop:**
+- iterate (thresholds, image-space cues for the low, upward-looking camera, timing windows, hook and jab suppression during a two-arm reach), re-running `grapple-eval` plus the drill scorer each time
+- log every iteration in TESTING.md with counts
+- stop when the held-out session meets the targets
+
+**Freeze:** grappling is behind `?grapple=1`, so this tuning may continue after 7:30 AM, as long as it changes nothing in the default build (the gesture code paths that run without `grapple=1` must stay identical, as `eval-gestures` will verify). It must not delay the 10:15 AM video. Throw is next, with the same targets, once grab passes.
