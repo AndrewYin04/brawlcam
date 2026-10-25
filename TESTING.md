@@ -72,6 +72,39 @@ What changed to get here (each verified on these clips before and after):
 | Online 1v1 | 200 ms added latency | PASS (simulated) | Oct 24 9:42 PM | same | Client-side `?netlag=200` (100 ms each way): `LAG200 {"winner":2,"bActions":18,"hits":5}`, both agree. Real cellular latency not measured here. |
 | Online 1v1 | Both players on phones | PASS (viewport) | Oct 24 9:42 PM | same | 844x390 mobile viewports, round completes, no overflow, no errors. Real phones: planner check pending |
 | Online 1v1 | One desktop, one phone | PASS (viewport) | Oct 24 9:42 PM | same | 1280x720 + 390x844 |
+| Brawl | 8 browsers, 8 different fighter clips, full 2-minute round | PASS (sync) / skew noted | Oct 24 10:10 PM | `npx playwright test tests/e2e/brawl.spec.ts` | `BRAWL8 {"samples":397,"mismatches":0,"turns":[0,18,1,14,0,12,0,10],"tgChanges":[2,18,2,12,0,12,0,10],"kos":2,"ringouts":2,"respawns":2}`: same tick => identical positions, HP, knockback, KOs on all 8; shoulder turns switch target lock; final KO counts identical. Arrival skew p95 195 ms here because 8 browsers saturate this 8-core server (2-browser test: 49 ms). Pose ran at 1-4 fps per browser, so few human KOs. |
+| Brawl | 1 human + 7 bots; 3 humans + 5 bots; fighter disconnects (replaced by a bot); spectator joins mid-round | PASS | Oct 24 10:13 PM | same, `-g "1 human"` | `BRAWL_BOTS {"kos":2,"kofeed":2}`: ring-outs, respawns, and KO feed lines; disconnected fighter turns into a bot; late joiner enters as spectator |
+| Brawl | 8-fighter round on a phone-sized viewport (record FPS) | RECORDED | Oct 24 10:10 PM | same | 844x390 mobile viewport on this CPU-only server (SwiftShader): VRM fighters 2-3 fps, capsules 48-60 fps. Not representative of a phone GPU; real-phone FPS: planner check pending |
+| Supers | Super fires only with a full meter | PASS | Oct 24 10:16 PM | `npx playwright test tests/e2e/supers.spec.ts` | `SUPER_GATE {"xGestures":7,"shields":0}`: X gestures recognized, no super with an empty meter |
+| Supers | Shield blocks all damage for 3 s; cooldown respected | PASS | Oct 24 10:16 PM | same | `SHIELD {"shields":1,"duringShield":[[0,true]x6]}`: every hit during the shield did 0 damage; with the meter held full, no second shield within the 10 s cooldown in 35 s of X gestures |
+| Supers | Energy blast travels and can be blocked | PASS | Oct 24 10:19 PM | same | `BLAST {"path":[[0,-0.25],[0,0.05]],"blasts":[[20,false],[4,true]]}`; projectile moves across frames; blocked = 4 HP, unblocked = 20 |
+| Fighter Forge | Valid prompt (recorded Meta response) | PASS | Oct 24 10:18 PM | `npx playwright test tests/e2e/features.spec.ts` | Name/story/moves/card shown; card color becomes the fighter's color in the match (`me.color` equals saved color, name "King Magma") |
+| Fighter Forge | Valid prompt (live Meta) | PASS | Oct 24 9:19 PM | `npx tsx tests/tools/forge-live.ts "volcano samurai frog"` | `FORGE 13.0s {"source":"meta","image":true,"name":"Magma Ribbit Ronin"}` |
+| Fighter Forge | Empty prompt | PASS | Oct 24 10:16 PM | features | House fighter + "Type an idea..." (real server, no AI call) |
+| Fighter Forge | Offensive prompt (recorded refusal) | PASS | Oct 24 10:16 PM | features | Polite toast "Let's forge a different fighter..." + house fighter |
+| Fighter Forge | Meta API erroring | PASS | Oct 24 10:16 PM | features | 500 => house fighter; practice still starts |
+| Fighter Forge | Longer than 15 s | PASS | Oct 24 10:16 PM | features | Spinner text, fallback in < 17 s |
+| Commentator | Lines arrive during play; mute/unmute | PASS | Oct 24 10:16 PM | features | Lines >= 3.4 s apart, shown on screen; muted lines not spoken; unmute persists |
+| Commentator | Gemini rate-limited or down | PASS | Oct 24 10:16 PM | features | 429 => no toast, no errors, match continues |
+| Leaderboard and Elo | Page loads (real Tiger Data); unreachable => friendly error; empty | PASS | Oct 24 10:18 PM | features | Table rendered; 503 => "taking a breather"; empty => "No ranked fights yet"; practice still starts |
+| Leaderboard and Elo | Updates after an online match | PASS | Oct 24 9:10 PM | `npx playwright test online` | `elo_delta {"1":-16,"2":16}` from Tiger Data; players table rows updated |
+| Store | Browse, mock purchase, equip shows in game, opt-in persists | PASS | Oct 24 10:18 PM | features | 8 skins with "Demo: no charge"; Buy => Equip => Equipped; in-game color `#ffc53d`; consent persists across reload |
+| Motion data dashboard | Opted-in match writes samples (counts update); opted-out writes none; export JSON | PASS | Oct 24 10:16 PM | features | `MOTION {"sent":1,"before":1,"after":2}`; 0 requests when opted out; export has 33-point frames and no player identifiers |
 | Online 1v1 | Invalid code | PASS (protocol) | Oct 24 9:03 PM | `npx tsx tests/tools/ws-smoke.ts` | `invalid code -> room_not_found` (UI test pending) |
 
 Paths not yet run are listed in `STATUS.md` until they have a row here.
+
+## Bugs found by these tests (reproduced first, fixed, re-run)
+
+| Bug | Repro | Root cause | Fix | Regression test |
+|---|---|---|---|---|
+| Brawl: players walked out of the ring by themselves | `npx tsx tests/unit/brawl-edge.ts`: 4 self ring-outs in 20 s of noisy movement, no hits | Walking was not limited at the edge; only knockback should ring you out | Walking stops 0.25 m inside the edge | `tests/unit/brawl-edge.ts` (now 0) |
+| Late joiner stuck in the lobby while a match runs | `npx tsx tests/unit/late-join.ts`: no `match_start` | Server only sent `match_start` at match start | Send it to people who join mid-match (spectators) | `tests/unit/late-join.ts`, brawl spec |
+| Brawl: a disconnected fighter was not replaced by a bot | brawl spec timed out waiting for `bot=1` | `leave()` removed the client before looking up its slot | Pass the slot explicitly | brawl spec |
+| Chosen color and name ignored in game | features spec: expected `#ffc53d`, got `#ff3d6e` | Game read `brawlcam.*` keys, Store/Forge wrote `throwhands.*` | One key set + migration | features spec (Forge, Store) |
+| Energy blast hit instantly at duel range (no visible travel) | supers spec: 1 projectile position | Spawned 0.5 m out with a 0.55 m hit radius | Spawn at the hands, 6 m/s, 0.4 m radius | supers spec |
+| Camera-denied test used the wrong failure | headless without permission gives `NotSupportedError`, not a denial | Test setup | `--use-fake-ui-for-media-stream=deny` (real `NotAllowedError`) | firstload spec |
+
+## Known intermittent
+
+- `local2p` "one player leaves" failed once inside an 18-minute full-suite run on a loaded machine (a 15 s wait), then passed 3/3 when repeated alone (`--repeat-each=3`). Not reproduced on demand yet; traces are kept on the next full run.
