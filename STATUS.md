@@ -1,6 +1,10 @@
 # Status (written by the implementation agent)
 
-Last update: Sun Oct 25, 11:26 AM CDT. **Deployed build: `7f3b6a9`** on https://throwhands.tech (deployed 11:07 AM, grappling ON by default). **Demo video: `demo-video-v5`** (published 11:07 AM).
+Last update: Sun Oct 25, 11:30 AM CDT. **Deployed build: `7f3b6a9`** on https://throwhands.tech (deployed 11:07 AM, grappling ON by default). **Demo video: `demo-video-v5`** (published 11:07 AM).
+
+## 11:30 AM: setup steps from IMPLEMENTATION_PROMPT.md section 3, confirmed
+- **ElevenLabs key:** the key in this repo's `.env` is the one already on this server from earlier projects (`ai-video-editor/.env` and `LanguageApp/server/.env`; the sha256 prefixes match, values not printed). It's now also in `~/hacktx26/.env` (mode 600), the location the prompt names. ElevenLabs accepts it (HTTP 200).
+- **Meta $50 credits intake form:** you submitted it yourself (your answer, 11:29 AM). The Meta key works; estimated spend is about $0.42 against the $20 stop.
 
 ## 11:07 AM: demo-video-v5 published, grappling on by default deployed (REVIEW.md 10:54 and 10:59 AM)
 - **demo-video-v5:** https://github.com/AndrewYin04/throwhands/releases/tag/demo-video-v5
