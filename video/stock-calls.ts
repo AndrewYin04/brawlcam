@@ -30,6 +30,8 @@ export const CALLS: Record<string, string[]> = {
   draw: ["IT'S A DRAW!"],
   time: ['TIME!'],
   throw: ['SHOULDER THROW!'],
+  meter_ready: ['THE SUPER IS READY!', 'METER IS FULL!'],
+  filler: ['KEEP THOSE HANDS UP!', 'PRESSURE, PRESSURE!', 'THE CROWD IS LOVING THIS!', 'WHAT A FIGHT WE HAVE!', 'WATCH THE JAB!', 'BEAUTIFUL MOVEMENT!'],
   clinch: ['CLINCH!'],
 };
 const OUT = path.join(ROOT, 'web/public/calls');

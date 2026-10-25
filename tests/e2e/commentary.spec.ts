@@ -26,5 +26,11 @@ test('announcer: instant stock calls on big moments, within the spoken budget, n
   // Spoken budget: at most 8 non-essential calls in any 60 s window (this run is under a minute).
   expect(per.length).toBeLessThanOrEqual(8);
   expect(tts).toBe(0);
+  // Audible: the context is running, the voice bus is up, and the calls actually started playing.
+  const audio = await page.evaluate(() => (window as any).__brawl.audio());
+  console.log('AUDIO', JSON.stringify(audio));
+  expect(audio.state).toBe('running');
+  expect(audio.voiceGain).toBeGreaterThan(0);
+  expect(audio.played).toBeGreaterThanOrEqual(2);
   await b.close();
 });

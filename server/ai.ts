@@ -193,7 +193,8 @@ export async function speak(text: string, mood = 'like an excited boxing play-by
           method: 'POST',
           headers: { 'x-goog-api-key': key, 'content-type': 'application/json' },
           body: JSON.stringify({
-            contents: [{ role: 'user', parts: [{ text: `You are a live fight commentator in a packed arena. Say this ${mood}: ${text}` }] }],
+            // Documented short style form ("Say cheerfully: ..."); the long role-play prompt was read aloud.
+            contents: [{ role: 'user', parts: [{ text: `Say ${mood.split(',')[0]}: ${text}` }] }],
             generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Fenrir' } } } },
           }),
         },

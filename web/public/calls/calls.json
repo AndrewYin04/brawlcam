@@ -195,6 +195,42 @@
     "text": "SHOULDER THROW!"
    }
   ],
+  "meter_ready": [
+   {
+    "id": "meter_ready_0",
+    "text": "THE SUPER IS READY!"
+   },
+   {
+    "id": "meter_ready_1",
+    "text": "METER IS FULL!"
+   }
+  ],
+  "filler": [
+   {
+    "id": "filler_0",
+    "text": "KEEP THOSE HANDS UP!"
+   },
+   {
+    "id": "filler_1",
+    "text": "PRESSURE, PRESSURE!"
+   },
+   {
+    "id": "filler_2",
+    "text": "THE CROWD IS LOVING THIS!"
+   },
+   {
+    "id": "filler_3",
+    "text": "WHAT A FIGHT WE HAVE!"
+   },
+   {
+    "id": "filler_4",
+    "text": "WATCH THE JAB!"
+   },
+   {
+    "id": "filler_5",
+    "text": "BEAUTIFUL MOVEMENT!"
+   }
+  ],
   "clinch": [
    {
     "id": "clinch_0",

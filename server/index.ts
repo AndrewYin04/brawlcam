@@ -24,7 +24,7 @@ const rooms = new RoomManager({
   async commentary(summary, voice, room) {
     if (room.aiFixtures) return { text: 'Fixture commentary: what a punch!', source: 'fixture', audio: null };
     const line = await ai.commentaryLine(summary);
-    const audio = voice && line.source !== 'template' ? await ai.speak(line.text, ai.moodFor(summary)) : null;
+    const audio = voice && process.env.LIVE_TTS === '1' && line.source !== 'template' ? await ai.speak(line.text, ai.moodFor(summary)) : null;
     return { text: line.text, source: line.source, audio: audio ? `data:${audio.mime};base64,${audio.b64}` : null };
   },
   async onMatchOver(room: Room, m: MatchSummary) {

@@ -23,6 +23,9 @@ export function setMuted(m: boolean) {
 }
 
 let currentAudio: HTMLAudioElement | null = null;
+/** Live AI lines are captions; spoken commentary comes from the verified stock calls. ?livevoice=1 re-enables Gemini TTS
+ *  (its delivery prompt was read aloud in the user's test and could not be re-verified: free-tier TTS quota). */
+const LIVE_VOICE = typeof location !== 'undefined' && new URLSearchParams(location.search).has('livevoice');
 /** Set by the app: false while the announcer just called a big moment or the spoken-line budget is used up. */
 export let voiceAllowed: () => boolean = () => true;
 export function setVoiceGate(f: () => boolean) {
@@ -41,7 +44,7 @@ export function playLine(text: string, audio: string | null, source = '') {
   // Voiced only with real TTS audio; otherwise the line is a caption (the flat browser voice is gone).
   let spoken: 'tts' | 'browser' | 'muted' | 'none' = 'none';
   if (muted) spoken = 'muted';
-  else if (audio && voiceAllowed()) {
+  else if (audio && LIVE_VOICE && voiceAllowed()) {
     try {
       currentAudio?.pause();
       currentAudio = new Audio(audio);
@@ -76,7 +79,7 @@ export class Commentator {
     const summary = summarize(this.buf, snap);
     this.buf = [];
     this.inflight = true;
-    fetch('/api/commentary', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ summary, voice: !muted && this.mayVoice() }) })
+    fetch('/api/commentary', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ summary, voice: LIVE_VOICE && !muted && this.mayVoice() }) })
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
         if (j?.text) playLine(j.text, j.audio ?? null, j.source);

@@ -239,6 +239,11 @@ export function loadBuffer(url: string): Promise<AudioBuffer | null> {
   return p;
 }
 let currentVoice: AudioBufferSourceNode | null = null;
+/** Diagnostics for tests: context state, voice bus gain, calls actually started. */
+export const audioDiag = { played: 0, lastError: '' };
+export function audioState() {
+  return { state: ctx?.state ?? 'none', voiceGain: voiceBus?.gain.value ?? null, crowdGain: crowdBus?.gain.value ?? null, played: audioDiag.played, lastError: audioDiag.lastError };
+}
 /** Play a pre-rendered announcer call on the voice bus (cuts off the previous one). Returns its duration. */
 export function playVoiceBuffer(buf: AudioBuffer): number {
   if (!ctx || !buses()) return 0;
@@ -250,37 +255,69 @@ export function playVoiceBuffer(buf: AudioBuffer): number {
   src.connect(voiceBus!);
   src.start();
   currentVoice = src;
+  audioDiag.played++;
+  duckCrowd(buf.duration);
+  if (ctx.state !== 'running') {
+    audioDiag.lastError = 'context ' + ctx.state;
+    void ctx.resume();
+  }
   return buf.duration;
 }
 
-// Crowd: a looping noise bed shaped like a murmuring arena, plus roars, "ooh"s and a chant, all synthesized.
+// Crowd: real crowd recordings (ElevenLabs sound effects, /crowd/): a looping arena bed, roars, "ooh"s, a gasp, a
+// chant. The crowd ducks about 8 dB under each announcer call so it never covers it.
 let crowdBed: { src: AudioBufferSourceNode; gain: GainNode } | null = null;
-let chantTimer = 0;
-function noiseBuffer(sec: number) {
-  const b = ctx!.createBuffer(1, Math.floor(ctx!.sampleRate * sec), ctx!.sampleRate);
-  const d = b.getChannelData(0);
-  let last = 0;
-  for (let i = 0; i < d.length; i++) {
-    // Brown-ish noise with slow random swells (many voices).
-    last = last * 0.97 + (Math.random() * 2 - 1) * 0.03;
-    d[i] = last * 8 * (0.7 + 0.3 * Math.sin(i / (ctx!.sampleRate * 0.37)) * Math.sin(i / (ctx!.sampleRate * 1.3)));
+let chantNode: { src: AudioBufferSourceNode; gain: GainNode } | null = null;
+let duckGain: GainNode | null = null;
+const CROWD = (id: string) => `/crowd/${id}.mp3`;
+for (const id of ['bed', 'roar_0', 'roar_1', 'roar_2', 'ooh_0', 'ooh_1', 'gasp_0', 'chant_0']) void loadBuffer(CROWD(id));
+function duckBus() {
+  if (!ctx || !buses()) return null;
+  if (!duckGain) {
+    duckGain = ctx.createGain();
+    duckGain.connect(crowdBus!);
   }
-  return b;
+  return duckGain;
+}
+/** Duck the crowd under a voice line of `sec` seconds. */
+export function duckCrowd(sec: number) {
+  const d = duckBus();
+  if (!d || !ctx) return;
+  const t = ctx.currentTime;
+  d.gain.cancelScheduledValues(t);
+  d.gain.setValueAtTime(d.gain.value, t);
+  d.gain.linearRampToValueAtTime(0.4, t + 0.08); // about -8 dB
+  d.gain.setValueAtTime(0.4, t + sec);
+  d.gain.linearRampToValueAtTime(1, t + sec + 0.4);
+}
+function playCrowd(id: string, gain = 1) {
+  const d = duckBus();
+  if (!d || !ctx) return;
+  void loadBuffer(CROWD(id)).then((buf) => {
+    if (!buf || !ctx) return;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const g = ctx.createGain();
+    g.gain.value = gain;
+    src.connect(g).connect(d);
+    src.start();
+  });
 }
 export function crowdStart() {
-  if (!ctx || !buses() || crowdBed) return;
-  const src = ctx.createBufferSource();
-  src.buffer = noiseBuffer(6);
-  src.loop = true;
-  const bp = ctx.createBiquadFilter();
-  bp.type = 'bandpass';
-  bp.frequency.value = 650;
-  bp.Q.value = 0.5;
+  if (!ctx || crowdBed) return;
+  const d = duckBus();
+  if (!d) return;
   const gain = ctx.createGain();
-  gain.gain.value = 0.18;
-  src.connect(bp).connect(gain).connect(crowdBus!);
-  src.start();
+  gain.gain.value = 0.55;
+  const src = ctx.createBufferSource();
+  src.loop = true;
+  src.connect(gain).connect(d);
   crowdBed = { src, gain };
+  void loadBuffer(CROWD('bed')).then((buf) => {
+    if (!buf || !crowdBed || crowdBed.src !== src) return;
+    src.buffer = buf;
+    src.start();
+  });
 }
 export function crowdStop() {
   try {
@@ -289,54 +326,42 @@ export function crowdStop() {
   crowdBed = null;
   crowdChant(false);
 }
-/** Swell the crowd for a big moment (0..1). */
+/** A real crowd roar for a big moment (0..1 picks the size). */
 export function crowdRoar(level = 1) {
-  if (!ctx || !crowdBed) return;
-  const g = crowdBed.gain.gain;
-  const t = ctx.currentTime;
-  g.cancelScheduledValues(t);
-  g.setValueAtTime(g.value, t);
-  g.linearRampToValueAtTime(0.18 + 0.75 * level, t + 0.12);
-  g.exponentialRampToValueAtTime(0.18, t + 1.4 + level);
+  if (level < 0.55) return;
+  playCrowd(`roar_${Math.floor(Math.random() * 3)}`, 0.5 + 0.5 * level);
 }
-/** Crowd "ooh" (blocked heavy hit, near miss): a falling vowel-like noise sweep. */
+/** Crowd "ooh" (blocked heavy hit, near miss). */
 export function crowdOoh() {
-  if (!ctx || !buses()) return;
-  const t = ctx.currentTime;
-  const src = ctx.createBufferSource();
-  src.buffer = noiseBuffer(1);
-  const bp = ctx.createBiquadFilter();
-  bp.type = 'bandpass';
-  bp.Q.value = 6;
-  bp.frequency.setValueAtTime(520, t);
-  bp.frequency.exponentialRampToValueAtTime(300, t + 0.8);
-  const g = ctx.createGain();
-  env(g, t, 0.08, 0.9, 0.7);
-  src.connect(bp).connect(g).connect(crowdBus!);
-  src.start(t);
-  src.stop(t + 1);
+  playCrowd(`ooh_${Math.floor(Math.random() * 2)}`, 0.9);
 }
-/** Rhythmic crowd chant while someone is on low HP. */
+/** Crowd gasp (guard break). */
+export function crowdGasp() {
+  playCrowd('gasp_0', 1);
+}
+/** Rhythmic crowd chant while someone is on low HP (looped recording). */
 export function crowdChant(on: boolean) {
-  clearInterval(chantTimer);
-  chantTimer = 0;
-  if (!on || !ctx) return;
-  let n = 0;
-  chantTimer = window.setInterval(() => {
-    if (!ctx || !buses()) return;
-    const t = ctx.currentTime;
-    const src = ctx.createBufferSource();
-    src.buffer = noiseBuffer(0.4);
-    const bp = ctx.createBiquadFilter();
-    bp.type = 'bandpass';
-    bp.Q.value = 4;
-    bp.frequency.value = n++ % 2 ? 340 : 420;
-    const g = ctx.createGain();
-    env(g, t, 0.03, 0.5, 0.25);
-    src.connect(bp).connect(g).connect(crowdBus!);
-    src.start(t);
-    src.stop(t + 0.4);
-  }, 480);
+  if (!on) {
+    try {
+      chantNode?.src.stop();
+    } catch {}
+    chantNode = null;
+    return;
+  }
+  if (chantNode || !ctx) return;
+  const d = duckBus();
+  if (!d) return;
+  const src = ctx.createBufferSource();
+  src.loop = true;
+  const gain = ctx.createGain();
+  gain.gain.value = 0.6;
+  src.connect(gain).connect(d);
+  chantNode = { src, gain };
+  void loadBuffer(CROWD('chant_0')).then((buf) => {
+    if (!buf || !chantNode || chantNode.src !== src) return;
+    src.buffer = buf;
+    src.start();
+  });
 }
 /** Short arena music sting between rounds (synthesized). */
 export function roundSting() {

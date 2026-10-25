@@ -365,6 +365,7 @@ export class MatchView {
       this.vfx.setProjectiles(s.p, (id) => this.color(id), owners);
       this.updateCamera(dt, s);
       this.updateHud(s);
+      this.announcer.tick(s, this.opts.localIds);
     }
     this.vfx.update(animDt);
     this.arena.update(this.time);

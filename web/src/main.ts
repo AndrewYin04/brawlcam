@@ -32,6 +32,7 @@ export const hooks = {
   localActions: [] as { t: number; kind: string; hand: string; player: number }[],
   calibrated: false,
   announcer: () => view?.announcer.log ?? [],
+  audio: () => sfx.audioState(),
   motionStream: () => ({ sent: motion.streamSent }),
   tutorial: null as any,
   snapshot: null as unknown,
@@ -88,7 +89,11 @@ let loopStarted = false;
 let resultsTimer = 0;
 const commentator = new Commentator();
 // Live AI lines are voiced only when the announcer hasn't just called a big moment and the spoken budget allows.
-commentator.mayVoice = () => !!view && !view.announcer.spokeWithin(2.5) && view.announcer.spokenLastMinute() < 6;
+commentator.mayVoice = () => !!view && !view.announcer.spokeWithin(3) && view.announcer.spokenLastMinute() < 8;
+// Browsers start audio suspended until a user gesture: resume on the first tap/click/key anywhere (links straight
+// into a match or a room never pass through the menu click that used to resume it).
+for (const ev of ['pointerdown', 'keydown', 'touchstart'] as const) addEventListener(ev, () => sfx.audioResume(), { passive: true });
+document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && sfx.audioResume());
 setVoiceGate(() => commentator.mayVoice()); // online rooms' server lines follow the same budget
 sfx.setVoiceMuted(isMuted());
 const motion = new MotionRecorder();

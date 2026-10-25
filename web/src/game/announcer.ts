@@ -103,7 +103,7 @@ export class Announcer {
       }
       case 'guard_break':
         this.say('guard_break');
-        sfx.crowdRoar(0.8);
+        sfx.crowdGasp();
         break;
       case 'cage':
         if (e.speed > 3) {
@@ -135,6 +135,25 @@ export class Announcer {
         break;
     }
   }
+
+  private meterReady = new Set<number>();
+  /** Per frame: "super ready" when your meter fills, and a short filler call when the fight has gone quiet. */
+  tick(snap: Snapshot | null, localIds: number[]) {
+    if (!snap || snap.phase !== 'fight') return;
+    for (const f of snap.f) {
+      if (!localIds.includes(f.id)) continue;
+      if (f.meter >= 100 && !this.meterReady.has(f.id)) {
+        this.meterReady.add(f.id);
+        this.say('meter_ready');
+      } else if (f.meter < 100) this.meterReady.delete(f.id);
+    }
+    const now = performance.now() / 1000;
+    if (now - this.lastAt > 9 && now - this.lastFiller > 9) {
+      this.lastFiller = now;
+      this.say('filler');
+    }
+  }
+  private lastFiller = 0;
 
   private setChant(on: boolean) {
     if (on === this.chant) return;
