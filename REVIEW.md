@@ -926,3 +926,10 @@ The user: at 0:56–0:58 of v4 the Shoulder Throw is still the old animation; th
 - **Only change:** re-record that single throw shot with the current deployed throw animation, in record mode with the same framing and length, and splice it into v4 at exactly the same timestamps with the existing `make-v4` pipeline. **Change nothing else:** no voiceover, no music, and no other shots. Keep the "SHOULDER THROW → 25 DMG" callout and the "GRAPPLING (BETA)" caption.
 - **Checks before publishing:** `freezedetect` reports no new freezes, the duration matches v4 (2:35), and the audio is a copy of v4's.
 - **Publish as `demo-video-v5`** (release plus the site mirror `https://throwhands.tech/media/throwhands-demo-v5.mp4`) **by 11:10 AM**, and post the link in STATUS.md immediately. If it can't be done by 11:10, **stop**: v4 is already on YouTube and Devpost, and the hackathon deadline is 11:30 AM.
+
+### 10:59 AM: the user: grappling ON by default. Deploy before 11:25 AM (hacking ends 11:30)
+The user decided to turn grappling on by default. The rollback's only failure was the 8-browser brawl crashing from server swap pressure (environmental); conditions 1 and 2 passed.
+- **Change:** in `web/src/flags.ts`, `GRAPPLE` defaults to **on**; `?grapple=0`, `false`, or `off` turn it off (the same switch as `5487223`). It's one line. Do it **right now, before or alongside v5**, deploy, and post the deployed build in STATUS.md **by 11:25 AM**.
+- **Smoke-check on the live default build** (no full suite; there's no time): a practice match starts, a jab registers, a grab registers through the guard, the drills page loads, and there are no console errors. Then re-run only the 8-browser online brawl test with no video encode running, and post the result.
+- After deploying, update README and `submission/devpost.md`: "Grappling (beta): on by default; add `?grapple=0` to turn it off." The planner will update the live Devpost text.
+- If it isn't deployed by 11:25, leave it opt-in. **Nothing may be deployed after 11:30** except few-line bug fixes.
