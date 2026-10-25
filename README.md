@@ -13,7 +13,8 @@ Built at HackTX 2026 (October 24 to 25, 2026). **Built with Claude Code** (AI co
 - **Online 1v1**: create a room, share the link or 4-letter code, fight a friend on any device. Spectators can watch and send cheers.
 - **Brawl**: up to 8 fighters in one ring, bots fill empty slots, Smash-style knockback and ring-outs, live KO feed.
 - **Winner stays on**: up to 8 friends, two fight at a time, the winner stays on.
-- **Super moves**: uppercut (fist driven up), shield (forearms crossed in an X), energy blast (both palms pushed forward), when your meter is full.
+- **Guard**: both forearms up in front of the face blocks 90% of damage, but a GUARD meter drains while you hold it and when hits land on it; let it empty and your guard breaks (dizzy for 2 s).
+- **Super moves**: uppercut (fist driven up), Iron Wall (forearms crossed in an X above the face, elbows up: 2.5 s unbreakable guard that counters the first hit), energy blast (both palms pushed forward), when your meter is full.
 - **Fighter Forge**: describe a fighter; Meta's Muse Spark writes the name, story, and moves, Muse Image paints the card, and your suit takes the card's colors.
 - **Live commentator**: Gemini calls the fight every few seconds, spoken with Gemini TTS.
 - **Rivalry card** after online matches, **Elo leaderboard** (Tiger Data), **store** (mock purchases, "Demo: no charge"), and an opt-in **motion data** program with an explicit consent screen.

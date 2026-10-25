@@ -86,6 +86,19 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 .meter-label { position: absolute; inset: 0; font: 700 8px/10px system-ui; letter-spacing: 2px; text-align: center; color: rgba(255, 255, 255, 0.8); }
 .meter.full .meter-label { color: #fff; }
 @keyframes shimmer { to { background-position: -200% 0; } }
+/* Guard meter (under the HP bar): blue -> yellow -> red as it drains; flashes when broken; gold during Iron Wall. */
+.guard { position: relative; height: 8px; width: 55%; background: rgba(0, 0, 0, 0.5); border: 1px solid rgba(255, 255, 255, 0.35); border-radius: 4px; overflow: hidden; margin-top: 4px; }
+.side.right .guard { margin-left: auto; }
+.guard-fill { height: 100%; width: 100%; background: #4aa8ff; transition: width 0.1s, background-color 0.2s; }
+.side.right .guard-fill { margin-left: auto; }
+.guard[data-level='mid'] .guard-fill { background: #ffd23d; }
+.guard[data-level='lo'] .guard-fill { background: #ff4a3d; }
+.guard[data-level='iron'] .guard-fill { background: linear-gradient(90deg, #ffe08a, #ffc53d, #ffe08a); background-size: 200% 100%; animation: shimmer 0.8s linear infinite; }
+.guard[data-level='broken'] { border-color: #ff4a3d; animation: guardflash 0.25s steps(2) infinite; }
+.guard.up { border-color: rgba(255, 255, 255, 0.8); }
+.guard-label { position: absolute; inset: 0; font: 700 7px/8px system-ui; letter-spacing: 2px; text-align: center; color: rgba(255, 255, 255, 0.85); text-shadow: 0 0 2px #000; }
+.guard[data-level='broken'] .guard-label { color: #fff; }
+@keyframes guardflash { 50% { background: rgba(255, 74, 61, 0.75); } }
 .pips { margin-top: 4px; height: 12px; }
 .pip { display: inline-block; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--gold); margin: 0 2px; }
 .pip.won { background: var(--gold); }

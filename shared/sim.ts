@@ -45,8 +45,18 @@ export interface Fighter extends FighterInit {
   vy: number;
   vz: number;
   yaw: number;
+  /** Guard is up this tick (the block gesture, guard meter > 0, not stunned or dizzy). */
   blocking: boolean;
-  shieldUntil: number;
+  /** Guard meter 0..TUNING.guardMax. Drains while guarding and on blocked hits; breaking it makes you dizzy. */
+  guard: number;
+  /** Last time the guard was up (or took a blocked hit); refill starts TUNING.guardRefillDelay after this. */
+  guardUpAt: number;
+  /** Guard-break dizzy: no attacks, no guard, normal damage, until this time. 0 when not dizzy. */
+  dizzyUntil: number;
+  /** Iron Wall super (unbreakable guard) active until this time. */
+  ironWallUntil: number;
+  /** Has this Iron Wall already countered an attacker? (Only the first attacker is countered.) */
+  ironCountered: boolean;
   stunUntil: number;
   invulnUntil: number;
   kb: number; // knockback percent (Brawl)
@@ -82,11 +92,18 @@ export interface Projectile {
   ttl: number;
 }
 
+export type SuperKind = 'uppercut' | 'ironwall' | 'blast';
+
 export type SimEvent =
-  | { type: 'hit'; attacker: number; target: number; damage: number; kind: string; blocked: boolean; shielded: boolean; isSuper: boolean; x: number; y: number; z: number; speed: number }
+  /** blocked: hit a normal guard (10% damage, guard drained). shielded: hit an Iron Wall (0 damage). guard: target's guard meter after the hit. */
+  | { type: 'hit'; attacker: number; target: number; damage: number; kind: string; blocked: boolean; shielded: boolean; isSuper: boolean; x: number; y: number; z: number; speed: number; guard: number }
   | { type: 'whiff'; attacker: number; kind: string; hand: Hand }
-  | { type: 'super'; id: number; kind: 'uppercut' | 'shield' | 'blast' }
-  | { type: 'super_denied'; id: number; kind: 'uppercut' | 'shield' | 'blast'; reason: 'meter' | 'cooldown' }
+  | { type: 'super'; id: number; kind: SuperKind }
+  | { type: 'super_denied'; id: number; kind: SuperKind; reason: 'meter' | 'cooldown' }
+  /** Fighter `id`'s guard meter hit 0: bubble shatters, `id` is dizzy for TUNING.guardBreakDizzy s. attacker = whose blocked hit broke it (null if it ran dry from holding). x/y/z = bubble centre. */
+  | { type: 'guard_break'; id: number; attacker: number | null; x: number; y: number; z: number }
+  /** Fighter `id`'s Iron Wall countered `attacker`: attacker takes `damage` and staggers. */
+  | { type: 'iron_counter'; id: number; attacker: number; damage: number }
   | { type: 'ko'; attacker: number | null; target: number; kind: string; ringout: boolean }
   | { type: 'respawn'; id: number }
   | { type: 'round_start'; n: number }
@@ -136,20 +153,34 @@ export const TUNING = {
   reach: { jab: 1.75, hook: 1.6, uppercut: 1.6, kick: 1.95, palm: 0, xshield: 0 } as Record<ActionKind, number>,
   speedMin: 1.5, // m/s, maps to 5 HP
   speedMax: 6.0, // m/s, maps to 15 HP
-  blockFactor: 0.2,
+  // Guard (block gesture). Blocked hits deal blockFactor of the damage and drain the guard meter.
+  blockFactor: 0.1,
+  guardMax: 100,
+  guardDrainPerSec: 20, // while held: empties in 5 s
+  guardRefillPerSec: 25,
+  guardRefillDelay: 0.5, // s with the arms down before the meter refills
+  /** Extra guard drained per blocked hit, by hit kind (plain uppercut is not in the planner's list; it drains like a hook). */
+  guardHitDrain: { jab: 10, hook: 15, uppercut: 15, kick: 20, super_uppercut: 60, blast: 50 } as Record<string, number>,
+  guardBreakDizzy: 2, // s dizzy after a guard break: no attacks, no guard, normal damage
+  guardAfterBreak: 30, // guard meter when the dizzy ends
+  dizzyMoveScale: 0.4, // walking speed while dizzy
+  // Iron Wall super (X-cross with a full meter): unbreakable guard, 0 damage, no guard drain; counters the first attacker.
+  ironWallSeconds: 2.5,
+  ironCounterDamage: 10,
+  ironCounterStagger: 0.6, // s the countered attacker is stunned
+  ironCounterPush: 1.6,
   meterPerHit: 12,
   meterPerBlockedHit: 4,
   meterPerTaken: 8,
   handCooldown: 0.28,
   kickCooldown: 0.6,
-  superCooldown: { uppercut: 6, shield: 10, blast: 6 },
+  superCooldown: { uppercut: 6, ironwall: 10, blast: 6 } as Record<SuperKind, number>,
   superUppercutDamage: 25,
   superUppercutLunge: 3.2,
   blastDamage: 20,
   blastSpeed: 6,
   blastHitRadius: 0.4,
   blastSpawn: 0.3,
-  shieldSeconds: 3,
   stunSeconds: 0.22,
   slowmoSuper: 1.2,
   slowmoKO: 1.6,
@@ -212,7 +243,11 @@ export class Sim {
       vz: 0,
       yaw: 0,
       blocking: false,
-      shieldUntil: 0,
+      guard: TUNING.guardMax,
+      guardUpAt: -9,
+      dizzyUntil: 0,
+      ironWallUntil: 0,
+      ironCountered: false,
       stunUntil: 0,
       invulnUntil: 0,
       kb: 0,
@@ -321,7 +356,7 @@ export class Sim {
       f.meter = this.round === 1 ? this.cfg.meterStart : Math.max(f.meter, this.cfg.meterStart);
       f.kb = 0;
       f.alive = true;
-      f.shieldUntil = 0;
+      this.resetDefense(f);
       f.stunUntil = 0;
       f.invulnUntil = 0;
       f.cd = {};
@@ -332,6 +367,15 @@ export class Sim {
     this.phase = 'countdown';
     this.phaseUntil = this.t + this.cfg.countdownSeconds;
     this.emit({ type: 'round_start', n: this.round });
+  }
+
+  private resetDefense(f: Fighter) {
+    f.blocking = false;
+    f.guard = TUNING.guardMax;
+    f.guardUpAt = -9;
+    f.dizzyUntil = 0;
+    f.ironWallUntil = 0;
+    f.ironCountered = false;
   }
 
   private emit(e: SimEvent) {
@@ -403,9 +447,25 @@ export class Sim {
     this.faceTarget(f, false, dt);
 
     const stunned = this.t < f.stunUntil;
-    // Holding the X with a full meter fires the Shield, even right after being hit (it is a defensive move).
-    if (fighting && inp.present && inp.xshield && f.meter >= 100 && this.cdReady(f, 'shield')) this.trySuper(f, 'shield');
-    f.blocking = fighting && inp.present && !stunned && (inp.blocking || (inp.xshield && f.meter < 100));
+    // Dizzy ends: the guard comes back at guardAfterBreak (and refills normally after the usual delay).
+    if (f.dizzyUntil > 0 && this.t >= f.dizzyUntil) {
+      f.dizzyUntil = 0;
+      f.guard = Math.max(f.guard, TUNING.guardAfterBreak);
+      f.guardUpAt = this.t;
+    }
+    const dizzy = f.dizzyUntil > 0;
+    // Holding the X with a full meter fires the Iron Wall, even right after being hit (it is a defensive move). Not while dizzy.
+    if (fighting && inp.present && inp.xshield && !dizzy && f.meter >= 100 && this.cdReady(f, 'ironwall')) this.trySuper(f, 'ironwall');
+    // Guard: the block gesture (or an X without a full meter, which reads as a block). The Iron Wall replaces it while active.
+    const wantGuard = inp.blocking || (inp.xshield && f.meter < 100);
+    f.blocking = fighting && inp.present && !stunned && !dizzy && this.t >= f.ironWallUntil && wantGuard && f.guard > 0;
+    if (f.blocking) {
+      f.guard -= TUNING.guardDrainPerSec * dt;
+      f.guardUpAt = this.t;
+      if (f.guard <= 0) this.breakGuard(f, null);
+    } else if (!dizzy && this.t - f.guardUpAt >= TUNING.guardRefillDelay) {
+      f.guard = Math.min(TUNING.guardMax, f.guard + TUNING.guardRefillPerSec * dt);
+    }
 
     const walkFromX = f.x;
     const walkFromZ = f.z;
@@ -429,7 +489,7 @@ export class Sim {
         // strafe: +1 moves to the fighter's own left (counterclockwise around the target)
         const lx = fz;
         const lz = -fx;
-        const sp = TUNING.moveSpeed * (f.blocking ? 0.5 : 1);
+        const sp = TUNING.moveSpeed * (f.blocking ? 0.5 : 1) * (f.dizzyUntil > 0 ? TUNING.dizzyMoveScale : 1);
         let mx = (fx * fwd + lx * strafe) * sp * dt;
         let mz = (fz * fwd + lz * strafe) * sp * dt;
         // do not walk through the target
@@ -443,8 +503,9 @@ export class Sim {
         // No target: move in facing frame.
         const fx = Math.sin(f.yaw);
         const fz = Math.cos(f.yaw);
-        f.x += (fx * fwd + fz * strafe) * TUNING.moveSpeed * dt;
-        f.z += (fz * fwd - fx * strafe) * TUNING.moveSpeed * dt;
+        const sp = TUNING.moveSpeed * (f.dizzyUntil > 0 ? TUNING.dizzyMoveScale : 1);
+        f.x += (fx * fwd + fz * strafe) * sp * dt;
+        f.z += (fz * fwd - fx * strafe) * sp * dt;
       }
     }
 
@@ -479,6 +540,7 @@ export class Sim {
     f.z = Math.cos(a) * r;
     f.invulnUntil = this.t + 1.5;
     f.lastHitBy = null;
+    this.resetDefense(f);
     this.emit({ type: 'respawn', id: f.id });
   }
 
@@ -487,6 +549,7 @@ export class Sim {
     f.alive = false;
     f.hp = 0;
     f.deaths++;
+    this.resetDefense(f); // no dizzy / Iron Wall / half-empty guard carried into the KO or the respawn
     const killer = by != null ? this.get(by) : undefined;
     if (killer && killer.id !== f.id) killer.kos++;
     this.emit({ type: 'ko', attacker: killer?.id ?? null, target: f.id, kind, ringout });
@@ -560,11 +623,12 @@ export class Sim {
     const f = this.get(id);
     if (!f || !f.alive || !f.input.present) return;
     if (this.t < f.stunUntil) return;
+    if (f.dizzyUntil > 0) return; // guard-broken: no attacks, no supers, no Iron Wall
 
     if (a.kind === 'palm') return this.trySuper(f, 'blast');
     if (a.kind === 'xshield') {
-      // With a full meter the X is the Shield super; otherwise it is just a block (handled by input state).
-      if (f.meter >= 100) this.trySuper(f, 'shield');
+      // With a full meter the X is the Iron Wall super; otherwise it is just a block (handled by input state).
+      if (f.meter >= 100) this.trySuper(f, 'ironwall');
       return;
     }
     if (a.kind === 'uppercut' && f.meter >= 100 && this.cdReady(f, 'uppercut')) return this.trySuper(f, 'uppercut');
@@ -608,7 +672,7 @@ export class Sim {
     return (f.cd[key] ?? 0) <= this.t;
   }
 
-  private trySuper(f: Fighter, kind: 'uppercut' | 'shield' | 'blast') {
+  private trySuper(f: Fighter, kind: SuperKind) {
     if (f.meter < 100) {
       this.emit({ type: 'super_denied', id: f.id, kind, reason: 'meter' });
       return;
@@ -620,8 +684,10 @@ export class Sim {
     f.meter = 0;
     f.cd[kind] = this.t + TUNING.superCooldown[kind];
     this.emit({ type: 'super', id: f.id, kind });
-    if (kind === 'shield') {
-      f.shieldUntil = this.t + TUNING.shieldSeconds;
+    if (kind === 'ironwall') {
+      f.ironWallUntil = this.t + TUNING.ironWallSeconds;
+      f.ironCountered = false;
+      f.blocking = false;
       return;
     }
     if (kind === 'blast') {
@@ -660,11 +726,19 @@ export class Sim {
     this.applyHit(f, tgt, TUNING.superUppercutDamage, 'super_uppercut', true, 0);
   }
 
+  private breakGuard(f: Fighter, by: number | null) {
+    f.guard = 0;
+    f.blocking = false;
+    f.dizzyUntil = this.t + TUNING.guardBreakDizzy;
+    this.emit({ type: 'guard_break', id: f.id, attacker: by, x: +f.x.toFixed(3), y: +(1.35 + f.y).toFixed(3), z: +f.z.toFixed(3) });
+  }
+
   private applyHit(att: Fighter, tgt: Fighter, base: number, kind: string, isSuper: boolean, speed: number) {
     if (this.t < tgt.invulnUntil) return;
-    const shielded = this.t < tgt.shieldUntil;
-    // Super uppercut breaks a normal block; only the Shield stops it.
-    const blocked = !shielded && tgt.blocking && kind !== 'super_uppercut';
+    // Iron Wall: unbreakable, 0 damage, no guard drain.
+    const shielded = this.t < tgt.ironWallUntil;
+    // A normal guard blocks everything, supers included (10% damage); heavy hits just drain more guard.
+    const blocked = !shielded && tgt.blocking;
     let dmg = shielded ? 0 : blocked ? Math.max(1, Math.round(base * TUNING.blockFactor)) : base;
     dmg = Math.min(dmg, tgt.hp);
     tgt.hp -= dmg;
@@ -676,6 +750,12 @@ export class Sim {
     tgt.lastHitBy = att.id;
     tgt.lastHitAt = this.t;
     if (!blocked && !shielded) tgt.stunUntil = this.t + TUNING.stunSeconds;
+    let guardBroken = false;
+    if (blocked) {
+      tgt.guard = Math.max(0, tgt.guard - (TUNING.guardHitDrain[kind] ?? TUNING.guardHitDrain.jab));
+      tgt.guardUpAt = this.t;
+      guardBroken = tgt.guard <= 0;
+    }
 
     // Knockback
     const dx = tgt.x - att.x;
@@ -686,7 +766,7 @@ export class Sim {
       const power = (blocked || shielded ? 0.6 : 2.2) * (1 + tgt.kb / 45) * (isSuper ? 2.2 : 1);
       tgt.vx += (dx / len) * power;
       tgt.vz += (dz / len) * power;
-      if (kind === 'super_uppercut' && !shielded) tgt.vy = 7 + tgt.kb / 30;
+      if (kind === 'super_uppercut' && !shielded && !blocked) tgt.vy = 7 + tgt.kb / 30;
       else if (!blocked && !shielded && tgt.kb > 60) tgt.vy = Math.max(tgt.vy, 2 + tgt.kb / 60);
     } else {
       // 1v1: knockback grows with damage taken this round (Smash-style percent); heavy hits fling much farther.
@@ -699,8 +779,8 @@ export class Sim {
       const push = base * (shielded ? 1 : 1 + tgt.kb / TUNING.duelKbScale) * (heavy ? TUNING.heavyKbMult : 1);
       tgt.vx += (dx / len) * push;
       tgt.vz += (dz / len) * push;
-      if (kind === 'super_uppercut' && !shielded) tgt.vy = 7.5;
-      else if (heavy && !shielded) tgt.vy = Math.max(tgt.vy, 2.5);
+      if (kind === 'super_uppercut' && !shielded && !blocked) tgt.vy = 7.5;
+      else if (heavy && !shielded && !blocked) tgt.vy = Math.max(tgt.vy, 2.5);
       if (heavy) att.combo = 0;
     }
 
@@ -717,8 +797,27 @@ export class Sim {
       y: 1.35 + tgt.y,
       z: tgt.z,
       speed,
+      guard: Math.round(tgt.guard),
     });
+    if (guardBroken) this.breakGuard(tgt, att.id);
     if (tgt.hp <= 0) this.kill(tgt, att.id, kind, false);
+    // Iron Wall counter: the first attacker to hit the wall takes damage and staggers.
+    if (shielded && !tgt.ironCountered && att.alive && att.id !== tgt.id) {
+      tgt.ironCountered = true;
+      const cdmg = Math.min(TUNING.ironCounterDamage, att.hp);
+      att.hp -= cdmg;
+      tgt.damageDealt += cdmg;
+      att.stunUntil = Math.max(att.stunUntil, this.t + TUNING.ironCounterStagger);
+      att.lastHitBy = tgt.id;
+      att.lastHitAt = this.t;
+      const ax = att.x - tgt.x;
+      const az = att.z - tgt.z;
+      const al = Math.hypot(ax, az) || 1;
+      att.vx += (ax / al) * TUNING.ironCounterPush;
+      att.vz += (az / al) * TUNING.ironCounterPush;
+      this.emit({ type: 'iron_counter', id: tgt.id, attacker: att.id, damage: cdmg });
+      if (att.hp <= 0) this.kill(att, tgt.id, 'iron_counter', false);
+    }
   }
 
   private updateProjectiles(dt: number) {
@@ -846,7 +945,9 @@ export class Sim {
         z: +f.z.toFixed(3),
         yaw: +f.yaw.toFixed(3),
         b: f.blocking ? 1 : 0,
-        sh: +Math.max(0, f.shieldUntil - this.t).toFixed(2),
+        gd: Math.round(f.guard), // guard meter 0..100
+        dz: f.dizzyUntil > 0 ? +Math.max(0, f.dizzyUntil - this.t).toFixed(2) : 0, // guard-break dizzy: s left, 0 = not dizzy
+        iw: +Math.max(0, f.ironWallUntil - this.t).toFixed(2), // Iron Wall: s left, 0 = inactive
         kb: Math.round(f.kb),
         kos: f.kos,
         deaths: f.deaths,
@@ -857,7 +958,7 @@ export class Sim {
         atk: f.atk ? { k: f.atk.k, h: f.atk.h, age: +(this.t - f.atk.t).toFixed(3) } : null,
         cd: {
           uppercut: +Math.max(0, (f.cd.uppercut ?? 0) - this.t).toFixed(1),
-          shield: +Math.max(0, (f.cd.shield ?? 0) - this.t).toFixed(1),
+          ironwall: +Math.max(0, (f.cd.ironwall ?? 0) - this.t).toFixed(1),
           blast: +Math.max(0, (f.cd.blast ?? 0) - this.t).toFixed(1),
         },
         j: includeJoints ? f.input.joints : undefined,

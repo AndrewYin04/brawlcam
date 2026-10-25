@@ -125,9 +125,9 @@ export class MatchView {
           const s = this.slots.get(e.id);
           if (!s) break;
           const col = s.snap.color;
-          if (e.kind === 'shield') {
-            this.vfx.shockwave(s.pos.clone().setY(1), 0x66ccff, 2);
-            this.showBanner('SHIELD!', 700, true);
+          if (e.kind === 'ironwall') {
+            this.vfx.shockwave(s.pos.clone().setY(1), 0xffc53d, 2);
+            this.showBanner('IRON WALL!', 900, true);
           } else if (e.kind === 'uppercut') {
             if (!USE_HEROES) this.vfx.pillar(s.pos, col);
             else this.vfx.speedLines();
@@ -142,6 +142,17 @@ export class MatchView {
           sfx.sfxSuper();
           break;
         }
+        case 'guard_break': {
+          const mine = this.opts.localIds.includes(e.id) || (e.attacker != null && this.opts.localIds.includes(e.attacker));
+          if (this.snap && this.snap.f.length > 2) this.addKoFeed(`${e.attacker != null ? this.name(e.attacker) + ' broke ' + this.name(e.id) + '’s guard' : this.name(e.id) + '’s guard ran out'}`);
+          else if (mine) this.showBanner('GUARD BREAK!', 1000, true);
+          if (this.opts.localIds.includes(e.id)) this.hint('Guard broken! Drop your arms between hits so the GUARD meter refills.', 3000);
+          break;
+        }
+        case 'iron_counter':
+          if (this.snap && this.snap.f.length > 2) this.addKoFeed(`${this.name(e.id)}’s Iron Wall countered ${this.name(e.attacker)}`);
+          else this.showBanner('COUNTER!', 800, true);
+          break;
         case 'super_denied':
           if (this.opts.localIds.includes(e.id)) this.hint(e.reason === 'meter' ? 'Fill your SUPER meter first: land hits!' : 'Super on cooldown');
           break;
@@ -243,7 +254,7 @@ export class MatchView {
         if (!joints && f.pr) joints = unpackJoints(f.j as number[] | undefined);
         if (!joints) {
           // Idle guard (or the procedural strike) when no live pose: absent players, bots without data.
-          joints = proceduralJoints({ atk: f.atk ? { k: f.atk.k, h: f.atk.h, age: f.atk.age } : null, blocking: !!f.b, shield: f.sh > 0, t: this.time, seed: f.id });
+          joints = proceduralJoints({ atk: f.atk ? { k: f.atk.k, h: f.atk.h, age: f.atk.age } : null, blocking: !!f.b, shield: f.iw > 0, t: this.time, seed: f.id });
         }
         if (slot.avatar instanceof HeroFighter) {
           // Heroes: humans' torso/arms follow their live pose; bots use authored clips.
@@ -252,10 +263,10 @@ export class MatchView {
           slot.avatar.setJoints(live ? joints : null);
           if (f.atk && f.atk.age < 0.3) slot.avatar.attack(f.atk.k, f.atk.h, `${f.atk.k}${f.atk.h}${(s.t - f.atk.age).toFixed(2)}`);
           slot.avatar.edgeDist = ((s as any).R ?? 99) - Math.hypot(f.x, f.z);
-          slot.avatar.update(animDt, this.time, { shield: f.sh, meterFull: f.meter >= 100, airborne: f.y, alive: !!f.alive, blocking: !!f.b });
+          slot.avatar.update(animDt, this.time, { shield: f.iw, meterFull: f.meter >= 100, airborne: f.y, alive: !!f.alive, blocking: !!f.b });
         } else {
           slot.avatar.setJoints(joints);
-          slot.avatar.update(animDt, this.time, { shield: f.sh, meterFull: f.meter >= 100, airborne: f.y, alive: !!f.alive || s.f.length <= 2 });
+          slot.avatar.update(animDt, this.time, { shield: f.iw, meterFull: f.meter >= 100, airborne: f.y, alive: !!f.alive || s.f.length <= 2 });
         }
         slot.avatar.setTargeted(s.f.length > 2 && me?.tg === f.id);
         slot.avatar.setSeeThroughCape(this.opts.camera !== 'side' && f.id === myId);
@@ -391,6 +402,16 @@ export class MatchView {
     const meter = $(`${p}-meter`).parentElement!;
     meter.classList.toggle('full', f.meter >= 100);
     $(`${p}-meter-label`).textContent = f.meter >= 100 ? 'SUPER READY' : 'SUPER';
+    // Guard meter: blue (full) -> yellow -> red (about to break); flashes while guard-broken, gold during Iron Wall.
+    const gd = f.dz > 0 ? 0 : f.gd;
+    ($(`${p}-guard`) as HTMLElement).style.width = `${f.iw > 0 ? 100 : gd}%`;
+    const guard = $(`${p}-guard`).parentElement!;
+    const level = f.iw > 0 ? 'iron' : f.dz > 0 ? 'broken' : gd > 60 ? 'hi' : gd > 30 ? 'mid' : 'lo';
+    if (guard.dataset.level !== level) {
+      guard.dataset.level = level;
+      $(`${p}-guard-label`).textContent = level === 'iron' ? 'IRON WALL' : level === 'broken' ? 'GUARD BROKEN' : 'GUARD';
+    }
+    guard.classList.toggle('up', !!f.b);
     const pips = $(`${p}-pips`);
     const want = this.snap && this.snap.f.length <= 2 ? `${'<span class="pip won"></span>'.repeat(f.rw)}${'<span class="pip"></span>'.repeat(Math.max(0, 2 - f.rw))}` : `${f.kos} KO · ${f.kb}%`;
     if (pips.innerHTML !== want) pips.innerHTML = want;

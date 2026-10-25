@@ -1,4 +1,4 @@
-// Repro: a full-meter X shield must work even if the player was just hit (stunned) when the X started.
+// Repro: a full-meter X (Iron Wall super) must work even if the player was just hit (stunned) when the X started.
 import { Sim } from '../../shared/sim';
 const sim = new Sim({ mode: 'duel', meterStart: 100 }, 5);
 sim.addFighter({ id: 1, name: 'P', color: '#f00' });
@@ -12,6 +12,6 @@ sim.drainEvents();
 sim.setInput(1, { present: true, xshield: true });
 sim.pushAction(1, { kind: 'xshield', hand: 'B', speed: 0 });
 for (let i = 0; i < 30; i++) sim.step(1 / 30); // keeps holding for 1 s
-const shields = sim.drainEvents().filter((e) => e.type === 'super' && e.kind === 'shield').length;
-console.log('shields fired while holding X after a hit:', shields);
+const shields = sim.drainEvents().filter((e) => e.type === 'super' && e.kind === 'ironwall').length;
+console.log('Iron Walls fired while holding X after a hit:', shields);
 process.exitCode = shields === 1 ? 0 : 1;

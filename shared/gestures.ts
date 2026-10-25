@@ -138,7 +138,12 @@ export class GestureRecognizer {
   private blocking = false;
   private xOnAt = -1;
   private xOffAt = -1;
+  /** Any crossed-arms pose (high or chest level): used only to suppress strikes, as before. */
   private xshield = false;
+  /** The X-cross super pose (HIGH X only): this is what the game sees as `xshield`. */
+  private xHigh = false;
+  private xhOnAt = -1;
+  private xhOffAt = -1;
   private turnSince = -1;
   private turnLatched = 0;
   private lastSeen = -9;
@@ -177,6 +182,7 @@ export class GestureRecognizer {
     this.pending = null;
     this.blocking = false;
     this.xshield = false;
+    this.xHigh = false;
   }
 
   update(frame: PersonFrame | null, now: number): GestureOutput {
@@ -341,6 +347,10 @@ export class GestureRecognizer {
     // High X: wrists together above the face with the elbows raised and spread.
     const highTight = dxW < this.cfg.xMaxGap && elbowsUp && ry(lW) > noseY + this.cfg.xAboveNose && ry(rW) > noseY + this.cfg.xAboveNose && lE[0] - rE[0] > dxW + this.cfg.xElbowSpread;
     const xPose = trulyCrossed || highTight;
+    // The X-cross super (Iron Wall) accepts ONE pose: the HIGH X, forearms crossed above the face with the elbows raised
+    // (both labeled X clips are this pose; the chest-level branch fires on many frames of ordinary shadow-boxing).
+    // A chest-level cross still suppresses strikes and blocks exactly as before, it just does not trigger the super.
+    const xHighPose = ((imgCrossed || worldCrossed) && elbowsUp) || highTight;
     const [hL, hR] = handInfo;
     // Extended block: both forearms held out in front of the face.
     const blockExtended = dxW < this.cfg.blockMaxGap && ry(lW) > this.cfg.blockMinY && ry(rW) > this.cfg.blockMinY && hL.ext > this.cfg.blockMinExt && hR.ext > this.cfg.blockMinExt;
@@ -415,11 +425,12 @@ export class GestureRecognizer {
 
     const handsSlow = handInfo.every((h) => h.speed < 2.5);
     [this.blocking, this.blockOnAt, this.blockOffAt] = hysteresis(blockPose && handsSlow, this.blocking, t, this.blockOnAt, this.blockOffAt, this.cfg.blockHold, this.cfg.blockRelease);
-    const wasX = this.xshield;
     [this.xshield, this.xOnAt, this.xOffAt] = hysteresis(xPose && handsSlow, this.xshield, t, this.xOnAt, this.xOffAt, this.cfg.xHold, this.cfg.xRelease);
-    if (this.xshield && !wasX) out.actions.push({ kind: 'xshield', hand: 'B', speed: 0, t });
+    const wasHigh = this.xHigh;
+    [this.xHigh, this.xhOnAt, this.xhOffAt] = hysteresis(xHighPose && handsSlow, this.xHigh, t, this.xhOnAt, this.xhOffAt, this.cfg.xHold, this.cfg.xRelease);
+    if (this.xHigh && !wasHigh) out.actions.push({ kind: 'xshield', hand: 'B', speed: 0, t });
     out.blocking = this.blocking;
-    out.xshield = this.xshield;
+    out.xshield = this.xHigh;
 
     // ---- kicks ----
     if (out.legs) {
