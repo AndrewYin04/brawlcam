@@ -11,7 +11,7 @@ const KEY = env.ELEVENLABS_API_KEY;
 const VOICE = process.env.VOICE ?? 'IKne3meq5aSn9XLyUdCD'; // Charlie: deep, confident, energetic
 const MODEL = process.env.MODEL ?? 'eleven_v3';
 export const CALLS: Record<string, string[]> = {
-  round1: ['Round one... FIGHT!'],
+  round1: ['Round one... FIGHT!', "ROUND ONE! LET'S GO!"],
   round2: ['Round two! FIGHT!'],
   round3: ['Final round! FIGHT!'],
   fight: ['FIGHT!'],
@@ -26,13 +26,24 @@ export const CALLS: Record<string, string[]> = {
   combo: ['COMBO!', 'THREE IN A ROW!', 'UNLOADING!'],
   low_hp: ["THEY'RE HURT!", "ONE MORE AND IT'S OVER!", 'HANGING ON!'],
   blocked: ['BLOCKED!', 'GREAT DEFENSE!'],
-  match_over: ['WHAT A FIGHT!', 'WE HAVE A WINNER!'],
+  match_over: ['WHAT A FIGHT!', 'WE HAVE A WINNER!', "THAT'S THE MATCH!", 'GREAT MATCH!'],
   draw: ["IT'S A DRAW!"],
-  time: ['TIME!'],
+  time: ['TIME!', "THAT'S TIME!"],
   throw: ['SHOULDER THROW!'],
   meter_ready: ['THE SUPER IS READY!', 'METER IS FULL!'],
   filler: ['KEEP THOSE HANDS UP!', 'PRESSURE, PRESSURE!', 'THE CROWD IS LOVING THIS!', 'WHAT A FIGHT WE HAVE!', 'WATCH THE JAB!', 'BEAUTIFUL MOVEMENT!'],
   clinch: ['CLINCH!'],
+  // Context calls (REVIEW.md 6:08 AM): the round start that mentions the score, and the match result chosen by how the
+  // match went (web/src/game/announcer-calls.ts picks them, falling back to the generic lines above).
+  match_point: ['MATCH POINT! ROUND TWO!'],
+  decider: ['ONE ROUND EACH... THIS DECIDES IT!'],
+  mo_flawless: ['FLAWLESS!'],
+  mo_comeback: ['WHAT A COMEBACK!', 'FROM THE BRINK!'],
+  mo_super: ['SUPER FINISH!'],
+  mo_close: ['BY A HAIR!', 'DOWN TO THE WIRE!'],
+  mo_dominant: ['TOTAL DOMINATION!', 'NOT EVEN CLOSE!'],
+  mo_decision: ['WINNER BY DECISION!'],
+  rematch: ['RUN IT BACK?', 'REMATCH?'],
   // Generic roasts (planner 5:10 AM item 2): no names, school-appropriate. Played when the live Gemini roast for that
   // moment is caption-only (Gemini TTS is out of quota); the caption keeps the specific Gemini line.
   roast_whiff: ['Swing and a miss! The air is winning.', 'That punch is still looking for a target.', 'Bold strategy, hitting nothing.', 'The wind felt that one.'],

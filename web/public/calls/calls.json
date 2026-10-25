@@ -5,6 +5,10 @@
    {
     "id": "round1_0",
     "text": "Round one... FIGHT!"
+   },
+   {
+    "id": "round1_1",
+    "text": "ROUND ONE! LET'S GO!"
    }
   ],
   "round2": [
@@ -175,6 +179,14 @@
    {
     "id": "match_over_1",
     "text": "WE HAVE A WINNER!"
+   },
+   {
+    "id": "match_over_2",
+    "text": "THAT'S THE MATCH!"
+   },
+   {
+    "id": "match_over_3",
+    "text": "GREAT MATCH!"
    }
   ],
   "draw": [
@@ -187,6 +199,10 @@
    {
     "id": "time_0",
     "text": "TIME!"
+   },
+   {
+    "id": "time_1",
+    "text": "THAT'S TIME!"
    }
   ],
   "throw": [
@@ -235,6 +251,76 @@
    {
     "id": "clinch_0",
     "text": "CLINCH!"
+   }
+  ],
+  "match_point": [
+   {
+    "id": "match_point_0",
+    "text": "MATCH POINT! ROUND TWO!"
+   }
+  ],
+  "decider": [
+   {
+    "id": "decider_0",
+    "text": "ONE ROUND EACH... THIS DECIDES IT!"
+   }
+  ],
+  "mo_flawless": [
+   {
+    "id": "mo_flawless_0",
+    "text": "FLAWLESS!"
+   }
+  ],
+  "mo_comeback": [
+   {
+    "id": "mo_comeback_0",
+    "text": "WHAT A COMEBACK!"
+   },
+   {
+    "id": "mo_comeback_1",
+    "text": "FROM THE BRINK!"
+   }
+  ],
+  "mo_super": [
+   {
+    "id": "mo_super_0",
+    "text": "SUPER FINISH!"
+   }
+  ],
+  "mo_close": [
+   {
+    "id": "mo_close_0",
+    "text": "BY A HAIR!"
+   },
+   {
+    "id": "mo_close_1",
+    "text": "DOWN TO THE WIRE!"
+   }
+  ],
+  "mo_dominant": [
+   {
+    "id": "mo_dominant_0",
+    "text": "TOTAL DOMINATION!"
+   },
+   {
+    "id": "mo_dominant_1",
+    "text": "NOT EVEN CLOSE!"
+   }
+  ],
+  "mo_decision": [
+   {
+    "id": "mo_decision_0",
+    "text": "WINNER BY DECISION!"
+   }
+  ],
+  "rematch": [
+   {
+    "id": "rematch_0",
+    "text": "RUN IT BACK?"
+   },
+   {
+    "id": "rematch_1",
+    "text": "REMATCH?"
    }
   ],
   "roast_whiff": [
