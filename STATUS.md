@@ -1,13 +1,46 @@
 # Status (written by the implementation agent)
 
-Last update: Sun Oct 25, 12:05 AM CDT.
+Last update: Sun Oct 25, 1:50 AM CDT.
+
+## Since 12:05 AM
+- **Pushing directly to `AndrewYin04/throwhands` main** (switched `gh` to the AndrewYin04 account; the fork/PR workaround is gone).
+- **https://throwhands.tech is live** (Let's Encrypt cert). `www.throwhands.tech` has a Caddy redirect block to the apex, but its certificate is blocked: one of the four authoritative nameservers (`tech-domains.mars.orderbox-dns.com`) still answers `127.0.0.1` for `www`, so Let's Encrypt validation fails about one time in four and Caddy keeps retrying. **Planner: please re-save the `www` A record (144.202.71.213) at the registrar so all four nameservers agree.**
+- **New renderer (build 4e7b98e, deployed)**: KayKit (CC0) toon characters with a locomotion state machine (idle/walk/run/strafe/back driven by real ground speed), live pose layered on chest/head/arms, authored punch/kick/hit/knockdown/get-up clips, tumble in the air, outlines. Floating sky stage, 1v1 ring-outs with damage-scaled knockback, hit-stop, sparks, flash, KO streak, bloom. `?classic` keeps the old VRM renderer.
+- **Bug fixed: shield while stunned** (holding X with a full meter now fires even during hit-stun; `tests/unit/shield-while-stunned.ts`).
+- **Bug fixed: leaderboard duplicate names**, reproduced first (`tests/unit/leaderboard-dup.ts` failed, now passes): players who share a nickname get a short tag (`Andrew #3f2a`).
+- Calibration "too close" guidance fixed (says step back when your head leaves the frame).
+
+## Review loop (spec section 11), log in [REVIEW-SELF.md](REVIEW-SELF.md)
+| Item | R1 motion | R1 visual | R2 motion | R2 visual |
+|---|---|---|---|---|
+| 1 Walk/run legs, no drift | 1 | 1 | 2 | 2 |
+| 2 Torso/head human | 1 | 2 | 1 | 2 |
+| 3 Attacks readable | 2 | 2 | 1 | 1 |
+| 4 Hit reactions / tumble | 1 | 2 | 1 | 3 |
+| 5 Glows only when active | 1 | 1 | 2 | 2 |
+| 6 Effects readable | 1 | 1 | 1 | 1 |
+| 7 Stage / lighting | 2 | 2 | 3 | 2 |
+| 8 Camera / framing | 2 | 3 | 2 | 2 |
+| 9 Silhouettes | 2 | 1 | 2 | 2 |
+
+R1 = old VRM build, R2 = build 4e7b98e. Measured: walk drift went from 89/89 frames to 11/89; frozen torso/head frames went from up to 32 to 0; foot slide is still 3 to 6 cm (target under 1 cm). Round 2 highs: the chibi helmet hides the opponent and the punches from behind; knockdowns are a stiff plank that snaps upright; full-screen flashes and the KO pillar wash out the frame; block looks like idle; no visible energy-blast projectile; the KO scene never KOs. Several of these go away with the 1:35 AM direction (human proportions, octagon, no ring-out pillar).
+
+## Working on now (1:35 AM direction, in its order)
+1. **Movement teaching** (in progress). Root cause of "idk how to move forward and backward": the 1v1 *duel assist* overrides forward/back whenever the step signal is weaker than 0.2, and pulls you back to 1.3 m as soon as you return to neutral, so stepping seems to do nothing. Fix: tutorial, HUD indicator, torso-lean forward/back, and no assist override while you are stepping.
+2. Human-proportioned characters (searching for openly licensed rigged humans now) + visible contact (fist reaches the target on the hit frame, measured).
+3. UFC octagon with a cage, cage bounce, HP-only KOs, Brawl HP + respawn.
+4. Credits in the footer and README.
+
+## Movement controls today (exact thresholds, `shared/gestures.ts` TUNING)
+- **Strafe:** lean your shoulders sideways relative to your hips. Dead zone 3.5 cm, full speed at 10 cm.
+- **Forward / back:** step toward or away from the camera. Measured as the change in your shoulder width in the image against calibration: dead zone 8%, full speed at 20% (about 25 cm and 60 cm of travel at 2 m from the camera).
+- Movement is ignored on frames where you strike or block.
+- **Duel assist** (1v1 only): when the forward/back signal is under 0.2, the game walks you back to 1.3 m from the opponent. This is what hid stepping.
+- Move speed 2.4 m/s (half while blocking). You stop at 0.85 m from the opponent.
+- `?move=point` prototype: hold one arm straight and still for 0.3 s to walk in that direction.
 
 ## Deployed URL
-- **https://throwhands.tech** once DNS points here. **Vultr server IP for DNS: `144.202.71.213`** (A records for `throwhands.tech` and `www.throwhands.tech`; IPv6 `2001:19f0:6400:2445:5400:06ff:fef0:b3b0` optional). Caddy already serves both names and will fetch a certificate as soon as DNS resolves.
-- Live now (same server): **https://144-202-71-213.sslip.io**
-  - Practice: https://144-202-71-213.sslip.io/?mode=practice
-  - Pose check page: https://144-202-71-213.sslip.io/spike.html
-  - Health: https://144-202-71-213.sslip.io/api/health
+- **https://throwhands.tech** (also https://144-202-71-213.sslip.io). Practice: https://throwhands.tech/?mode=practice · Health: https://throwhands.tech/api/health · Pitch: https://throwhands.tech/pitch/
 
 ## Vultr (cost limits, spec section 10)
 - Exactly one instance: id `7b48fd52-b976-484c-adbe-95ab42f98a5d`, plan `vc2-1c-1gb` ($5.00/month), region `dfw`, Ubuntu 24.04, IP 144.202.71.213. Nothing else created.
@@ -46,9 +79,8 @@ All game paths below were run end to end on the deployed server through the real
 None so far.
 
 ## Requests for planner
-1. **Merge PR #1: https://github.com/AndrewYin04/throwhands/pull/1** (all work so far, pushed from a fork). Then **GitHub write access:** The server's `gh` login is `andrewyin-builds`, which has read-only access to `AndrewYin04/throwhands`: every push since 8:30 PM fails with `remote: Permission to AndrewYin04/throwhands.git denied to andrewyin-builds.` (403). No invitation is pending. Please add `andrewyin-builds` as a collaborator with **Write** access, or tell me which account to push as. About 15 commits are waiting locally (including this file, `submission/devpost.md` for the soft submission, README, TESTING.md).
-   - Until then, the Devpost draft is on the server at `/home/agent/projects/brawlcam/submission/devpost.md`.
-2. **DNS for throwhands.tech**: public DNS currently answers `127.0.0.1` for both names. They need A records `throwhands.tech` and `www.throwhands.tech` -> `144.202.71.213`. Deploys add the names to Caddy automatically once DNS resolves here (earlier attempts while DNS was wrong got Let's Encrypt to rate-limit the name for about an hour; Caddy also tries ZeroSSL).
+1. Re-save the `www.throwhands.tech` A record at the registrar (one nameserver still answers 127.0.0.1), see above.
+2. (Done: write access and DNS for the apex.)
 3. **Upload the demo video** as a GitHub release asset and to YouTube: https://144-202-71-213.sslip.io/media/throwhands-demo.mp4
 4. **Real webcam + real phone check** (spec 9.3: a path counts as done only when both agents' runs pass). On https://144-202-71-213.sslip.io:
    - Laptop Chrome: Practice vs Bot. Does the fighter mirror your arms and head? Do jabs, hooks, uppercuts register? Block (both forearms up in front of the face)? Shield (cross arms in an X above your head, with a full meter)? Report misses and false triggers in REVIEW.md.
