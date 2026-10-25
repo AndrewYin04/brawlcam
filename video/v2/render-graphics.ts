@@ -33,8 +33,8 @@ const BEAT = 60 / BPM;
 const STATS = [
   { value: 48, label: 'END-TO-END TESTS PASS', sub: 'real browsers in Playwright, recorded fighter clips as the webcam', c: 'p1' },
   { value: '0', countSub: 2160, label: 'STATE MISMATCHES', sub: 'between both screens over <b style="color:#fff">{n}</b> shared ticks online', c: 'good' },
-  { value: 3.4, dec: 1, suffix: '×', label: 'POSE-STREAM COMPRESSION', sub: '19.7 MB down to 5.9 MB per player-hour in Tiger Data', c: 'p2' },
-  { value: 8, label: 'BROWSERS IN ONE BRAWL', sub: 'same state on all 8: 0 mismatches over 2,494 ticks', c: 'gold' },
+  { value: 3.4, dec: 1, suffix: '×', label: 'POSE-STREAM COMPRESSION', sub: '19.7 MB to 5.9 MB per player-hour, in Tiger Data', c: 'p2' },
+  { value: 8, label: 'BROWSERS IN ONE BRAWL', sub: 'all 8 in sync: 0 mismatches over 2,494 ticks', c: 'gold' },
 ];
 
 type Asset = { id: string; scene: string; params?: Record<string, unknown>; desc: string };
@@ -115,25 +115,33 @@ async function render(page: Page, a: Asset): Promise<Result> {
   // contact sheet of the review frames (alpha clips over a grey checkerboard so transparency is visible)
   fs.mkdirSync(path.join(OUT, 'sheets'), { recursive: true });
   const n = fs.readdirSync(fdir).length, cols = 3, rows = Math.ceil(n / cols);
-  const bgf = info.alpha ? `color=c=0x4a4f5c:s=${W}x${H},format=rgba,geq=r='if(mod(floor(X/120)+floor(Y/120),2),90,60)':g='if(mod(floor(X/120)+floor(Y/120),2),95,64)':b='if(mod(floor(X/120)+floor(Y/120),2),110,74)':a=255[bg];[bg][0]overlay=0:0,` : '';
-  execFileSync('ffmpeg', ['-loglevel', 'error', '-y', '-pattern_type', 'glob', '-i', path.join(fdir, '*.png'), '-filter_complex', `${bgf}scale=640:360,tile=${cols}x${rows}:padding=4:color=white`, '-frames:v', '1', path.join(OUT, 'sheets', `${a.id}.png`)]);
+  // Tile first (keeps alpha), then put the single tiled image over a checkerboard: overlaying per frame onto a
+  // generated source drops/shifts frames through framesync.
+  const sheet = path.join(OUT, 'sheets', `${a.id}.png`);
+  execFileSync('ffmpeg', ['-loglevel', 'error', '-y', '-pattern_type', 'glob', '-i', path.join(fdir, '*.png'), '-vf', `format=rgba,scale=640:360,tile=${cols}x${rows}:padding=4:color=white@1`, '-frames:v', '1', sheet]);
+  if (info.alpha) {
+    const sw = cols * 640 + (cols - 1) * 4, sh = rows * 360 + (rows - 1) * 4;
+    const chk = `color=c=black:s=${sw}x${sh}:d=1,format=rgb24,geq=r='if(mod(floor(X/40)+floor(Y/40),2),90,60)':g='if(mod(floor(X/40)+floor(Y/40),2),95,64)':b='if(mod(floor(X/40)+floor(Y/40),2),110,74)'[bg];[bg][0]overlay=0:0`;
+    execFileSync('ffmpeg', ['-loglevel', 'error', '-y', '-i', sheet, '-filter_complex', chk, '-frames:v', '1', sheet.replace(/\.png$/, '.tmp.png')]);
+    fs.renameSync(sheet.replace(/\.png$/, '.tmp.png'), sheet);
+  }
   const probed = Number(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', file]).toString().trim());
   console.log(`${a.id.padEnd(28)} ${frames} frames  ${probed.toFixed(3)} s  ${info.alpha ? 'alpha .mov' : 'opaque .mp4'}`);
   return { id: a.id, file, dur: +(frames / FPS).toFixed(3), frames, alpha: info.alpha, hits: info.hits, cutFrame: info.cutFrame, desc: a.desc, params: a.params?.stats ? undefined : a.params };
 }
 
 const t0 = Date.now();
-const browser = await chromium.launch({ args: ['--force-color-profile=srgb', '--disable-lcd-text', '--font-render-hinting=none'] });
-const ctx = await browser.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: 1 });
-const queue = [...todo];
+// Longest assets first. One browser process per job: screenshots are PNG-encoded in the browser process,
+// so pages sharing one browser serialize on a single core.
+const queue = [...todo].sort((a, b) => (b.id === 'pipeline' ? 1 : 0) - (a.id === 'pipeline' ? 1 : 0));
 const results: Result[] = [];
 await Promise.all(Array.from({ length: Math.min(jobs, queue.length) }, async () => {
-  const page = await ctx.newPage();
+  const browser = await chromium.launch({ args: ['--force-color-profile=srgb', '--disable-lcd-text', '--font-render-hinting=none'] });
+  const page = await browser.newPage({ viewport: { width: W, height: H }, deviceScaleFactor: 1 });
   page.on('pageerror', (e) => { console.error('page error:', e.message); process.exitCode = 1; });
   for (let a = queue.shift(); a; a = queue.shift()) results.push(await render(page, a));
-  await page.close();
+  await browser.close();
 }));
-await browser.close();
 
 // manifest: merge with any previous run so single-asset renders don't drop the others
 const mf = path.join(OUT, 'manifest.json');

@@ -136,7 +136,7 @@
   }
 
   function sceneLogoOpen(stage, P) {
-    const B = P.beat, tl = 0.4, dur = 2.0;
+    const B = P.beat, tl = 0.26, dur = 2.0;
     const bg = background(stage);
     const L = logoBlock(stage, 236, 300);
     const kick = el('div', { class: 'center kicker', style: 'top:226px;z-index:5;font-size:34px' }, stage);
@@ -285,9 +285,9 @@
     const spec = {
       bg: { seed: 41, a: 'rgba(255,197,61,0.18)' },
       lines: [
-        [{ t: 'NO', c: 'w', size: 112, hit: 0 }, { t: 'CONTROLLER.', c: 'w', size: 112, hit: 0 }],
-        [{ t: 'NO', c: 'w', size: 112, hit: 1 }, { t: 'DOWNLOAD.', c: 'w', size: 112, hit: 1 }],
-        [{ t: 'JUST A', c: 'gold', size: 124, hit: 2, s0: 1.7 }, { t: 'WEBCAM.', c: 'gold', size: 176, hit: 3, glitch: true, s0: 2.6 }],
+        [{ t: 'NO', c: 'w', size: 132, hit: 0 }, { t: 'CONTROLLER.', c: 'w', size: 132, hit: 0 }],
+        [{ t: 'NO', c: 'w', size: 132, hit: 1 }, { t: 'DOWNLOAD.', c: 'w', size: 132, hit: 1 }],
+        [{ t: 'JUST A', c: 'gold', size: 140, hit: 2, s0: 1.7 }, { t: 'WEBCAM.', c: 'gold', size: 200, hit: 3, glitch: true, s0: 2.6 }],
       ],
     };
     const k = kinetic(stage, P, spec);
@@ -319,14 +319,16 @@
     const bg = background(stage, { seed: o.seed, a: o.tint });
     const color = COL[o.color];
     const wrap = el('div', { class: 'abs', style: `left:0;right:0;top:0;bottom:0;z-index:5` }, stage);
-    const block = el('div', { class: 'abs', style: `left:${SAFE.x0}px;top:330px;` }, wrap);
+    const ghost = el('div', { class: 'abs bungee', style: `right:120px;top:50%;margin-top:-330px;font-size:600px;line-height:1;color:transparent;-webkit-text-stroke:4px ${color};opacity:0.22;z-index:2` }, wrap, o.num);
+    const block = el("div", { class: "abs", style: `left:${SAFE.x0}px;top:0px;z-index:3` }, wrap);
     const num = el('div', { class: 'bungee', style: `font-size:64px;color:${color};text-shadow:0 0 30px ${GLOW[o.color]};position:absolute;top:-90px;left:0;letter-spacing:4px;white-space:nowrap` }, block, `${o.num}<span style="font-family:Inter;font-weight:800;font-size:26px;letter-spacing:0.3em;color:${COL.muted};margin-left:22px;vertical-align:middle">${o.kicker}</span>`);
-    const title = el('div', { class: 'bungee', style: `font-size:176px;line-height:0.98;color:#fff;text-shadow:0 0 40px rgba(255,255,255,0.18),0 10px 0 rgba(0,0,0,0.55);white-space:nowrap;position:relative` }, block, o.lines.join('<br>'));
+    const title = el('div', { class: 'bungee', style: `font-size:210px;line-height:0.98;color:#fff;text-shadow:0 0 40px rgba(255,255,255,0.18),0 10px 0 rgba(0,0,0,0.55);white-space:nowrap;position:relative` }, block, o.lines.join('<br>'));
     fit(title, SAFE.x1 - SAFE.x0);
     const bar = el('div', { class: 'abs', style: `left:-60px;right:-60px;top:-10px;bottom:-10px;background:${color};box-shadow:0 0 50px ${GLOW[o.color]};z-index:3` }, title);
     const rule = el('div', { class: 'abs', style: `left:0;height:10px;width:520px;border-radius:5px;background:${color};box-shadow:0 0 24px ${GLOW[o.color]};transform-origin:0 50%` }, block);
     const ruleTop = () => title.offsetHeight + 30;
     rule.style.top = ruleTop() + 'px';
+    block.style.top = Math.round(540 - (title.offsetHeight + 40) / 2 + 20) + 'px';
     return {
       dur, hits: [+tA.toFixed(3), +tB.toFixed(3)],
       seek(t) {
@@ -345,6 +347,9 @@
         const [sx, sy] = shake(t, tB, 0.3, 10);
         wrap.style.transform = `translate(${sx}px,${sy}px) scale(${1 + 0.025 * seg(t, tB, dur)})`;
         wrap.style.transformOrigin = '30% 50%';
+        const pg = E.outExpo(seg(t, 0, 0.5));
+        ghost.style.transform = `translateX(${(260 * (1 - pg) - 60 * t).toFixed(1)}px)`;
+        ghost.style.opacity = String(0.22 * pg);
       },
     };
   }
@@ -392,7 +397,7 @@
     };
     const nodes = MAIN.map((n, i) => ({ ...n, e: nodeEl(xs[i], NY, NW, NH, n), x: xs[i], tIn: 0.5 + i * 0.55 }));
     // pose skeleton inside the MediaPipe node
-    const poseSvg = sv('svg', { width: 92, height: 74, viewBox: '0 0 92 76' }, nodes[1].iconEl);
+    const poseSvg = sv('svg', { width: 92, height: 74, viewBox: '0 0 92 76' }, MAIN[1].iconEl);
     const poseLines = POSE_LINES.map(([a, b]) => sv('line', { x1: POSE_PTS[a][0], y1: POSE_PTS[a][1], x2: POSE_PTS[b][0], y2: POSE_PTS[b][1], stroke: COL.p2, 'stroke-width': 3, 'stroke-linecap': 'round', opacity: 0 }, poseSvg));
     const poseDots = POSE_PTS.map(([x, y], i) => sv('circle', { cx: x, cy: y, r: i < 3 ? 3 : 4, fill: i % 3 === 0 ? COL.p1 : '#fff', opacity: 0 }, poseSvg));
 
@@ -413,7 +418,7 @@
     const ax = (i) => [xs[i] + NW / 2 + 4, xs[i + 1] - NW / 2 - 8];
     for (let i = 0; i < 4; i++) { const [a, b] = ax(i); addPath(`M${a} ${NY} L${b} ${NY}`, 'p2', 'gp2', nodes[i].tIn + 0.2, nodes[i + 1].tIn, 3, 0.62); }
     // label on the gestures -> sim arrow: what actually travels
-    const pill = el('div', { class: 'abs', style: `left:${(xs[2] + xs[3]) / 2 - 170}px;width:340px;top:${NY - NH / 2 - 62}px;text-align:center;z-index:6` }, stage, `<span style="display:inline-block;background:rgba(61,255,154,0.12);border:2px solid rgba(61,255,154,0.55);color:${COL.good};border-radius:999px;padding:6px 16px;font-weight:800;font-size:19px;letter-spacing:0.06em">JOINTS + ACTIONS, NO VIDEO</span>`);
+    const pill = el('div', { class: 'abs', style: `left:${(xs[2] + xs[3]) / 2 - 220}px;width:440px;top:${NY - NH / 2 - 58}px;text-align:center;z-index:6` }, stage, `<span style="display:inline-block;background:rgba(61,255,154,0.12);border:2px solid rgba(61,255,154,0.55);color:${COL.good};border-radius:999px;padding:6px 16px;font-weight:800;font-size:19px;letter-spacing:0.06em;white-space:nowrap">JOINTS + ACTIONS, NO VIDEO</span>`);
 
     // branches
     const BY = 778, BW = 400, BH = 156;
@@ -427,7 +432,7 @@
     addPath(`M${BR[0].x + 60} ${BY - BH / 2 - 4} C${BR[0].x + 60} ${BY - 170}, ${simX - 70} ${simB + 110}, ${simX - 70} ${simB + 14}`, 'gold', 'ggold', 3.3, 3.85, 4, 1.1);
     addPath(`M${simX - 10} ${simB + 4} C${simX - 10} ${simB + 90}, ${BR[1].x + 40} ${BY - 170}, ${BR[1].x + 40} ${BY - BH / 2 - 14}`, 'good', 'ggood', 3.95, 4.45, 4, 1.0);
     addPath(`M${simX + 60} ${simB + 4} C${simX + 60} ${simB + 100}, ${BR[2].x - 60} ${BY - 180}, ${BR[2].x - 60} ${BY - BH / 2 - 14}`, 'p1', 'gp1', 4.6, 5.1, 4, 1.0);
-    const evLabel = el('div', { class: 'abs', style: `left:${simX - 230}px;width:460px;top:${simB + 34}px;text-align:center;font-weight:800;font-size:18px;letter-spacing:0.22em;color:${COL.muted};z-index:6` }, stage, 'FIGHT EVENTS');
+    const evLabel = el('div', { class: 'abs', style: `left:${simX + 40 - 110}px;width:220px;top:${simB + 92}px;text-align:center;font-weight:800;font-size:16px;line-height:1.3;letter-spacing:0.2em;color:${COL.muted};z-index:6` }, stage, 'FIGHT<br>EVENTS');
     const muLabel = el('div', { class: 'abs', style: `left:${BR[0].x + 80}px;width:300px;top:${simB + 58}px;font-weight:800;font-size:18px;letter-spacing:0.22em;color:${COL.gold};z-index:6` }, stage, 'BEFORE THE FIGHT');
 
     const nodeIn = (e, t, tIn) => {
@@ -484,14 +489,16 @@
     const STATS = P.stats;
     const TW = 360, GAP = 32, x0 = SAFE.x0;
     const tiles = STATS.map((s, i) => {
-      const d = el('div', { class: 'abs', style: `left:${x0 + i * (TW + GAP)}px;top:372px;width:${TW}px;height:390px;border-radius:26px;background:rgba(14,18,34,0.9);border:3px solid ${COL[s.c]};box-shadow:0 0 34px ${GLOW[s.c]};z-index:5;display:flex;flex-direction:column;align-items:center;padding:34px 22px 0;text-align:center` }, stage);
-      const num = el('div', { class: 'bungee', style: `font-size:150px;line-height:1;color:${COL[s.c]};text-shadow:0 0 40px ${GLOW[s.c]},0 8px 0 rgba(0,0,0,0.5);height:160px;white-space:nowrap` }, d, '0');
-      el('div', { style: 'font-weight:800;font-size:27px;letter-spacing:0.08em;color:#fff;margin-top:18px;line-height:1.15' }, d, s.label);
-      const sub = el('div', { style: `font-weight:600;font-size:21px;color:${COL.muted};margin-top:12px;line-height:1.3` }, d, '');
+      const d = el('div', { class: 'abs', style: `left:${x0 + i * (TW + GAP)}px;top:330px;width:${TW}px;height:470px;border-radius:26px;background:rgba(14,18,34,0.9);border:3px solid ${COL[s.c]};box-shadow:0 0 34px ${GLOW[s.c]};z-index:5;display:flex;flex-direction:column;align-items:center;padding:34px 22px 0;text-align:center` }, stage);
+      const num = el('div', { class: 'bungee', style: `font-size:176px;line-height:1;color:${COL[s.c]};text-shadow:0 0 40px ${GLOW[s.c]},0 8px 0 rgba(0,0,0,0.5);height:190px;white-space:nowrap` }, d, '0');
+      el('div', { style: 'font-weight:800;font-size:31px;letter-spacing:0.06em;color:#fff;margin-top:22px;line-height:1.15' }, d, s.label);
+      const sub = el('div', { style: `font-weight:600;font-size:24px;color:${COL.muted};margin-top:14px;line-height:1.3` }, d, '');
+      num.textContent = s.countSub ? s.value : (s.dec ? s.value.toFixed(s.dec) : String(s.value)) + (s.suffix ?? '');
+      fit(num, TW - 44);
       return { s, d, num, sub, tIn: 0.35 + i * B, tLand: 0.35 + i * B + 1.0 };
     });
     const fmt = (v, dec) => v.toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec });
-    const imps = tiles.map((tl, i) => impact(stage, x0 + i * (TW + GAP) + TW / 2, 450, { seed: 70 + i, flash: 0, ring: 260, sparks: 16 }));
+    const imps = tiles.map((tl, i) => impact(stage, x0 + i * (TW + GAP) + TW / 2, 460, { seed: 70 + i, flash: 0, ring: 260, sparks: 16 }));
     return {
       dur, hits: tiles.map((x) => +x.tLand.toFixed(3)),
       seek(t) {
