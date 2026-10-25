@@ -133,14 +133,19 @@ test('Commentator: lines arrive during play; mute and unmute', async () => {
   const gaps = log.slice(1).map((l: any, i: number) => (l.at - log[i].at) / 1000);
   for (const g of gaps) expect(g).toBeGreaterThanOrEqual(3.4); // one line every 3-4 s at most
   await expect(page.locator('#commentary')).toContainText('King Magma');
+  // The sound button opens the volume panel; its "Mute commentator" button mutes the voice (captions keep coming).
   await page.click('#btn-mute');
-  await expect(page.locator('#btn-mute')).toHaveText('🔇');
+  await expect(page.locator('#vol-mute')).toBeVisible();
+  await page.click('#vol-mute');
+  await expect(page.locator('#vol-mute')).toHaveText('Unmute commentator');
+  expect(await page.evaluate(() => localStorage.getItem('throwhands.mute'))).toBe('1');
   const n = log.length;
   await page.waitForFunction((n) => (window as any).__brawl.commentary.length > n, n, { timeout: 20_000 });
   log = await page.evaluate(() => (window as any).__brawl.commentary.slice());
   expect(log[log.length - 1].spoken).toBe('muted');
-  await page.click('#btn-mute');
-  await expect(page.locator('#btn-mute')).toHaveText('🔊');
+  if (!(await page.locator('#vol-mute').isVisible())) await page.click('#btn-mute');
+  await page.click('#vol-mute');
+  await expect(page.locator('#vol-mute')).toHaveText('Mute commentator');
   expect(await page.evaluate(() => localStorage.getItem('throwhands.mute'))).toBe('0');
   expect(calls).toBeGreaterThanOrEqual(2);
   await b.close();

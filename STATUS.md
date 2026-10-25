@@ -1,6 +1,46 @@
 # Status (written by the implementation agent)
 
-Last update: Sun Oct 25, 4:25 AM CDT. Deployed build: `8abd535` on https://throwhands.tech.
+Last update: Sun Oct 25, 5:10 AM CDT. Deploy in progress (see the end of this section for the deployed commit).
+
+## Since 4:35 AM: the user's drill sessions (REVIEW.md 4:25 AM and 4:35 AM), reproduced, fixed, re-measured
+**How these numbers were made.** Both sessions were exported from Tiger `research_frames` and replayed frame by frame through the real `GestureRecognizer`, with the same live guard calibration the game ran (`tests/tools/export-research.ts`, `tests/tools/drill-replay.ts`; the landmark fixtures stay local in `clips/research/`).
+- **Replay fidelity:** the old code replayed gives the recorded live numbers, for example lean_back +0.63 (recorded +0.66) and step_back +0.50 (recorded +0.40).
+- **Rep scoring:** each rep is scored on a fixed 3 s window from its prompt, like the drill's timeout. The live run ended reps early; its forward bias "detected" forward reps before you moved, so labeled frames alone missed the motion.
+- **Before** = the code you ran; **after** = now. "fwd" and "strafe" are the mean input over the rep windows.
+
+
+
+**What was wrong, and what changed:**
+1. **Moving backward read as forward.**
+   - **Lean signal:** the world-space torso lean used guessed hip depth. At a laptop your hips are out of frame (visibility 0.09 in session 1), so its sign was wrong in about a third of reps.
+   - **Step signal:** it compared against the 3 s calibration, and you settled 14% closer right after calibrating. That alone is the +0.25 "still" drift.
+   - **Now:** forward/back reads one signal, your **apparent size** in the image (the rotation-corrected shoulder width). Leaning and stepping both change it.
+   - **Your spot:** size is compared against **your spot**: the median size over the last 10 s you stood settled, seeded by the guard hold. So it follows posture drift, but never a held step.
+   - **Cross-talk:** while you strafe harder than you move forward or back, a weak forward/back is dropped (diagonal drift during side steps).
+   - **Session 2 "still"** is exactly 0; big punches are ≈0 forward in both sessions.
+   - **Session 1 "still" +0.12** is a real lean. At 10.2–14.6 s you dropped your hands to your hips and leaned toward the screen: your head grew 19% in the image, and it reads as forward. Elsewhere in "still" the input is 0.
+2. **Big hooks read as jabs, uppercuts never fired.**
+   - **Hooks:** your hooks open the elbow to 155–160° and sweep 0.68–1.08 m toward the midline.
+   - **Uppercuts:** your uppercuts raise the wrist 0.5–0.85 m with the elbow open past 140°. The elbow limits (150° for hooks, 115° for uppercuts) rejected both.
+   - **Now:** an arbiter classifies every big strike by the whole motion, whatever the elbow does:
+     - uppercut: wrist rise ≥ 0.4 m and ≥ 0.75 × the sweep
+     - hook: sweep ≥ 0.45 m, or a 35° torso turn (wrapped) with ≥ 0.3 m sweep
+   - **Why 0.45 m:** crosses thrown from a bladed stance sweep 0.29–0.41 m, both in your session 1 straights and on the shadowboxing clips. Small strikes keep their old kinds.
+   - **Labeled clips:** no regression (eval-gestures jab 6 TP, 86% precision; hook 3/3, 0 false). All 13 labeled jabs still fire on the same frame.
+3. **Grab 0/4.** Merged the 4:10 AM jab hold and blast hold (the parallel agent's work). Your real reps still failed for two reasons:
+   - **Reach:** your low guard sits at arm extension 0.78, right at the reach threshold. So one arm stayed "reached" from an old rise and never lined up with the other.
+   - **Pull:** your grab reaches both hands **up** (wrists +0.39–0.54 m) and pulls down to your guard (extension ~0.65–0.75). It never reaches the chest pose (0.45).
+   - **Now, reach:** a fresh rise re-arms an arm.
+   - **Now, pull:** after a reach where both arms rose within 0.12 s and both wrists went up ≥ 0.25 m, bringing both arms back ≥ 0.15 to your guard counts as the pull. Both wrists rising together no longer fires a single jab, hook or uppercut.
+   - **Result:** grab **0/4 → 3/4**, and false grabs on all 37 real clips stay **0**. Throw is still 0/4 (real-clip throw recall 4%), so grappling stays behind `?grapple=1`.
+4. **Research upload bug:** the server clamped each frame's time to its own clock, and your laptop clock runs ahead, so up to 9 frames shared one millisecond in Tiger. Frames now also store their capture time (`ft`).
+
+**Still weak (honest):**
+- **Big hooks:** the wind-up (arm drawn out to the side) still fires one extra jab on 2–3 of 4 reps. A rule for it cost real lead jabs on the labeled clips, so it was not shipped.
+- **Session 1 step_fwd 0/3:** in rep 8 your arms swung faster than 0.9 m/s while stepping in, which the strike gate treats as a punch. In rep 13 you stepped in at 2.4 s. Raising the gate to 1.5 m/s gained 1 rep and let hook wind-ups through, so it was not changed.
+- **Throw** is not addressed yet.
+
+**Please re-run the drills** (`?research=1&drills=1&grapple=1` and press Guided drills) once this build is live. The new sessions store exact capture times.
 
 ## Since 4:05 AM
 - **Camera fixes from review rounds 7 and 8:**
@@ -195,12 +235,10 @@ The cause of the misses was the tumble pivoting at the feet, which swung the hea
 - **Strafe** is the sum of two inputs:
   - step sideways: hip center x in the image against the calibrated spot, in calibrated shoulder widths; dead zone 0.3, full speed 0.9
   - lean shoulders over hips: dead zone 3.5 cm, full 10 cm
-- **Forward/back** is the larger of two inputs:
-  - lean the torso toward/away from the camera: shoulders vs hips against the calibrated stance; dead zone 5.5 cm, full 12 cm
-  - step: rotation-corrected shoulder width in the image; dead zone 10%, full 22%
-- Both are smoothed over 0.15 s and ignored while striking, blocking, and for 0.3 s after a strike.
+- **Forward/back** (since 5:00 AM) is your apparent size in the image (rotation-corrected shoulder width) against **your spot** (median of the last 10 s standing settled, seeded by the guard hold): dead zone 10%, full 22%. Leaning and stepping both count. While strafing harder, forward/back under 0.75 is dropped.
+- Both are smoothed over 0.15 s and ignored while striking (a hand faster than 0.9 m/s), blocking, and for 0.35 s after (0.65 s after a detected strike).
 - **Detection:**
-  - Lean in 12 cm: full forward input, 0.41 m advanced.
+  - Lean in 25 cm at 1.5 m: forward input 0.73, 0.30 m advanced (12 cm is inside the dead zone by design; your real drill leans changed size 26–39%).
   - Real side-to-side footwork (shadow_fighterD): strafe in the stepped direction on 88% of frames, 0 wrong-direction frames.
   - Standing in guard: 0% movement input.
   - Mirroring checked: stepping to your own left moves your fighter screen-left.

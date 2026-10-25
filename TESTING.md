@@ -211,6 +211,40 @@ Why throws are missed (seoi_02 rep 1, per-frame features): the judo entry has al
 hinge lands about 1.5 s after the turn, past `throwWindow` 0.8 s. **Default-on criterion (about 70% recall for grab and throw)
 is not met**: throw 4% on real drills, grab unmeasured. `?grapple=1` stays opt-in.
 
+## The user's drill sessions fda75d56 and 2dd3adbd, replayed (REVIEW.md 4:25 and 4:35 AM, Sun Oct 25 5:00 AM)
+- **Data:** both sessions were exported from Tiger with `tests/tools/export-research.ts` into local fixtures (`clips/research/`, gitignored).
+  - **Timing:** row times are rebuilt by a rolling fit, because the server clamped frame times to its clock and up to 9 frames shared 1 ms. New sessions store the capture time in `ft`.
+  - **Replay:** `tests/tools/drill-replay.ts` replays a session through the real recognizer with the live guard calibration, and scores each rep on a 3 s window the way `web/src/drills.ts` does. `tests/tools/drill-trace.ts` traces one rep frame by frame. `tests/tools/strike-features.ts` gives each rep's sweep, rise, torso turn and elbow.
+- **Per-drill movement numbers, before and after:** STATUS.md, "Since 4:35 AM".
+- **Strike confusion on the punch and grapple reps, both sessions** (actions fired inside the rep windows):
+
+| Prompted (both sessions) | Reps detected before → after | jab fired before → after | hook fired before → after | uppercut fired before → after | palm fired before → after | grab fired before → after | throw fired before → after |
+|---|---|---|---|---|---|---|---|
+| straight_big | 4/8 → 4/8 | 5 → 5 | 3 → 3 | 3 → 3 | 1 → 0 | 0 → 0 | 0 → 0 |
+| hook_L_big | 3/8 → 4/8 | 7 → 6 | 3 → 5 | 0 → 0 | 0 → 0 | 0 → 0 | 0 → 0 |
+| hook_R_big | 3/8 → 4/8 | 6 → 5 | 5 → 7 | 2 → 2 | 1 → 0 | 0 → 0 | 0 → 0 |
+| uppercut_big | 2/6 → 5/6 | 7 → 7 | 5 → 2 | 2 → 5 | 0 → 0 | 0 → 0 | 0 → 0 |
+| grab | 0/4 → 3/4 | 8 → 4 | 0 → 0 | 1 → 0 | 0 → 0 | 0 → 3 | 0 → 0 |
+| throw | 0/4 → 0/4 | 4 → 1 | 4 → 4 | 1 → 0 | 0 → 0 | 0 → 1 | 0 → 0 |
+
+- **Boundaries were tuned on these sessions plus the 37 shadowboxing clips:**
+  - big uppercut: wrist rise ≥ 0.4 m and ≥ 0.75 × the sweep
+  - big hook: sweep ≥ 0.45 m, or a turn ≥ 35° with ≥ 0.3 m sweep
+  - **Why not 0.30 m:** the planner's 0.30 m turned 7 crosses on the clips (bladed-stance rear straights, 0.29–0.41 m sweep) into hooks, and cost 1 labeled jab. At 0.45 m every labeled jab is kept.
+  - **Yaw wrap fixed:** the turn is now a wrapped difference. Before the fix, a yaw crossing ±180° read as a 358° turn.
+- **eval-gestures (labeled clips), unchanged before and after:**
+  - jab: 6 TP, 1 FP, 8 FN (86% precision)
+  - hook: 3/3, 0 FP
+  - uppercut: 3 FP (unchanged)
+  - block, xshield, kick and knee unchanged
+- **jab-latency:** 13 labeled jabs, mean 46 ms, median 33 ms (same frames as before). All clips: 58 jabs, down from 62. The arbiter now calls 4 of them hooks: wide swings on `crowd_01`, `kick_02`, `ufc_02` and `ufc_05`.
+- **Grab on the user's real reps: 0/4 → 3/4.** False grabs on the 37 clips stay 0 (`grapple-scan`).
+  - The guard-return pull only counts after a simultaneous (≤ 0.12 s) two-arm reach in which both wrists rise ≥ 0.25 m. Without the rising-wrists condition, it fired 10 false grabs on shadowboxing one-twos.
+  - Throw recall is unchanged: 0/4 on the user's reps, 4% on the seoi-nage clips.
+- **Movement unit tests, all PASS:** `move-forward-back`, `side-step`, `punch-no-move`.
+  - **move-forward-back:** the synthetic lean is now 25 cm. Real "lean toward the camera" reps changed size 26–39%; a 12 cm lean at 1.5 m (8%) is inside the dead zone by design.
+  - **punch-no-move:** now counts displacement *caused* by the strike. Footwork already under way 0.4 s before a punch is not counted; the raw number is printed too (hook_01: 0.0 cm caused, 6.3 cm raw footwork).
+
 ## Bugs found by these tests (reproduced first, fixed, re-run)
 
 | Bug | Repro | Root cause | Fix | Regression test |
