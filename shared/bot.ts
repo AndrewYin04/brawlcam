@@ -23,6 +23,8 @@ export class Bot {
   private nextGuardRollAt = 0;
   private strafeDir = 1;
   private strafeUntil = 0;
+  /** Grappling (sim.cfg.grapple only): held in a clinch, lean back hard until this time to escape. */
+  private escapeBackUntil = 0;
   private rng: () => number;
   private level: number;
   private seed: number;
@@ -72,6 +74,33 @@ export class Bot {
     }
   }
 
+  /**
+   * Grappling decisions (sim.cfg.grapple only), so the strike / grab / throw triangle shows up in practice:
+   * grab a guarding opponent in range (grab beats guard); in the clinch, knee (and sometimes hook) and, with a full
+   * meter, sometimes throw; when held, try to escape (palm frame or a hard lean back); now and then throw from range.
+   * Returns null to fall through to the normal attack roll; `a: null` = no action this time (`lean`: start an escape lean).
+   */
+  private grappleChoice(sim: Sim, dist: number, targetGuarding: boolean): { a: Action | null; pace: number; lean?: boolean } | null {
+    const me = sim.get(this.id)!;
+    if (me.grapple) return { a: null, pace: 0.3 }; // own grab / throw starting: wait, re-check soon
+    if (me.clinch?.holder) {
+      if (me.meter >= 100 && this.rng() < 0.4) return { a: { kind: 'throw', hand: 'B', speed: 0 }, pace: 0.6 };
+      if (this.rng() < 0.75) return { a: { kind: 'kick', hand: this.rng() < 0.5 ? 'L' : 'R', speed: 3 }, pace: 0.55 };
+      return { a: { kind: 'hook', hand: this.rng() < 0.5 ? 'L' : 'R', speed: 2 + this.rng() * 2 }, pace: 0.55 };
+    }
+    if (me.clinch) {
+      if (me.meter >= 100 && this.rng() < 0.25) return { a: { kind: 'throw', hand: 'B', speed: 0 }, pace: 0.6 };
+      // Not every chance: harder bots fight out of the clinch sooner (so knees land against easy bots).
+      if (this.rng() >= [0.3, 0.45, 0.6, 0.7][Math.max(0, Math.min(3, this.level))]) return { a: null, pace: 0.6 };
+      if (this.rng() < 0.5) return { a: { kind: 'palm', hand: 'B', speed: 3 }, pace: 0.8 };
+      this.escapeBackUntil = sim.t + 0.45;
+      return { a: null, pace: 0.8, lean: true };
+    }
+    if (targetGuarding && dist <= TUNING.grabRange && this.rng() < 0.45) return { a: { kind: 'grab', hand: 'B', speed: 0 }, pace: 1 };
+    if (me.meter >= 100 && dist <= TUNING.throwRange && this.rng() < 0.15) return { a: { kind: 'throw', hand: 'B', speed: 0 }, pace: 1 };
+    return null;
+  }
+
   tick(sim: Sim) {
     const me = sim.get(this.id);
     if (!me) return;
@@ -84,7 +113,8 @@ export class Bot {
 
     if (fighting && me.alive && tgt) {
       const dist = Math.hypot(tgt.x - me.x, tgt.z - me.z);
-      const want = TUNING.engageDist; // arm's length
+      // Arm's length; with grappling on, step into grab range when the opponent turtles (grab beats guard).
+      const want = sim.cfg.grapple && tgt.blocking && this.level >= 0 ? TUNING.grabRange - 0.15 : TUNING.engageDist;
       if (dist > want + 0.15) fwd = Math.min(1, (dist - want) * 1.5);
       else if (dist < want - 0.25) fwd = -0.5;
       if (sim.cfg.mode === 'brawl') {
@@ -124,21 +154,33 @@ export class Bot {
       }
       blocking = this.level >= 0 && t < this.blockUntil && me.dizzyUntil === 0;
 
+      // Grappling: while held, the escape lean overrides movement (the sim reads forward input < -0.6 for 0.3 s).
+      if (sim.cfg.grapple && me.clinch && !me.clinch.holder && t < this.escapeBackUntil) fwd = -1;
+
       // Level -1: passive training dummy (never attacks), used by tests and as an option.
       if (this.level >= 0 && t >= this.nextAttackAt && dist < TUNING.reach.jab + 0.1 && t >= me.stunUntil && me.dizzyUntil === 0) {
-        const roll = this.rng();
-        let a: Action;
-        if (me.meter >= 100 && roll < 0.45) {
-          a = this.rng() < 0.5 ? { kind: 'uppercut', hand: 'R', speed: 5 } : { kind: 'palm', hand: 'B', speed: 3 };
-        } else if (me.meter >= 100 && roll < 0.55) {
-          a = { kind: 'xshield', hand: 'B', speed: 0 };
-        } else if (roll < 0.55) a = { kind: 'jab', hand: this.rng() < 0.6 ? 'L' : 'R', speed: 2 + this.rng() * 2.5 };
-        else if (roll < 0.8) a = { kind: 'hook', hand: this.rng() < 0.5 ? 'L' : 'R', speed: 2 + this.rng() * 2.5 };
-        else if (roll < 0.92) a = { kind: 'uppercut', hand: 'R', speed: 2.5 + this.rng() * 2 };
-        else a = { kind: 'kick', hand: 'R', speed: 3 + this.rng() * 2 };
-        if (!blocking) sim.pushAction(this.id, a);
-        const base = [1.6, 1.15, 0.8, 0.35][Math.max(0, Math.min(3, this.level))];
-        this.nextAttackAt = t + base * (0.6 + this.rng() * 0.9);
+        // Grappling moves first (only with sim.cfg.grapple, so the rng sequence is untouched when it is off).
+        const g = sim.cfg.grapple ? this.grappleChoice(sim, dist, tgt.blocking) : null;
+        if (g) {
+          if (g.a && (!blocking || me.clinch)) sim.pushAction(this.id, g.a); // held: the guard is down anyway
+          if (g.lean) fwd = -1; // starting the escape lean this tick
+          const base = [1.6, 1.15, 0.8, 0.35][Math.max(0, Math.min(3, this.level))];
+          this.nextAttackAt = t + base * g.pace * (0.6 + this.rng() * 0.9);
+        } else {
+          const roll = this.rng();
+          let a: Action;
+          if (me.meter >= 100 && roll < 0.45) {
+            a = this.rng() < 0.5 ? { kind: 'uppercut', hand: 'R', speed: 5 } : { kind: 'palm', hand: 'B', speed: 3 };
+          } else if (me.meter >= 100 && roll < 0.55) {
+            a = { kind: 'xshield', hand: 'B', speed: 0 };
+          } else if (roll < 0.55) a = { kind: 'jab', hand: this.rng() < 0.6 ? 'L' : 'R', speed: 2 + this.rng() * 2.5 };
+          else if (roll < 0.8) a = { kind: 'hook', hand: this.rng() < 0.5 ? 'L' : 'R', speed: 2 + this.rng() * 2.5 };
+          else if (roll < 0.92) a = { kind: 'uppercut', hand: 'R', speed: 2.5 + this.rng() * 2 };
+          else a = { kind: 'kick', hand: 'R', speed: 3 + this.rng() * 2 };
+          if (!blocking) sim.pushAction(this.id, a);
+          const base = [1.6, 1.15, 0.8, 0.35][Math.max(0, Math.min(3, this.level))];
+          this.nextAttackAt = t + base * (0.6 + this.rng() * 0.9);
+        }
       }
     }
 

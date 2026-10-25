@@ -102,6 +102,127 @@ export const GESTURE_CFG = {
   minShoulderVis: 0.5,
 };
 
+/**
+ * Grappling gestures (planner spec 2026-10-25 2:50 AM, section B). Detected independently of every other move: the
+ * detector only reads features and appends 'grab' / 'throw' actions after all other detection has run, so it cannot
+ * change any existing action, guard, X, movement or turn output. The sim ignores both actions unless SimConfig.grapple.
+ */
+export const GRAPPLE_CFG = {
+  // Reach: both arms extend forward together.
+  reachExt: 0.75, // extension (fraction of arm length) both arms must pass
+  reachSync: 0.25, // s: the two arms must pass reachExt within this of each other
+  reachRise: 0.12, // an arm "reaches" when it passes reachExt having extended by at least this within reachRiseWindow
+  reachRiseWindow: 0.4, // s (so an arm already held out near reachExt in a long guard is not a reach)
+  // Pull: then both wrists come back to the chest, close together.
+  pullExt: 0.45, // both extensions below this
+  pullGap: 1.0, // wrists closer than this many shoulder widths
+  reachMaxHold: 0.5, // s: arms held out longer than this before coming back is a push-and-hold (energy blast), not a grab
+  pullWindow: 0.5, // s from the arms starting back (first arm dropping below reachExt) to the pulled-in pose
+  pullHold: 0.06, // s the pulled-in pose must persist (single-frame tracking glitches are not grabs)
+  pullMaxTurnDeg: 35, // a grab is not a turn: torso yaw stays within this of the reach (also rejects tracking flips)
+  grabRefractory: 0.8, // s between grabs
+  // Shoulder throw: after the reach, twist the torso and hinge forward.
+  throwWindow: 0.8, // s after the reach
+  throwTwistDeg: 60, // torso yaw change from the reach
+  throwDrop: 0.15, // shoulders drop (toward the hips) by this fraction of the torso length
+  throwSquareDeg: 40, // the reach starts squared up to the opponent (|yaw| within this): untwisting is not a throw
+  throwHold: 0.06, // s the twisted-and-hinged pose must persist
+  throwRefractory: 1.2, // s between throws
+};
+
+export interface GrappleFeatures {
+  t: number;
+  extL: number; // wrist distance from shoulder / arm length
+  extR: number;
+  gap: number; // wrist-to-wrist distance, meters
+  sw: number; // shoulder width, meters
+  yaw: number; // torso yaw, radians
+  shH: number; // shoulder-centre height above the hip centre, meters
+  torso: number; // shoulder-centre to hip-centre distance, meters
+}
+
+export class GrappleDetector {
+  cfg = { ...GRAPPLE_CFG };
+  private riseAt = { L: -9, R: -9 };
+  private wasExt = { L: false, R: false };
+  private wasReach = { L: false, R: false };
+  private hist: { t: number; L: number; R: number }[] = [];
+  /** Time both arms were last out together (the later arm's rise), with the torso pose at that moment. */
+  private reach: { t: number; yaw: number; shH: number; torso: number; pulled: boolean; thrown: boolean; pullSince: number; throwSince: number; releasedAt: number } | null = null;
+  private lastGrab = -9;
+  private lastThrow = -9;
+
+  reset() {
+    this.riseAt = { L: -9, R: -9 };
+    this.wasExt = { L: false, R: false };
+    this.wasReach = { L: false, R: false };
+    this.hist = [];
+    this.reach = null;
+  }
+
+  update(f: GrappleFeatures): ('grab' | 'throw')[] {
+    const c = this.cfg;
+    const out: ('grab' | 'throw')[] = [];
+    this.hist.push({ t: f.t, L: f.extL, R: f.extR });
+    while (this.hist.length && f.t - this.hist[0].t > c.reachRiseWindow) this.hist.shift();
+    for (const h of ['L', 'R'] as const) {
+      const e = h === 'L' ? f.extL : f.extR;
+      const ext = e >= c.reachExt;
+      // A reach is a motion: the arm passes reachExt after extending by reachRise within the window.
+      let lo = e;
+      for (const x of this.hist) lo = Math.min(lo, x[h]);
+      const reaching = ext && e - lo >= c.reachRise;
+      if (reaching && !this.wasReach[h]) this.riseAt[h] = f.t;
+      this.wasReach[h] = reaching || (this.wasReach[h] && ext); // stays "reached" while the arm stays out
+      this.wasExt[h] = ext;
+    }
+    // Both arms out now, having risen within reachSync of each other: a (new) reach.
+    if (this.wasReach.L && this.wasReach.R && Math.abs(this.riseAt.L - this.riseAt.R) <= c.reachSync) {
+      const at = Math.max(this.riseAt.L, this.riseAt.R);
+      if (!this.reach || this.reach.t !== at) this.reach = { t: at, yaw: f.yaw, shH: f.shH, torso: f.torso, pulled: false, thrown: false, pullSince: -1, throwSince: -1, releasedAt: -1 };
+    }
+    const r = this.reach;
+    if (!r) return out;
+    const age = f.t - r.t;
+    if (r.releasedAt < 0 && !(this.wasExt.L && this.wasExt.R)) r.releasedAt = f.t;
+    const grabLive = r.releasedAt >= 0 ? r.releasedAt - r.t <= c.reachMaxHold && f.t - r.releasedAt <= c.pullWindow : age <= c.reachMaxHold;
+    if (!grabLive && age > c.throwWindow) {
+      this.reach = null;
+      return out;
+    }
+    const deg = 180 / Math.PI;
+    const turn = Math.abs(wrapRad(f.yaw - r.yaw)) * deg;
+    if (!r.thrown && age <= c.throwWindow && f.t - this.lastThrow >= c.throwRefractory && Math.abs(r.yaw) * deg <= c.throwSquareDeg) {
+      const drop = (r.shH - f.shH) / Math.max(0.2, r.torso);
+      if (turn >= c.throwTwistDeg && drop >= c.throwDrop) {
+        if (r.throwSince < 0) r.throwSince = f.t;
+        if (f.t - r.throwSince >= c.throwHold) {
+          r.thrown = true;
+          this.lastThrow = f.t;
+          out.push('throw');
+        }
+      } else r.throwSince = -1;
+    }
+    if (!r.pulled && !r.thrown && grabLive && r.releasedAt >= 0 && f.t - this.lastGrab >= c.grabRefractory) {
+      if (f.extL < c.pullExt && f.extR < c.pullExt && f.gap < c.pullGap * f.sw && turn <= c.pullMaxTurnDeg) {
+        if (r.pullSince < 0) r.pullSince = f.t;
+        if (f.t - r.pullSince >= c.pullHold) {
+          r.pulled = true;
+          this.lastGrab = f.t;
+          out.push('grab');
+        }
+      } else r.pullSince = -1;
+    }
+    return out;
+  }
+}
+
+function wrapRad(a: number) {
+  while (a > Math.PI) a -= Math.PI * 2;
+  while (a < -Math.PI) a += Math.PI * 2;
+  return a;
+}
+
 export interface GestureOutput {
   present: boolean;
   actions: (Action & { t: number })[];
@@ -179,6 +300,8 @@ export class GestureRecognizer {
   private leanS = 0;
   /** Set to [] to collect per-frame candidate/suppression notes (tuning tools). */
   debugLog: string[] | null = null;
+  /** Grab / shoulder-throw detection (additive: runs last and only appends actions). */
+  grapple = new GrappleDetector();
 
   /** Start (or restart) the 3-second guard calibration. */
   beginCalibration() {
@@ -206,6 +329,7 @@ export class GestureRecognizer {
     this.blocking = false;
     this.xshield = false;
     this.xHigh = false;
+    this.grapple.reset();
   }
 
   update(frame: PersonFrame | null, now: number): GestureOutput {
@@ -589,6 +713,11 @@ export class GestureRecognizer {
     } else if (Math.abs(yaw) < this.cfg.turnOff) {
       this.turnLatched = 0;
       this.turnSince = -1;
+    }
+
+    // ---- grappling (after everything else, so it cannot affect any other output) ----
+    for (const k of this.grapple.update({ t, extL: handInfo[0].ext, extR: handInfo[1].ext, gap: len(sub(lW, rW)), sw: SW, yaw, shH: MS[1] - midHip[1], torso: len(sub(MS, midHip)) })) {
+      out.actions.push({ kind: k, hand: 'B', speed: 0, t });
     }
 
     out.debug = { yaw, lean, ratio, stepFwd, leanFwd, leanZ: leanZ - (this.calib.leanZ ?? 0), torso: torsoImgDbg, lExt: handInfo[0].ext, rExt: handInfo[1].ext, lEl: handInfo[0].elbow, rEl: handInfo[1].elbow, lSp: handInfo[0].speed, rSp: handInfo[1].speed };
