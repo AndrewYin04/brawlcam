@@ -1,6 +1,30 @@
 # Status (written by the implementation agent)
 
-Last update: Sun Oct 25, 9:15 AM CDT. **Deployed build: `fb00f2d`** on https://throwhands.tech (deployed 9:12 AM).
+Last update: Sun Oct 25, 10:13 AM CDT. **Deployed build: `1adaff6`** on https://throwhands.tech (deployed 10:08 AM). **Working on now: `demo-video-v4` (REVIEW.md 10:05 AM), due 10:40.**
+
+## 10:08 AM: grappling stays opt-in (`?grapple=1`); the default-on trial is rolled back (REVIEW.md 7:45 AM)
+The rule was to turn grappling on by default only if all three conditions held. Condition 3 did not, so `1adaff6` puts it back behind `?grapple=1`. The video keeps "GRAPPLING (BETA)", and README and devpost already say beta.
+1. **Labeled-clip strike results with grappling on: identical or better. ✓**
+   - eval-gestures: same true positives and misses; false jabs 1 → 0.
+2. **The user's drill sessions show no new strike misreads. ✓**
+   - Command: `npx tsx tests/tools/drill-replay.ts 2dd3adbd-exact.json fda75d56-exact.json ea6e2541-exact.json --reps [--grapple]`
+   - With grappling on, the replays only lose strikes, never gain one. Strike tallies off → on:
+     - `hookR×2` reps: 2 → 1
+     - `hookL×2` reps: 7 → 6
+     - examples: grab rep `r6✓[jabL grab jabR]` → `[jabL grab]`; straight rep `r14✗[uppercutR hookR]` → `[]`
+   - Rep scores are unchanged.
+3. **The full e2e suite on the live default build (grappling on): not a clean pass. ✗**
+   - **Full run on `fb00f2d`:** `59 passed, 1 failed, 1 skipped (36.1m)` (the skip is the `@live` Forge test, run separately). The previous run's drills, grab-drill, commentator-mute and supers-guard failures all pass now:
+     - **drills, grab-drill:** the tests were updated for the on-by-default build.
+     - **commentator mute:** the test fix from the call-variety work.
+     - **supers guard:** a blocked Super Uppercut correctly chips 3 (10% of 25).
+   - **The 1 failure:** the 8-browser online brawl ("Target crashed"). Swap was full; I had paused a video encode that held about 750 MB.
+   - **Rerun of that test alone on `66febd5`:** `BRAWL8 {"samples":872,"mismatches":0,"p95":133,…,"fps":[6,8,8,7,8,8,9,8]}`. That fails the `p95 < 100` assertion. All 8 clients agree; only the timing fails. The 8 headless browsers ran at 6–9 fps, and I had a replay job running alongside.
+   - **Grappling isn't the cause:** online rooms always have grappling off (`web/src/net/online.ts:321`), and the earlier failure at 8:15 was also a sync p95 (642 under load).
+   - **Not a clean pass by 10:08,** so per the rule grappling is opt-in again. Turning it on later is one line in `web/src/flags.ts`, and is worth doing once the brawl test passes alone on an idle machine.
+- **Live check of the rollback:** `tests/e2e/drills.spec.ts` against https://throwhands.tech, with the result in TESTING.md.
+- **Also live since 9:58 (`66febd5`):** a landed Shoulder Throw now calls "SHOULDER THROW!". Before the fix, the throw's 25-damage hit took a "BIG RIGHT HAND!" line. The repro is `tests/unit/announcer-throw-call.ts`: it failed before and passes now.
+- **Match-end calls, rerun on `66febd5`:** `MATCH_ENDS ["FLAWLESS!","TOTAL DOMINATION!","NOT EVEN CLOSE!"]`, 1 passed.
 
 ## 9:12 AM: match-end calls fixed (REVIEW.md 6:08 + 7:58 AM), deployed and checked in live matches
 - **Bug reproduced first:** `tests/unit/announcer-match-end.ts` drives the real `Announcer` with 10 real bot-vs-bot sim duels, delivering events the way the game view does. On the old main (`b661b7b`):
