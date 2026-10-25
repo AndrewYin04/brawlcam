@@ -247,6 +247,11 @@ is not met**: throw 4% on real drills, grab unmeasured. `?grapple=1` stays opt-i
   - **move-forward-back:** the synthetic lean is now 25 cm. Real "lean toward the camera" reps changed size 26–39%; a 12 cm lean at 1.5 m (8%) is inside the dead zone by design.
   - **punch-no-move:** now counts displacement *caused* by the strike. Footwork already under way 0.4 s before a punch is not counted; the raw number is printed too (hook_01: 0.0 cm caused, 6.3 cm raw footwork).
 
+- **e2e fixes, Sun Oct 25 5:50 AM:**
+  - **Motion data export** failed 2 of 2 runs, a real bug. The Export button's handler was attached only after three stats requests, and a click within 0.1 s of the page showing did nothing. The handler is now attached at once and waits for the sample.
+  - **Energy blast** failed 2 of 2 runs, a stale test. A probe of 60 s on production: the scripted blocker was guard-broken 6 times and KO'd, and the one blast landed unguarded. The e2e now checks that the blast fires, travels and lands. Blocked-blast damage (10%) and guard drain (50) stay asserted in `tests/unit/guard-meter.ts`.
+  - **Commentator mute:** the e2e now drives the volume panel (the sound button opens it since the audio work); PASS on production.
+
 ## Bugs found by these tests (reproduced first, fixed, re-run)
 
 | Bug | Repro | Root cause | Fix | Regression test |
