@@ -59,7 +59,7 @@ async function video() {
   const t0 = Date.now();
   await openStore(page, true);
   // Larger page text for a 1080p video frame, and the fitting room plus the first row in view.
-  await page.addStyleTag({ content: 'html{zoom:1.25}' });
+  await page.addStyleTag({ content: 'html{zoom:1.45}' });
   await page.evaluate(() => document.getElementById('skin-stage')!.scrollIntoView({ block: 'start' }));
   await page.mouse.move(1900, 1000);
   await page.waitForTimeout(400);
