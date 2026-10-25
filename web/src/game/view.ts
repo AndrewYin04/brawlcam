@@ -433,6 +433,12 @@ export class MatchView {
       att: attId, tgt: id, t: 0, u, a0, d0, yawA: Math.atan2(u.x, u.z), yawT: Math.atan2(-u.x, -u.z), sign: side, landU, lat: new THREE.Vector3(),
       resolved: false, slammed: false, held: [], camFrom: this.arena.camPos.clone(), lookFrom: this.arena.camLook.clone(), camPos, camLook,
     };
+    // From the clinch the camera is already on (about) this side shot and settles in place. From anywhere else (a throw
+    // from range), cut to the side shot once, at the start, instead of swinging round during the grip and turn-in.
+    if (this.arena.camPos.distanceTo(camPos) > 0.6) {
+      this.throwSeq.camFrom.copy(camPos);
+      this.throwSeq.lookFrom.copy(camLook);
+    }
     this.throwWait = 0;
   }
   private throwWait = 0;

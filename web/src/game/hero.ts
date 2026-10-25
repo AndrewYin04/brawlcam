@@ -961,7 +961,9 @@ export class HeroFighter {
    *  the thrower's shoulder, so the two stay attached through the arc. */
   private thrownLimbs(ts: NonNullable<HeroFighter['throwSeq']>) {
     const s = THREE.MathUtils.clamp((ts.t - THROW_T.arc) / (THROW_T.slam - THROW_T.arc), 0, 1);
-    const bend = Math.sin(Math.PI * Math.min(1, s * 1.15)); // 0 -> 1 -> 0: straight at take-off and at the slam
+    // Knees and hips start bent (as the standing legs were at the load, so the switch to the held lying clip doesn't
+    // straighten them in one frame), bend more as the body whips over, and are straight for the slam.
+    const bend = s < 0.3 ? 0.6 + 0.4 * (s / 0.3) : Math.max(0, Math.cos(((s - 0.3) / 0.57) * (Math.PI / 2)));
     const side = new THREE.Vector3(1, 0, 0).applyQuaternion(this.body.getWorldQuaternion(new THREE.Quaternion()));
     for (const sd of ['l', 'r'] as const) {
       rotateWorld(this.bones['thigh_' + sd], side, -0.55 * bend * (sd === 'l' ? 1 : 0.8));
