@@ -33,7 +33,12 @@ export const GESTURE_CFG = {
   jabMinSpeed: 1.2, // m/s wrist speed relative to shoulders
   // hook
   hookVel: 1.7, // m/s lateral wrist velocity toward the midline
-  hookElbowMax: 150,
+  hookElbowMax: 150, // small hooks keep the elbow bent; big ones (sweep >= hookSweep) may open it fully
+  hookSweep: 0.3, // m toward the midline: a big hook, whatever the elbow does (straights sweep <= 0.11 m)
+  hookTurnDeg: 35, // deg torso turn within the strike window ...
+  hookSweepWithTurn: 0.15, // ... with at least this sweep also makes a hook
+  bigUpRise: 0.4, // m wrist rise: a big uppercut (hooks rise <= 0.43 m, and less than they sweep)
+  upOverSweep: 0.75, // a big uppercut rises at least this fraction of its sweep
   // uppercut
   upVel: 1.7, // m/s upward wrist velocity
   upStartBelow: 0.12, // wrist must start this far below shoulder line (m)
@@ -262,7 +267,7 @@ export class GestureRecognizer {
   calib: Calibration = { ...DEFAULT_CALIB };
   calibrated = false;
   private hist: Hist[] = [];
-  private feat: Record<'L' | 'R', { t: number; ext: number; elbow: number; y: number; u: number; speed: number }[]> = { L: [], R: [] };
+  private feat: Record<'L' | 'R', { t: number; ext: number; elbow: number; y: number; u: number; speed: number; yaw: number }[]> = { L: [], R: [] };
   private renderFilter = new VecFilter(15 * 3, 1.2, 0.6);
   private gestFilter = new VecFilter(15 * 3, 6, 0.8);
   private lastStrike: Record<string, number> = { L: -9, R: -9, kickL: -9, kickR: -9 };
@@ -426,10 +431,11 @@ export class GestureRecognizer {
 
     // Peak-based strike detection: robust to frame rate (works the same at 10, 15, or 30 fps).
     const candidates: { hand: 'L' | 'R'; kind: ActionKind; score: number; speed: number; t: number }[] = [];
+    const torsoYaw = Math.atan2(-(lS[2] - rS[2]), lS[0] - rS[0]);
     for (const hi of handInfo) {
       const side = hi.h === 'L' ? 1 : -1; // +X is the person's left
       const F = this.feat[hi.h];
-      F.push({ t, ext: hi.ext, elbow: hi.elbow, y: hi.W[1] - MS[1], u: -side * (hi.W[0] - MS[0]), speed: hi.speed });
+      F.push({ t, ext: hi.ext, elbow: hi.elbow, y: hi.W[1] - MS[1], u: -side * (hi.W[0] - MS[0]), speed: hi.speed, yaw: torsoYaw });
       while (F.length && t - F[0].t > 0.6) F.shift();
       const n = F.length;
       if (n < 3) continue;
@@ -460,15 +466,49 @@ export class GestureRecognizer {
         for (let i = k; i >= 0 && pk.t - F[i].t <= this.cfg.riseWindow; i--) uMin = Math.min(uMin, F[i].u);
         const uNow = Math.max(pk.u, F[n - 1].u);
         const kind: ActionKind = uNow - uMin >= this.cfg.hookRise * 1.2 && pk.elbow < this.cfg.hookElbowMax ? 'hook' : 'jab';
+        // (Big swings are reclassified below from the whole motion: sweep, rise and torso turn.)
         candidates.push({ hand: hi.h, kind, score: jab.rise / this.cfg.jabElbowRise, speed: Math.max(jab.peakSpeed, ((pk.ext - jab.start.ext) * this.calib.armLen) / jab.dt), t: pk.t });
       }
       const up = peakOf('y');
-      if (up && up.rise >= this.cfg.upRise && up.start.y < -this.cfg.upStartBelow && pk.elbow < this.cfg.upElbowMax) {
+      // Big swinging uppercuts open the elbow past 150 deg (drill session 2dd3adbd): the bent-elbow limit only applies to
+      // small ones.
+      if (up && up.rise >= this.cfg.upRise && up.start.y < -this.cfg.upStartBelow && (pk.elbow < this.cfg.upElbowMax || up.rise >= this.cfg.bigUpRise)) {
         candidates.push({ hand: hi.h, kind: 'uppercut', score: (up.rise / this.cfg.upRise) * 1.1, speed: Math.max(up.peakSpeed, up.rise / up.dt), t: pk.t });
       }
       const hook = peakOf('u');
-      if (hook && hook.rise >= this.cfg.hookRise && pk.elbow < this.cfg.hookElbowMax && pk.y > -0.3) {
+      // Big hooks open the elbow to 155-160 deg (drill session 2dd3adbd): past hookElbowMax only a big sweep counts.
+      if (hook && hook.rise >= this.cfg.hookRise && (pk.elbow < this.cfg.hookElbowMax || hook.rise >= this.cfg.hookSweep) && pk.y > -0.3) {
         candidates.push({ hand: hi.h, kind: 'hook', score: hook.rise / this.cfg.hookRise, speed: Math.max(hook.peakSpeed, hook.rise / hook.dt), t: pk.t });
+      }
+      // Arbiter for big swings, whichever peak fired (REVIEW.md 4:35 AM): classify by the whole motion, not elbow angle.
+      // Big hooks sweep ~1 m toward the midline with a 70-120 deg torso turn; straights sweep <= 0.11 m and turn <= 10 deg;
+      // big uppercuts raise the wrist 0.5-0.85 m. Small strikes keep the kind their peak gave them.
+      if (candidates.some((c) => c.hand === hi.h)) {
+        let uMin = Infinity, yMin = Infinity, yawMin = Infinity, yawMax = -Infinity;
+        const tEnd = F[n - 1].t;
+        for (const f of F) {
+          if (tEnd - f.t > this.cfg.riseWindow + 0.05) continue;
+          uMin = Math.min(uMin, f.u);
+          yMin = Math.min(yMin, f.y);
+          yawMin = Math.min(yawMin, f.yaw);
+          yawMax = Math.max(yawMax, f.yaw);
+        }
+        let uMax = -Infinity, yMax = -Infinity, seenUMin = false, seenYMin = false;
+        for (const f of F) {
+          if (tEnd - f.t > this.cfg.riseWindow + 0.05) continue;
+          if (f.u === uMin) seenUMin = true;
+          if (f.y === yMin) seenYMin = true;
+          if (seenUMin) uMax = Math.max(uMax, f.u);
+          if (seenYMin) yMax = Math.max(yMax, f.y);
+        }
+        const sweep = uMax - uMin, rise = yMax - yMin, turn = ((yawMax - yawMin) * 180) / Math.PI;
+        let kind: ActionKind | null = null;
+        if (rise >= this.cfg.bigUpRise && rise >= this.cfg.upOverSweep * sweep) kind = 'uppercut';
+        else if (sweep >= this.cfg.hookSweep || (turn >= this.cfg.hookTurnDeg && sweep >= this.cfg.hookSweepWithTurn)) kind = 'hook';
+        if (kind) for (const c of candidates) if (c.hand === hi.h && c.kind !== kind && (c.kind === 'jab' || c.kind === 'hook' || c.kind === 'uppercut')) {
+          if (this.debugLog) this.debugLog.push(`${t.toFixed(2)} reclass ${c.kind}${c.hand} -> ${kind} (sweep ${sweep.toFixed(2)} rise ${rise.toFixed(2)} turn ${turn.toFixed(0)})`);
+          c.kind = kind;
+        }
       }
     }
     if (this.debugLog) for (const c of candidates) this.debugLog.push(`${t.toFixed(2)} cand ${c.kind}${c.hand} score ${c.score.toFixed(2)} speed ${c.speed.toFixed(2)} peakT ${c.t.toFixed(2)}`);
