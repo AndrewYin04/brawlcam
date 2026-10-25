@@ -52,7 +52,7 @@ const ASSETS: Asset[] = [
   { id: 'pipeline', scene: 'pipeline', desc: 'AI pipeline: Webcam -> MediaPipe Pose -> gesture rules -> game sim -> opponent screen; Meta Muse, Gemini, ElevenLabs branches; particles' },
   { id: 'stats', scene: 'stats', params: { stats: STATS }, desc: 'Stat counters: 48 e2e tests, 0 mismatches over 2,160 ticks, 3.4x compression, 8 browsers' },
   callout('callout_right_hook', 'RIGHT HOOK', '11 DMG'),
-  callout('callout_guard_broken', 'GUARD BROKEN', '2 s DIZZY', { color: 'p2' }),
+  callout('callout_guard_broken', 'GUARD BROKEN', '2 SEC DIZZY', { color: 'p2' }),
   callout('callout_iron_wall', 'IRON WALL', 'COUNTERS THE NEXT HIT', { color: 'p2' }),
   callout('callout_super_uppercut', 'SUPER UPPERCUT', 'INTO THE CAGE'),
   callout('callout_right_hook_pointer', 'RIGHT HOOK', '11 DMG', { target: [1180, 470] }, 'Lower third with the optional pointer to a body part (sample target 1180,470)'),
@@ -118,7 +118,7 @@ async function render(page: Page, a: Asset): Promise<Result> {
   // Tile first (keeps alpha), then put the single tiled image over a checkerboard: overlaying per frame onto a
   // generated source drops/shifts frames through framesync.
   const sheet = path.join(OUT, 'sheets', `${a.id}.png`);
-  execFileSync('ffmpeg', ['-loglevel', 'error', '-y', '-pattern_type', 'glob', '-i', path.join(fdir, '*.png'), '-vf', `format=rgba,scale=640:360,tile=${cols}x${rows}:padding=4:color=white@1`, '-frames:v', '1', sheet]);
+  execFileSync('ffmpeg', ['-loglevel', 'error', '-y', '-reinit_filter', '0', '-pattern_type', 'glob', '-i', path.join(fdir, '*.png'), '-vf', `format=rgba,scale=640:360,tile=${cols}x${rows}:padding=4:color=white@1`, '-frames:v', '1', sheet]);
   if (info.alpha) {
     const sw = cols * 640 + (cols - 1) * 4, sh = rows * 360 + (rows - 1) * 4;
     const chk = `color=c=black:s=${sw}x${sh}:d=1,format=rgb24,geq=r='if(mod(floor(X/40)+floor(Y/40),2),90,60)':g='if(mod(floor(X/40)+floor(Y/40),2),95,64)':b='if(mod(floor(X/40)+floor(Y/40),2),110,74)'[bg];[bg][0]overlay=0:0`;
