@@ -194,7 +194,10 @@ wss.on('connection', (ws: WebSocket) => {
   let alive = true;
   ws.on('pong', () => (alive = true));
   const ping = setInterval(() => {
-    if (!alive) return ws.terminate();
+    if (!alive) {
+      console.log('[ws] terminate: no pong within 10 s');
+      return ws.terminate();
+    }
     alive = false;
     ws.ping();
   }, 10_000);
@@ -223,8 +226,9 @@ wss.on('connection', (ws: WebSocket) => {
     }
     if (room && clientId) room.handle(clientId, msg);
   });
-  ws.on('close', () => {
+  ws.on('close', (code, reason) => {
     clearInterval(ping);
+    if (room) console.log(`[ws] close room=${room.code} code=${code} reason=${String(reason).slice(0, 60)} alive=${alive}`);
     if (room) room.disconnect(ws);
   });
   ws.on('error', () => {});

@@ -14,7 +14,7 @@ async function player(clip: string, path: string, opts = {}) {
   return { b, ...(await openPage(b, path, opts)) };
 }
 async function host(clip: string, q: string) {
-  const h = await player(clip, `/?${TQ}${q}`);
+  const h = await player(clip, `/?${TQ}&skipcal${q}`);
   await waitScreen(h.page, 'menu');
   await h.page.fill('#nickname', 'E2E Brawler 1');
   await h.page.dispatchEvent('#nickname', 'change');
@@ -57,7 +57,7 @@ test('8 browsers, 8 different fighter clips: full 2-minute brawl, all clients ag
   const A = await host(FIGHTERS[0], '');
   const others = [];
   for (const clip of FIGHTERS.slice(1)) {
-    const p = await player(clip, `/?room=${A.room}&${TQ}&renderfps=3`);
+    const p = await player(clip, `/?room=${A.room}&${TQ}&skipcal&renderfps=3`);
     others.push(p);
   }
   for (const o of others) await waitScreen(o.page, 'lobby', 60_000);

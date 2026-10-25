@@ -20,21 +20,21 @@ Allow the camera and, within seconds, a 3D superhero copies your arms, torso, an
 - **Block** with both forearms in front of your face. **Kick** when your legs are in frame.
 - **Supers** when your meter fills: an uppercut that launches your opponent in slow motion, an X-arm 3-second shield, or a two-palm energy blast.
 
-Matches are best of 3 with KOs, a rematch button, and synthesized sound. Modes:
+Matches are best of 3 with KOs, a rematch button, synthesized sound, and a superhero look: suits in your colors, glowing gloves, a cape, and an aura that charges with your meter. Modes:
 
 - **Practice** against a CPU fighter.
-- **Online 1v1** with a friend on another laptop or phone, by room code or link. <!-- VERIFY -->
-- **Brawl**: a free-for-all for up to 8, with bots filling empty slots. <!-- VERIFY -->
-- **Winner stays on**: two fight, the rest of the room watches and queues. <!-- VERIFY -->
-- **Local 2-player**: two people side by side in front of one camera. <!-- VERIFY -->
+- **Online 1v1** with a friend on another laptop or phone, by room code or link.
+- **Brawl**: a free-for-all for up to 8, with bots filling empty slots.
+- **Winner stays on**: two fight, the rest of the room watches and queues.
+- **Local 2-player**: two people side by side in front of one camera.
 
-AI is the core of it. A pose model in your browser *is* the controller. **Fighter Forge** turns a prompt like "lava golem with a crown" into a name, backstory, and move names (Muse Spark) and a fighter card (Muse Image). <!-- VERIFY --> After an online match, a **rivalry card** sums up the fight for you to send your opponent. <!-- VERIFY --> A **Gemini commentator** calls the fight out loud. <!-- VERIFY -->
+AI is the core of it. A pose model in your browser *is* the controller. **Fighter Forge** turns a prompt like "lava golem with a crown" into a name, backstory, and move names (Muse Spark) and a fighter card (Muse Image). After an online match, a **rivalry card** sums up the fight for you to send your opponent. A **Gemini commentator** calls the fight out loud.
 
-Online wins feed an Elo leaderboard. A store page shows skins and a season pass with mock purchases, plus a motion-data consent screen. <!-- VERIFY -->
+Online wins feed an Elo leaderboard. A store page shows skins and a season pass with mock purchases, plus a motion-data consent screen.
 
 ## How we built it
 
-**Pose.** MediaPipe Pose Landmarker (lite) runs in a Web Worker so detection never blocks rendering, on the GPU delegate with CPU fallback. A One Euro filter smooths landmarks.
+**Pose.** MediaPipe Pose Landmarker (lite) runs in a Web Worker so detection never blocks rendering, on the GPU delegate with CPU fallback, and falls back to the main thread on browsers without WebGL in workers (older Safari). Camera frames are read straight from the camera track where supported, so pose rate does not depend on render rate. A One Euro filter smooths landmarks.
 
 **Avatar.** three.js and @pixiv/three-vrm drive a VRM humanoid (Seed-san by VirtualCast), recolored as a superhero suit with glowing gloves and an aura. We solve arm, torso, and head rotations directly from world landmarks, mirror-correct.
 
@@ -42,9 +42,9 @@ Online wins feed an Elo leaderboard. A store page shows skins and a season pass 
 
 **Simulation.** One deterministic simulation handles health, meters, supers, projectiles, rounds, and KOs. It runs in the browser for local modes and on the server for online rooms, and it was designed for N fighters: every message carries a slot ID, and bots send the same inputs as humans.
 
-**Server.** A Node `ws` relay on a Vultr VM in Dallas, behind Caddy with automatic HTTPS. Online hits are resolved server-side from the defender's latest block state, and the server proxies Gemini, Meta, and Tiger Data so no keys reach the browser. <!-- VERIFY --> Stats live in Tiger Data hypertables. <!-- VERIFY -->
+**Server.** A Node `ws` relay on a Vultr VM in Dallas, behind Caddy with automatic HTTPS. Online hits are resolved server-side from the defender's latest block state, and the server proxies Gemini, Meta, and Tiger Data so no keys reach the browser. Stats live in Tiger Data hypertables.
 
-**Testing.** Playwright end-to-end tests feed downloaded video clips to headless Chromium as a fake webcam.
+**Testing.** Every user path runs end to end against the live server with Playwright, using downloaded video of real people (including pro fighters' shadowboxing) as the webcam. Two browsers driven by two fighters' footage play a full online best-of-3, and the test checks that both screens show identical HP, round, and timer on every shared tick (2,160 ticks, 0 mismatches). Eight browsers run winner-stays-on and Brawl rooms. The tests found and we fixed real bugs, from players walking themselves out of the ring to Safari never starting pose tracking.
 
 ## Challenges we ran into
 
@@ -93,14 +93,14 @@ More fighters and arenas, then three revenue lines:
 
 ## Prize tracks
 
-**Most Entertaining (Jester's Court).** The track wants "projects that capture that same excitement and keep people coming back for more." You physically throw punches, and the game answers with screen shake, a slow-motion uppercut launch, and a KO. There is no account to create, a rematch is one button away, and Brawl puts up to 8 fighters in one ring. <!-- VERIFY -->
+**Most Entertaining (Jester's Court).** The track wants "projects that capture that same excitement and keep people coming back for more." You physically throw punches, and the game answers with screen shake, a slow-motion uppercut launch, and a KO. There is no account to create, a rematch is one button away, and Brawl puts up to 8 fighters in one ring.
 
-**Meta: "Bringing People Closer Together with AI".** Throw Hands exists so friends can fight each other, side by side on one camera or remotely on two devices. <!-- VERIFY --> After the match, a Muse Image rivalry card goes to the friend you just beat, and the rematch is right there. <!-- VERIFY --> AI is essential: the pose-tracking model is the controller, so without it there is no game. Fighter Forge uses Muse Spark and Muse Image to turn one sentence into your own fighter, and Gemini calls the fight live. <!-- VERIFY -->
+**Meta: "Bringing People Closer Together with AI".** Throw Hands exists so friends can fight each other, side by side on one camera or remotely on two devices. After the match, a Muse Image rivalry card goes to the friend you just beat, and the rematch is right there. AI is essential: the pose-tracking model is the controller, so without it there is no game. Fighter Forge uses Muse Spark and Muse Image to turn one sentence into your own fighter, and Gemini calls the fight live.
 
-**Best Use of Gemini API (MLH).** Every 3 to 4 seconds, batched match events (hits, blocks, combos, health) go to Gemini Flash, which returns one hype line that Gemini TTS speaks aloud, with a browser speech fallback and a mute toggle. <!-- VERIFY -->
+**Best Use of Gemini API (MLH).** Every 3 to 4 seconds, batched match events (hits, blocks, supers, KOs, health) go to Gemini (`gemini-3.5-flash-lite`, about 0.6 s per line), which returns one hype line that Gemini TTS (`gemini-3.8-flash-lite-tts`) speaks aloud, with a browser speech fallback and a mute toggle. In online rooms the server generates one shared line for everyone, so spectators hear the same call and the free tier lasts.
 
-**Best Use of Tiger Data (MLH).** Hits, blocks, and supers go into a `match_events` hypertable and opt-in landmark frames into `pose_samples`. Continuous aggregates power the Elo leaderboard and the motion-data counts. <!-- VERIFY -->
+**Best Use of Tiger Data (MLH).** Hits, blocks, and supers go into a `match_events` hypertable and opt-in landmark frames into `pose_samples`. Continuous aggregates power the Elo leaderboard and the motion-data counts.
 
-**Best Use of Vultr (MLH).** A Vultr VM in Dallas serves the game over HTTPS through Caddy. It also runs the WebSocket relay and the simulation for online rooms and proxies the AI and database calls. <!-- VERIFY -->
+**Best Use of Vultr (MLH).** A Vultr VM in Dallas serves the game over HTTPS through Caddy. It also runs the WebSocket relay and the simulation for online rooms and proxies the AI and database calls.
 
 **Best .Tech Domain Name (MLH).** "Throw hands" is slang for fighting, which is the whole game: https://throwhands.tech.

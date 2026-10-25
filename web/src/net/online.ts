@@ -80,7 +80,8 @@ class Conn {
           reject(Object.assign(new Error(m.message), { code: m.code }));
         }
       };
-      ws.onclose = () => {
+      ws.onclose = (ev) => {
+        hooks.errors.push(`ws-close:${ev.code}`);
         if (!settled) {
           settled = true;
           reject(new Error('Could not reach the game server.'));
