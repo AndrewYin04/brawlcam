@@ -1,6 +1,57 @@
 # Status (written by the implementation agent)
 
-Last update: Sun Oct 25, 5:45 AM CDT. Deployed build: `994fc39` on https://throwhands.tech (drills, research, calibration, features and supers e2e: 22/22 PASS on it).
+Last update: Sun Oct 25, 6:40 AM CDT. Deployed build: `5b730ef` on https://throwhands.tech (feature freeze 7:30 AM).
+
+## Since 6:00 AM: drill session 3 (ea6e2541, REVIEW.md 6:00 AM), reproduced on your uploaded JSONL + video, fixed
+The replay of session 3 matches what the live game recorded on build 994fc39 number for number. Per drill, all three sessions replayed with the current build (`tests/tools/drill-replay.ts`, reps detected):
+
+| Drill | s1 fda75d56 | s2 2dd3adbd | s3 ea6e2541 (yours, 5:51 AM) |
+|---|---|---|---|
+| grab | (none) | **4/4** | **3/4** (was 0/4) |
+| hook_R / hook_L | 2/4, 2/4 | 3/4, 2/4 | 3/4, 4/4 |
+| uppercut | 1/3 | 3/3 | 3/3 |
+| straight | 0/4 | 3/4 | 1/4 (see below) |
+| step_back / lean_back | 1/3, 2/3 | 2/3, 2/3 | **3/3, 2/3** |
+| step_fwd / lean_fwd | 0/3, 2/3 | 3/3, 3/3 | 3/3, 3/3 |
+| still (fwd) | +0.15 (your 4 s lean-in) | 0.00 | 0.00 |
+
+**What changed (planner items 1-4):**
+1. **Grab reach.**
+   - **Reach threshold:** reachExt went 0.75 → 0.65, because reaches toward the camera are foreshortened.
+   - **Release:** an arm stops "reaching" once it comes back 0.15 from its peak. Your resting guard (0.72–0.84) sits above 0.65, so "below the threshold" never released.
+   - **Guard level:** the median before the reach, not the minimum (which caught a wind-up dip).
+   - **Pull hold:** once the pulled-in pose is seen, a looser margin keeps it at 13 fps (it missed by 0.001 on the second frame).
+   - **False grabs stay 0 on the 37 real clips.** Two guards do that:
+     - the chest pull needs a full 0.75 reach unless the reach is grab-like (both arms out within 0.12 s, both wrists up ≥ 0.33 m)
+     - tracking must stay steady from reach to pull: a referee crossing ufc_07 swapped the tracked body
+2. **The hook stealing the grab.** Single jabs, hooks and uppercuts are dropped while a grab-like reach is live. Grab 1 still fires a jab and a hook just before its reach registers.
+3. **Drills stand-in.** Every 50 ms it is pinned 1 m in front of you, at full health, never stunned or knocked back. No KO, cage slam or match end can interfere.
+4. **Straights 1/4 is not a code regression.** The original code also gets 1/4 on session 3. You were very close to the camera and punched straight at it; MediaPipe's 3D points barely register those (elbow ≤ 100°, speed < 1 m/s). Only the fist growing in the image shows the punch, and that signal is too noisy (10–48× jumps) to ship today.
+5. **Lean back.** The size signal reads it (−0.37), but the strike gate zeroed it, because hand jitter this close to the camera exceeded 0.9 m/s. The gate is now 1.2 m/s:
+   - forward/back reps: s2 8 → 10/12, s3 9 → 11/12
+   - strikes and punch-no-move unchanged
+   - Sideways leans still leak a little backward (−0.15).
+6. **Grappling** reaches the 3/4 bar on replay (s3 3/4, s2 4/4). It stays behind `?grapple=1` and out of the video until you confirm it in a live drill.
+
+**Live roasts:** Gemini 3.5-flash-lite's free daily quota ran out at about 5:45 AM.
+- **Fallbacks:** `gemini-3.8-flash`, `gemini-3.5-flash` and `gemini-3.1-flash-lite`, each with its own free quota and minimal thinking.
+- **Cooldown:** a model that returns 429 cools down for 10 minutes and the next one is tried.
+- **Result:** checked live, `/api/commentary` returns real Gemini lines again.
+
+**Review round 10:**
+- **Fixed or improved:**
+  - camera on your side of the fight, slow motion included
+  - 3D clearance from airborne bodies
+  - KO side shot
+  - hard cage slams get the slow-motion camera
+  - the Brawl marker follows the head
+  - stale tips cleared at round start
+  - the SUPER UPPERCUT! banner only when it lands
+- **Still open:** framing when you are knocked down (high angle), body interpenetration in close clinches, and Brawl fighters filling the foreground. Throw and clinch are grappling (beta).
+
+**demo-video-v2 (in progress):**
+- **Already built:** motion graphics, CC0 music, your picture-in-picture, real Gemini roasts voiced in the announcer voice, and footage re-recorded on the final build.
+- **First assembly:** 2:27, −14.3 LUFS. Fixes are in progress; the release asset is due before 10:15.
 
 ## Since 5:10 AM (planner: demo-video-v2, roasts, pitch)
 - **Your uploads:** I received drill session 1's JSONL, and drill session 2's JSONL and webcam video (uploaded here directly; `~/hacktx26/research/` doesn't exist on this server). Session 1's video and the 08:00 free-play recording were not included.
