@@ -42,6 +42,11 @@ const C = (method: string, ...args: unknown[]): Cue => ({ op: 'call', method, ar
 const SHOTS: Shot[] = [
   // demo-video-v2: the user's own drill-session motion (session 2dd3adbd, resampled to 30 fps by research-slice.ts);
   // the picture-in-picture uses the same session's webcam video, synced from the clip's sourceVideoStart.
+  { name: 'user_step', seconds: 8, warmup: 30 * 3.2, cfg: { mode: 'duel', camera: 'behind', players: [{ name: 'You', color: P1, landmarks: LM('user_step') }], bots: 1, botLevel: -1, meter: 0 } },
+  { name: 'user_hookL', seconds: 8, warmup: 30 * 3.2, cfg: { mode: 'duel', camera: 'behind', players: [{ name: 'You', color: P1, landmarks: LM('user_hookL') }], bots: 1, botLevel: 0, meter: 0 } },
+  { name: 'user_upper2', seconds: 8, warmup: 30 * 3.2, cfg: { mode: 'duel', camera: 'behind', players: [{ name: 'You', color: P1, landmarks: LM('user_upper2') }], bots: 1, botLevel: -1, meter: 100 } },
+  { name: 'user_r1', seconds: 20, warmup: 30 * 3.2, roast: true, cfg: { mode: 'duel', camera: 'behind', players: [{ name: 'You', color: P1, landmarks: LM('user_r1') }], bots: 1, botLevel: 0, meter: 100 } },
+  { name: 'user_ai', seconds: 6, warmup: 30 * 3.2, cfg: { mode: 'duel', camera: 'behind', players: [{ name: 'You', color: P1, landmarks: LM('user_ai') }], bots: 1, botLevel: 0, meter: 0 } },
   { name: 'user_hook', seconds: 12, warmup: 30 * 3.2, cfg: { mode: 'duel', camera: 'side', players: [{ name: 'You', color: P1, landmarks: LM('user_hook') }], bots: 1, botLevel: 0, meter: 0 } },
   { name: 'user_hook_behind', seconds: 12, warmup: 30 * 3.2, cfg: { mode: 'duel', camera: 'behind', players: [{ name: 'You', color: P1, landmarks: LM('user_hook') }], bots: 1, botLevel: 0, meter: 0 } },
   { name: 'user_upper', seconds: 8, warmup: 30 * 3.2, cfg: { mode: 'duel', camera: 'behind', players: [{ name: 'You', color: P1, landmarks: LM('user_upper') }], bots: 1, botLevel: 0, meter: 100 } },

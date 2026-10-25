@@ -1,0 +1,14 @@
+[
+ {
+  "file": "/home/agent/projects/brawlcam/video/out/v2roast/roast_0_IronRookjustsentyourlunc.mp3",
+  "text": "Iron Rook just sent your lunch money into low earth orbit.",
+  "from": "user_r1.roasts.json t=5 (gemini-3.1-flash-lite)",
+  "t": 5
+ },
+ {
+  "file": "/home/agent/projects/brawlcam/video/out/v2roast/roast_1_IronRooktradespunchesbut.mp3",
+  "text": "Iron Rook trades punches, but your super is cooked and ready to serve!",
+  "from": "user_r1.roasts.json t=10 (gemini-3.5-flash)",
+  "t": 10
+ }
+]

@@ -6,17 +6,16 @@ import { execFileSync } from 'child_process';
 const ROOT = path.resolve(import.meta.dirname, '../..');
 const env = Object.fromEntries(fs.readFileSync(path.join(ROOT, '.env'), 'utf8').split('\n').filter((l) => /^[A-Z_]+=/.test(l)).map((l) => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1).trim()]));
 const KEY = env.ELEVENLABS_API_KEY;
-const LINES = [
-  { text: 'Iron Rook just got a taste of the stratosphere thanks to your super uppercut.', from: 'roasts-s2.json t=36.7 (gemini-3.1-flash-lite)' },
-  { text: 'You and Iron Rook are looking like a pair of shiny metal statues tonight.', from: 'roasts-s3.json t=21.7 (gemini-3.1-flash-lite)' },
-  { text: 'Iron Rook is playing brick wall while you are gathering all that power.', from: 'roasts-s3.json t=26.7 (gemini-3.1-flash-lite)' },
-];
+// Lines Gemini wrote about the roast scene's own events (record-scenes.ts, roast: true), with the scene time each was
+// written for. Template fallbacks (source "template") are not used.
+const SRC = process.env.ROASTS ?? path.join(ROOT, 'video/out/user_r1.roasts.json');
+const LINES = (JSON.parse(fs.readFileSync(SRC, 'utf8')) as { t: number; text: string; source: string }[]).filter((l) => l.source.startsWith('gemini')).slice(0, 2).map((l) => ({ text: l.text, t: l.t, from: `${path.basename(SRC)} t=${l.t} (${l.source})` }));
 const OUT = path.join(ROOT, 'video/out/v2roast');
 fs.mkdirSync(OUT, { recursive: true });
 const norm = (t: string) => t.toLowerCase().replace(/[^a-z0-9' ]/g, ' ').split(/\s+/).filter(Boolean);
-const bank: { file: string; text: string; from: string }[] = [];
+const bank: { file: string; text: string; from: string; t: number }[] = [];
 for (const [i, l] of LINES.entries()) {
-  const file = path.join(OUT, `roast_${i}.mp3`);
+  const file = path.join(OUT, `roast_${i}_${l.text.replace(/[^a-z]/gi, '').slice(0, 24)}.mp3`);
   if (!fs.existsSync(file)) {
     const r = await fetch('https://api.elevenlabs.io/v1/text-to-speech/IKne3meq5aSn9XLyUdCD?output_format=mp3_44100_128', { method: 'POST', headers: { 'xi-api-key': KEY, 'content-type': 'application/json' }, body: JSON.stringify({ text: '[mischievously] ' + l.text, model_id: 'eleven_v3', voice_settings: { stability: 0.0, similarity_boost: 0.8, style: 0.9, use_speaker_boost: true } }) });
     if (!r.ok) { console.log(i, 'ERR', r.status); continue; }
@@ -33,6 +32,6 @@ for (const [i, l] of LINES.entries()) {
   const heard = String(stt.text ?? '');
   const extra = norm(heard).filter((w) => !norm(l.text).includes(w));
   console.log(extra.length <= 1 ? 'ok  ' : 'FAIL', i, JSON.stringify(l.text), 'heard', JSON.stringify(heard), extra.length ? 'extra: ' + extra.join(' ') : '');
-  if (extra.length <= 1) bank.push({ file, text: l.text, from: l.from });
+  if (extra.length <= 1) bank.push({ file, text: l.text, from: l.from, t: l.t });
 }
 fs.writeFileSync(path.join(ROOT, 'video/v2/roasts.json'), JSON.stringify(bank, null, 1));
