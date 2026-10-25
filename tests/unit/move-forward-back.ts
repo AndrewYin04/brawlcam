@@ -64,12 +64,14 @@ export function run(shape: Shape, seconds: number) {
 
 const at = (tr: { t: number; d: number }[], t: number) => tr[Math.min(tr.length - 1, Math.round(t * 30))];
 let fail = false;
-// 1) Lean in 12 cm from 1.0 s to 2.5 s.
+// 1) Lean in 25 cm from 1.0 s to 2.5 s. (Players told "lean toward the camera" in the drill sessions fda75d56 and
+// 2dd3adbd grew 26-39% in the image; 25 cm at 1.5 m is about 17%. Forward/back now reads apparent size, so a
+// 12 cm lean at 1.5 m, 8%, is inside the dead zone by design.)
 {
-  const tr = run((t) => ({ lean: t >= 1 && t < 2.5 ? 0.12 : 0, scale: 1 }), 3);
+  const tr = run((t) => ({ lean: t >= 1 && t < 2.5 ? 0.25 : 0, scale: 1 }), 3);
   const d0 = at(tr, 0.9).d, d1 = at(tr, 2.4).d;
   const maxFwd = Math.max(...tr.map((x) => x.fwd));
-  console.log(`(distances: from my position to the opponent's starting spot)\nlean in 12 cm: distance ${d0.toFixed(2)} -> ${d1.toFixed(2)} m (max forward input ${maxFwd.toFixed(2)})`);
+  console.log(`(distances: from my position to the opponent's starting spot)\nlean in 25 cm: distance ${d0.toFixed(2)} -> ${d1.toFixed(2)} m (max forward input ${maxFwd.toFixed(2)})`);
   if (!(d1 < d0 - 0.25)) { console.log('  FAIL: leaning toward the camera did not advance'); fail = true; }
 }
 // 2) Step back (body 15% smaller in the image) from 1.0 s to 2.0 s, then return to the spot until 3.5 s.

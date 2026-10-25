@@ -81,6 +81,8 @@ async function migrate() {
     // Guided drills: the prompted move and rep number for each frame (labels come from the drill script).
     `ALTER TABLE research_frames ADD COLUMN IF NOT EXISTS label text`,
     `ALTER TABLE research_frames ADD COLUMN IF NOT EXISTS rep int`,
+    // Capture time of the frame (seconds on the page's pose clock). Row time is when the upload batch was stamped.
+    `ALTER TABLE research_frames ADD COLUMN IF NOT EXISTS ft real`,
     // Opt-in continuous pose streams (motion-data consent): world landmarks at 15 fps, no video. One smallint column per
     // coordinate (x/y/z in mm, visibility in %) so Timescale's columnar compression works (3.4x, about 5.9 MB per
     // player-hour; arrays only reached 1.7x). The first array-based version held only test rows and is replaced.
@@ -191,15 +193,15 @@ export async function insertPoseSamples(sessionId: string, samples: { t: number;
   return !!(await q(`INSERT INTO pose_samples (time, session_id, label, landmarks) VALUES ${ph.join(',')}`, vals));
 }
 
-export async function insertResearchFrames(sessionId: string, frames: { t: number; lm: number[]; acts: string[]; mv: number[]; mk: string | null; lb: string | null; rp: number | null }[]) {
+export async function insertResearchFrames(sessionId: string, frames: { t: number; ft?: number | null; lm: number[]; acts: string[]; mv: number[]; mk: string | null; lb: string | null; rp: number | null }[]) {
   if (!frames.length) return true;
   const vals: unknown[] = [];
   const ph = frames.map((f, i) => {
-    vals.push(new Date(f.t), sessionId, f.lm, f.acts, f.mv, f.mk, f.lb, f.rp);
-    const o = i * 8;
-    return `($${o + 1},$${o + 2},$${o + 3},$${o + 4},$${o + 5},$${o + 6},$${o + 7},$${o + 8})`;
+    vals.push(new Date(f.t), sessionId, f.lm, f.acts, f.mv, f.mk, f.lb, f.rp, typeof f.ft === 'number' && Number.isFinite(f.ft) ? f.ft : null);
+    const o = i * 9;
+    return `($${o + 1},$${o + 2},$${o + 3},$${o + 4},$${o + 5},$${o + 6},$${o + 7},$${o + 8},$${o + 9})`;
   });
-  return !!(await q(`INSERT INTO research_frames (time, session_id, lm, actions, move, marker, label, rep) VALUES ${ph.join(',')}`, vals));
+  return !!(await q(`INSERT INTO research_frames (time, session_id, lm, actions, move, marker, label, rep, ft) VALUES ${ph.join(',')}`, vals));
 }
 
 // Storage guard: stop accepting stream inserts above 600 MB (free tier headroom); size is cached for a minute.

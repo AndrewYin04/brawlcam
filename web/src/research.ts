@@ -17,7 +17,7 @@ class Research {
   active = false;
   sessionId = '';
   private lines: string[] = [];
-  private batch: { t: number; lm: number[]; acts: string[]; mv: number[]; mk: string | null; lb?: string | null; rp?: number }[] = [];
+  private batch: { t: number; ft?: number; lm: number[]; acts: string[]; mv: number[]; mk: string | null; lb?: string | null; rp?: number }[] = [];
   /** Current drill prompt label and rep number (labels come from the drill script, not keys). */
   private label: string | null = null;
   private rep = 0;
@@ -125,6 +125,7 @@ class Research {
       if (p)
         this.batch.push({
           t: Date.now(),
+          ft: +t.toFixed(3),
           lm: [...p.world.flatMap((l) => l.slice(0, 4).map(round)), ...p.image.flatMap((l) => l.slice(0, 4).map(round))],
           acts: (o?.actions ?? []).map((a) => `${a.kind}:${a.hand}:${a.speed.toFixed(2)}`),
           mv: o ? [+o.move[0].toFixed(2), +o.move[1].toFixed(2)] : [0, 0],

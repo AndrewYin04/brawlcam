@@ -39,16 +39,27 @@ for (const name of CLIPS) {
     trace.push({ t: f.t, d: inputDist, fwd: o.move[1] });
     void a;
   }
-  let worst = 0;
+  // Displacement CAUSED by the strike: input beyond what the player was already doing when the window opened. These
+  // boxers use real footwork, so a step that was already under way 0.4 s before the punch is not the punch moving them
+  // (the raw number, including that footwork, is printed for reference).
+  let worst = 0, worstRaw = 0;
   for (const st of strikes) {
     const w = trace.filter((x) => x.t >= st - 0.4 && x.t <= st + 0.35);
     if (w.length < 2) continue;
-    const disp = Math.max(...w.map((x) => x.d)) - Math.min(...w.map((x) => x.d));
-    worst = Math.max(worst, disp);
+    worstRaw = Math.max(worstRaw, Math.max(...w.map((x) => x.d)) - Math.min(...w.map((x) => x.d)));
+    const b = w[0].fwd;
+    let d = 0, lo = 0, hi = 0;
+    for (const x of w) {
+      const extra = Math.sign(x.fwd) === Math.sign(b) && Math.abs(x.fwd) <= Math.abs(b) ? 0 : x.fwd - (Math.sign(x.fwd) === Math.sign(b) ? b : 0);
+      d += extra * 2.4 * (1 / 30);
+      lo = Math.min(lo, d);
+      hi = Math.max(hi, d);
+    }
+    worst = Math.max(worst, hi - lo);
   }
   const fwdFrames = trace.filter((x) => x.fwd !== 0).length;
   worstAll = Math.max(worstAll, worst);
-  console.log(`${name}: ${strikes.length} strikes, worst input-driven displacement around a strike ${(worst * 100).toFixed(1)} cm, forward/back input on ${fwdFrames}/${trace.length} frames`);
+  console.log(`${name}: ${strikes.length} strikes, worst strike-caused displacement ${(worst * 100).toFixed(1)} cm (raw incl. footwork already under way ${(worstRaw * 100).toFixed(1)} cm), forward/back input on ${fwdFrames}/${trace.length} frames`);
   if (worst > 0.05) fail = true;
 }
 console.log(fail ? `FAIL: a strike moved the fighter up to ${(worstAll * 100).toFixed(1)} cm (target < 5 cm)` : 'PASS');

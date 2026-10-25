@@ -74,21 +74,21 @@ export const GESTURE_CFG = {
   // movement
   leanDead: 0.035, // m
   leanFull: 0.1,
-  stepDead: 0.1, // fraction of calibrated shoulder width in image (rotation-corrected)
+  stepDead: 0.1, // log of apparent size vs your spot (0.1 = 10% larger/smaller in the image)
   stepFull: 0.22,
+  diagonalMin: 0.75, // while strafing harder, forward/back only counts when at least this strong (deliberate diagonal)
+  spotWindow: 10, // s: your spot is the median size over this many seconds of standing settled
+  spotMinSamples: 20, // settled frames needed before the median replaces the calibrated size
+  spotSettle: 0.6, // s window to decide you are standing settled
+  spotStill: 0.05, // log size range within that window that counts as settled
   // Strafe by stepping sideways: hip center x in the image vs the calibrated spot, in calibrated shoulder widths.
   sideStepDead: 0.3,
   sideStepFull: 0.9,
   edgeMargin: 0.1, // fraction of image width: closer to the edge than this stops increasing the strafe that way
-  // Forward/back by leaning the torso toward/away from the camera (shoulders vs hips, against the calibrated stance).
-  leanFwdDead: 0.055, // m
-  leanFwdFull: 0.12,
-  leanBackDead: 0.085, // m
-  leanBackFull: 0.15,
   moveSmooth: 0.15, // s
   moveQuietAfterStrike: 0.35, // s: torso motion around a strike is the punch, not a step
-  armBusySpeed: 0.9,
-  moveQuietAfterDetect: 0.65, // s: recovery after a detected strike (lean-back, re-squaring) is not movement // m/s: a hand this fast means a strike is starting (its wind-up and twist are not movement)
+  armBusySpeed: 0.9, // m/s: a hand this fast means a strike is starting (its wind-up and twist are not movement)
+  moveQuietAfterDetect: 0.65, // s: recovery after a detected strike (lean-back, re-squaring) is not movement
   moveHoldLookback: 0.2, // s: during a strike, movement holds its value from this long before the onset
   fwdPersist: 0.2, // s: forward/back intent must last this long before it moves the fighter
   stepMaxYaw: (35 * Math.PI) / 180, // ignore shoulder width when the torso is twisted more than this
@@ -282,7 +282,7 @@ export class GestureRecognizer {
   private turnSince = -1;
   private turnLatched = 0;
   private lastSeen = -9;
-  private calibFrames: { sw: number; arm: number; isw: number; cx: number; lz: number; hx: number }[] = [];
+  private calibFrames: { t: number; sw: number; arm: number; isw: number; cx: number; lz: number; hx: number }[] = [];
   private calibStart = -1;
   private standingAnkleY: [number, number] | null = null;
   private legsBusyUntil = -9;
@@ -296,8 +296,10 @@ export class GestureRecognizer {
   private fwdSign = 0;
   private fwdSince = 0;
   private lastMoveT = -1;
-  private ratioS = 0;
-  private leanS = 0;
+  private sizeS = 0;
+  private sizeBase: number | null = null;
+  private sizeHist: { t: number; v: number }[] = [];
+  private spotSamples: { t: number; v: number }[] = [];
   /** Set to [] to collect per-frame candidate/suppression notes (tuning tools). */
   debugLog: string[] | null = null;
   /** Grab / shoulder-throw detection (additive: runs last and only appends actions). */
@@ -316,6 +318,9 @@ export class GestureRecognizer {
     if (c?.imgHipX == null) this.calib.imgHipX = undefined;
     this.leanZSamples = [];
     this.hipXSamples = [];
+    this.sizeBase = null;
+    this.sizeHist = [];
+    this.spotSamples = [];
     this.calibrated = true;
   }
 
@@ -632,30 +637,46 @@ export class GestureRecognizer {
     const hipX = Math.min(1 - m, Math.max(m, this.hipXS));
     const stepStrafe = this.calib.imgHipX == null ? 0 : deadzone((hipX - this.calib.imgHipX) / this.calib.imgShoulderW, this.cfg.sideStepDead, this.cfg.sideStepFull);
     const strafe = Math.max(-1, Math.min(1, stepStrafe + leanStrafe));
-    // Shoulder width in the image, corrected for torso rotation (turning for a hook narrows the shoulders
-    // in the image; that is not a step back).
+    // ---- forward/back: apparent size in the image (drill sessions fda75d56 / 2dd3adbd, REVIEW.md 4:25 AM) ----
+    // Closer to the camera = larger in the image, whether you step or lean. Size is the log of the shoulder width in
+    // the image, corrected for torso rotation (turning for a hook narrows the shoulders; that is not a step back).
+    // The world-space torso lean used before read the wrong sign in a third of reps: at a laptop the hips are out of
+    // frame and their depth is guessed. Size is measured against your current spot, which follows slow posture drift
+    // (you settle closer after calibrating, you sit up between drills) but never a deliberate step.
     const yawNow = Math.atan2(-(lS[2] - rS[2]), lS[0] - rS[0]);
-    const ratioRaw = imgSW / Math.max(0.5, Math.cos(yawNow)) / this.calib.imgShoulderW - 1;
-    const leanRaw = MS[2] - midHip[2];
-    // Smooth both (about 0.15 s) so bobbing and punch recoil don't read as movement.
+    const sizeRaw = Math.log(Math.max(1e-3, imgSW / Math.max(0.5, Math.cos(yawNow))));
     const k = this.lastMoveT < 0 ? 1 : Math.min(1, (t - this.lastMoveT) / this.cfg.moveSmooth);
     this.lastMoveT = t;
-    // A twisted torso (|yaw| > 35 deg) makes shoulder width unreliable: keep the last good value.
-    if (Math.abs(yawNow) < this.cfg.stepMaxYaw) this.ratioS += (ratioRaw - this.ratioS) * k;
-    this.leanS += (leanRaw - this.leanS) * k;
-    const ratio = this.ratioS;
-    const stepFwd = deadzone(ratio, this.cfg.stepDead, this.cfg.stepFull);
-    // Torso lean toward/away from the camera (works at a laptop where stepping isn't possible).
-    const leanZ = this.leanS;
-    if (this.calib.leanZ == null) {
-      // No guard calibration (skipped): learn the stance from the first half second.
-      this.leanZSamples.push(leanZ);
-      if (this.leanZSamples.length >= 15) this.calib.leanZ = [...this.leanZSamples].sort((a, b) => a - b)[7];
+    if (this.sizeBase == null) {
+      this.sizeBase = Math.log(this.calib.imgShoulderW);
+      this.sizeS = sizeRaw;
     }
-    // Leaning back needs a bit more than leaning in: boxers sway back after punches without meaning to retreat.
-    const lz = this.calib.leanZ == null ? 0 : leanZ - this.calib.leanZ;
-    const leanFwd = this.calib.leanZ == null ? 0 : lz >= 0 ? deadzone(lz, this.cfg.leanFwdDead, this.cfg.leanFwdFull) : deadzone(lz, this.cfg.leanBackDead, this.cfg.leanBackFull);
-    const fwd = Math.abs(leanFwd) > Math.abs(stepFwd) ? leanFwd : stepFwd;
+    // A twisted torso (|yaw| > 35 deg) makes shoulder width unreliable: keep the last good value.
+    if (Math.abs(yawNow) < this.cfg.stepMaxYaw) this.sizeS += (sizeRaw - this.sizeS) * k;
+    this.sizeHist.push({ t, v: this.sizeS });
+    while (this.sizeHist.length && t - this.sizeHist[0].t > this.cfg.spotSettle) this.sizeHist.shift();
+    // Your spot = the median size over the last few seconds you stood settled (not mid-strike). You keep coming back to
+    // your spot, so a held step or lean never becomes the new spot, while a lasting shift (settling closer right after
+    // calibrating, sitting up between drills) takes over within a few seconds.
+    const strikeQuiet = t < this.moveQuietUntil;
+    if (!strikeQuiet && this.sizeHist.length > 2 && t - this.sizeHist[0].t >= this.cfg.spotSettle * 0.9) {
+      let lo = Infinity, hi = -Infinity;
+      for (const h of this.sizeHist) (lo = Math.min(lo, h.v)), (hi = Math.max(hi, h.v));
+      if (hi - lo < this.cfg.spotStill) this.spotSamples.push({ t, v: this.sizeS });
+    }
+    while (this.spotSamples.length && t - this.spotSamples[0].t > this.cfg.spotWindow) this.spotSamples.shift();
+    if (this.spotSamples.length >= this.cfg.spotMinSamples) {
+      const v = this.spotSamples.map((x) => x.v).sort((x, y) => x - y);
+      this.sizeBase = v[v.length >> 1];
+    }
+    const ratio = this.sizeS - this.sizeBase;
+    const stepFwd = deadzone(ratio, this.cfg.stepDead, this.cfg.stepFull);
+    // Stepping or leaning sideways changes your size in the image a little, which read as diagonal drift in the drills:
+    // while strafing harder than moving forward/back, a weak forward/back is dropped.
+    let fwd = stepFwd;
+    if (Math.abs(strafe) > Math.abs(fwd) && Math.abs(fwd) < this.cfg.diagonalMin) fwd = 0;
+    const leanZ = MS[2] - midHip[2];
+    const leanFwd = 0;
     const torsoImgDbg = Math.hypot((frame.image[11][0] + frame.image[12][0]) / 2 - (frame.image[23][0] + frame.image[24][0]) / 2, (frame.image[11][1] + frame.image[12][1]) / 2 - (frame.image[23][1] + frame.image[24][1]) / 2);
     // Strikes: the wind-up and twist start before a strike is detected (at its peak). Gate from the strike's onset
     // (a hand starts moving fast) until 0.35 s after it, and hold movement at its value from just before the onset.
@@ -720,7 +741,7 @@ export class GestureRecognizer {
       out.actions.push({ kind: k, hand: 'B', speed: 0, t });
     }
 
-    out.debug = { yaw, lean, ratio, stepFwd, leanFwd, leanZ: leanZ - (this.calib.leanZ ?? 0), torso: torsoImgDbg, lExt: handInfo[0].ext, rExt: handInfo[1].ext, lEl: handInfo[0].elbow, rEl: handInfo[1].elbow, lSp: handInfo[0].speed, rSp: handInfo[1].speed };
+    out.debug = { yaw, lean, ratio, stepFwd, leanFwd, leanZ: leanZ - (this.calib.leanZ ?? 0), size: this.sizeS, spot: this.sizeBase ?? 0, quiet: t < this.moveQuietUntil ? 1 : 0, fwdRaw: fwd, strafeRaw: strafe, torso: torsoImgDbg, lExt: handInfo[0].ext, rExt: handInfo[1].ext, lEl: handInfo[0].elbow, rEl: handInfo[1].elbow, lSp: handInfo[0].speed, rSp: handInfo[1].speed };
     return out;
   }
 
@@ -764,13 +785,18 @@ export class GestureRecognizer {
     const arm = (len(sub(lS, P[J.lEl])) + len(sub(P[J.lEl], lW)) + len(sub(rS, P[J.rEl])) + len(sub(P[J.rEl], rW))) / 2;
     const hipM = mid(P[J.lHip], P[J.rHip]);
     const hv = Math.min(frame.image[23][3], frame.image[24][3]) > 0.5 && frame.image[23][1] < 0.98;
-    this.calibFrames.push({ sw: len(sub(lS, rS)), arm, isw: imgSW, cx: imgCX, lz: MS[2] - hipM[2], hx: hv ? (frame.image[23][0] + frame.image[24][0]) / 2 : imgCX });
+    this.calibFrames.push({ t, sw: len(sub(lS, rS)), arm, isw: imgSW, cx: imgCX, lz: MS[2] - hipM[2], hx: hv ? (frame.image[23][0] + frame.image[24][0]) / 2 : imgCX });
     const progress = Math.min(1, (t - this.calibStart) / 3);
     if (progress >= 1 && this.calibFrames.length >= 10) {
       const med = (k: 'sw' | 'arm' | 'isw' | 'cx' | 'lz' | 'hx') => {
         const a = this.calibFrames.map((f) => f[k]).sort((x, y) => x - y);
         return a[Math.floor(a.length / 2)];
       };
+      this.sizeBase = null;
+      this.sizeHist = [];
+      // The guard hold is 3 s of you standing on your spot: it seeds the spot median, so an early held lean can't take over.
+      // (Each frame is stamped with its own time, so these age out of the window like any other sample.)
+      this.spotSamples = this.calibFrames.map((f) => ({ t: f.t, v: Math.log(f.isw) }));
       this.calib = { shoulderW: med('sw'), armLen: Math.max(0.4, med('arm')), imgShoulderW: med('isw'), imgCenterX: med('cx'), leanZ: med('lz'), imgHipX: med('hx') };
       this.calibrated = true;
       return { progress: 1, guidance: null, done: true };

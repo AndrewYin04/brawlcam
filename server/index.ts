@@ -180,7 +180,10 @@ const server = http.createServer(async (req, res) => {
         .slice(0, 150)
         .filter((f: any) => Array.isArray(f?.lm) && f.lm.length === 264)
         .map((f: any) => ({
+          // Row time is clamped to the server clock (a client clock running ahead collapses frames onto one instant),
+          // so the frame's capture time on the page's pose clock is stored separately for exact replay.
           t: Math.min(Date.now(), Number(f.t) || Date.now()),
+          ft: Number.isFinite(Number(f.ft)) ? Number(f.ft) : null,
           lm: f.lm.map(num),
           acts: (Array.isArray(f.acts) ? f.acts : []).slice(0, 8).map((a: unknown) => String(a).slice(0, 32)),
           mv: (Array.isArray(f.mv) ? f.mv : [0, 0]).slice(0, 2).map(num),
