@@ -97,7 +97,7 @@ The full spec follows. It is identical to `SPEC.md` at handoff time; after hando
 
 # SPEC: Brawlcam (working name)
 
-Last change: 2026-10-24 6:10 PM CDT. Dropped the hardware wristband and the Best Hardware track, because it needs the user's physical work. The implementation agent now finds and downloads its own test clips (section 6). Real-person footage of the user is no longer required. Added section 9 (testing): every user path, plus UFC fighter clips playing each other online. 6:50 PM: added verified Tiger Data and Vultr details to section 4. 7:00 PM: verified Gemini model IDs (section 2). 7:10 PM: verified Meta API details, Meta track weights and video structure (section 2), and added cost limits (section 10). When this file changes after handoff, add a dated note at the top saying what changed. A dated note here overrides the implementation prompt.
+Last change: 2026-10-24 6:10 PM CDT. Dropped the hardware wristband and the Best Hardware track, because it needs the user's physical work. The implementation agent now finds and downloads its own test clips (section 6). Real-person footage of the user is no longer required. Added section 9 (testing): every user path, plus UFC fighter clips playing each other online. 6:50 PM: added verified Tiger Data and Vultr details to section 4. 7:00 PM: verified Gemini model IDs (section 2). 7:10 PM: verified Meta API details, Meta track weights and video structure (section 2), and added cost limits (section 10). 7:20 PM: added the P1 party room (up to 8 friends, winner stays on, spectators) and the requirement that rooms and messages support N players for future free-for-all. When this file changes after handoff, add a dated note at the top saying what changed. A dated note here overrides the implementation prompt.
 
 ## 1. Product
 
@@ -172,9 +172,12 @@ P0 must work for the demo. P1 should work. P2 is cut first, in reverse order of 
 | P1 | Accounts-lite and Elo | A nickname stored in localStorage; no passwords. Online wins and losses update Elo (K=32), stored in Tiger Data. Leaderboard page. |
 | P1 | Store page | Skins and auras with prices and a season-pass card. Purchases are mocked; label the button "Demo: no charge". Include the opt-in toggle for motion data sharing. |
 | P2 | Motion data dashboard | A page for a "robotics lab buyer": counts of labeled strike, block, and dodge sequences by type, from continuous aggregates; a 3D replay of one anonymized sequence; an export-to-JSON sample. |
+| P1 | Party room | Up to 8 friends join one room by link or code. Two fight at a time, winner stays on, and the next player in the queue is up. Everyone else spectates live and can send cheer reactions that appear on screen. The lobby shows the queue order and each player's wins in the session. This serves Meta's human-connection criterion (30% of that track's score). Cut it before Online 1v1 if time runs short. |
 | P2 | Solana skins | Buying a skin mints a devnet token to a throwaway wallet. Cut first. |
 
-**Out of scope:** hardware of any kind, real payments, password accounts, matchmaking queues beyond room codes, more than 2 players per match, video upload of any kind, anti-cheat.
+**Out of scope:** hardware of any kind, real payments, password accounts, matchmaking queues beyond room codes, more than 2 fighters in the arena at once, video upload of any kind, anti-cheat.
+
+**Built for more players later.** Free-for-all matches with 3 to 4 fighters at once come after the hackathon, but the code must not block them. Rooms hold any number of clients (fighters plus spectators). Every WebSocket message carries a player slot ID instead of assuming "me and the opponent". Hit resolution looks up the target by ID, and the renderer can place N fighters in the ring.
 
 ## 4. Architecture
 
@@ -302,7 +305,8 @@ Testing must be extensive. Every user path in the table below must be exercised 
 | Calibration | Guard pose detected; calibration completes in 3 s. The player is too close or too far: on-screen guidance appears. |
 | Practice vs bot | Full match won by KO, lost by KO, won on time, a drawn round, rematch, quit to menu mid-round. |
 | Local 2-player | Full match; one player leaves the frame mid-round (their fighter idles, the game does not crash); both players leave the frame. |
-| Online 1v1 | Create room; join by link; join by code; invalid code; room full (third player); host disconnects mid-round; guest disconnects mid-round; reconnect within 10 s resumes; both players on phones; one on desktop and one on phone; 200 ms added latency. |
+| Online 1v1 | Create room; join by link; join by code; invalid code; a third person joining becomes a spectator; a ninth person is refused with a clear message; host disconnects mid-round; guest disconnects mid-round; reconnect within 10 s resumes; both players on phones; one on desktop and one on phone; 200 ms added latency. |
+| Party room | 8 browsers (8 different fighter clips) join one room; winner-stays-on rotates through at least 4 matches; spectators see the live fight and their cheers appear on the fighters' screens; the current fighter leaves mid-match (the next in queue takes over, or the match is awarded); the queue order survives a spectator reconnecting. |
 | Supers | Each super fires only when the meter is full, the cooldown is respected, Shield blocks all damage for 3 s, Energy blast travels and can be blocked. |
 | Fighter Forge | Valid prompt; empty prompt; offensive prompt (handled by the model's refusal and shown politely); Meta API key missing or erroring (falls back to a default fighter, and the game still works); generation longer than 15 s (spinner, then timeout fallback). |
 | Commentator | Lines arrive during play; mute and unmute; Gemini key missing or rate-limited (silent fallback, no errors shown to the player). |
