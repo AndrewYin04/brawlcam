@@ -121,6 +121,6 @@ const assV3 = path.join(OUT, 'captions-replaced.ass');
 fs.writeFileSync(assV3, out.join('\n'));
 
 const final = path.join(OUT, 'throwhands-demo-v3.mp4');
-ff(['-i', silent, '-i', path.join(V, 'v2/audio-v3.m4a'), '-vf', `subtitles=${assV3}`, '-map', '0:v', '-map', '1:a', '-c:v', 'libx264', '-preset', 'medium', '-crf', '19', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k', '-ar', '48000', '-movflags', '+faststart', '-shortest', final]);
+ff(['-i', silent, '-i', path.join(V, 'v2/audio-v3.m4a'), '-vf', `subtitles=${assV3}`, '-map', '0:v', '-map', '1:a', '-c:v', 'libx264', '-preset', 'medium', '-crf', '19', '-pix_fmt', 'yuv420p', '-c:a', 'copy', '-movflags', '+faststart', '-shortest', final]);
 fs.writeFileSync(path.join(OUT, 'replaced.json'), JSON.stringify(reps.map((r) => ({ from: +r.start.toFixed(2), to: +r.end.toFixed(2), what: r.what, source: r.file ? path.basename(r.file) : `${r.src} from ${r.ss}s` })), null, 1));
 console.log('wrote', final, dur(final).toFixed(2) + ' s; replaced:', reps.map((r) => `${r.start.toFixed(2)}-${r.end.toFixed(2)}`).join(', '));

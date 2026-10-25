@@ -247,7 +247,7 @@ audio.forEach((a, i) => {
   speech.push(`[s${i}]`);
 });
 af += `${speech.join('')}amix=inputs=${speech.length}:normalize=0[sp];[sp]asplit=2[sp1][sp2];`;
-af += `[mus][sp1]sidechaincompress=threshold=0.03:ratio=8:attack=20:release=400[duck];[duck][sp2]amix=inputs=2:normalize=0,loudnorm=I=-14:TP=-1.5:LRA=11[aout]`;
+af += `[mus][sp1]sidechaincompress=threshold=0.03:ratio=8:attack=20:release=400[duck];[duck][sp2]amix=inputs=2:normalize=0,loudnorm=I=-14:TP=-1.5:LRA=11${V3 ? ',aresample=192000,alimiter=limit=0.56:level=false,aresample=48000' : ''}[aout]`;
 const mixed = path.join(OUT, 'audio.m4a');
 ff([...aIn, '-filter_complex', af, '-map', '[aout]', '-t', TOTAL_V3.toFixed(2), '-c:a', 'aac', '-b:a', '192k', mixed]);
 
