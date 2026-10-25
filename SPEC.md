@@ -1,6 +1,6 @@
 # SPEC: Brawlcam (working name)
 
-Last change: 2026-10-24 6:10 PM CDT. Dropped the hardware wristband and the Best Hardware track, because it needs the user's physical work. The implementation agent now finds and downloads its own test clips (section 6). Real-person footage of the user is no longer required. Added section 9 (testing): every user path, plus UFC fighter clips playing each other online. 6:50 PM: added verified Tiger Data and Vultr details to section 4. 7:00 PM: verified Gemini model IDs (section 2). 7:10 PM: verified Meta API details, Meta track weights and video structure (section 2), and added cost limits (section 10). 7:25 PM: added P1 Brawl (free-for-all arena, up to 8 fighters, bots fill empty slots) and P1 Winner-stays-on room, plus the rule that rooms, messages, and rendering support N players (section 3). When this file changes after handoff, add a dated note at the top saying what changed. A dated note here overrides the implementation prompt.
+Last change: 2026-10-24 6:10 PM CDT. Dropped the hardware wristband and the Best Hardware track, because it needs the user's physical work. The implementation agent now finds and downloads its own test clips (section 6). Real-person footage of the user is no longer required. Added section 9 (testing): every user path, plus UFC fighter clips playing each other online. 6:50 PM: added verified Tiger Data and Vultr details to section 4. 7:00 PM: verified Gemini model IDs (section 2). 7:10 PM: verified Meta API details, Meta track weights and video structure (section 2), and added cost limits (section 10). 7:25 PM: added P1 Brawl (free-for-all arena, up to 8 fighters, bots fill empty slots) and P1 Winner-stays-on room, plus the rule that rooms, messages, and rendering support N players (section 3). 8:10 PM: Meta official-rules weights, submission and content requirements (section 2); milestones moved about 1 hour later because the implementation agent started late (section 8). When this file changes after handoff, add a dated note at the top saying what changed. A dated note here overrides the implementation prompt.
 
 ## 1. Product
 
@@ -27,7 +27,10 @@ Non-MLH tracks (maximum 3). Best Overall and Best Pitch are entered automaticall
     - Base URL `https://api.meta.ai/v1`, OpenAI-compatible (`POST /chat/completions`), bearer auth with `META_API_KEY`.
     - Model IDs: `muse-spark-1.3` for text and `muse-image-1.0` for images. Docs: https://dev.meta.ai/docs/
     - A test call to `muse-spark-1.3` returned HTTP 200, but with `max_tokens: 40`, 38 tokens went to hidden reasoning and the reply text was empty. Give it a much larger `max_tokens` (for example 1,000) and check the docs for a reasoning-effort setting.
-  - **Meta's track PDF** (posted in Discord #ask-meta by Meta staff) weights judging as follows: human connection 30%, how essential and well-integrated AI is 25%, originality 20%, technical execution and working demo 20%.
+  - **Meta's Round 1 Official Rules** (posted in Discord #ask-meta by Meta staff; the rules are the binding contract and override the shorter track PDF) weight judging: Human Connection 30%, AI Centrality 25% ("how central AI is to the project's core functionality"), Execution & Demo Quality 25%, Originality 20%. Meta's submission requirements: a 2 to 3 minute working demo video, a public repo link, and a short written description of what was built and the role AI plays. Content rules that affect the build:
+    - No personally identifiable information collected without the person's express written consent. The motion-data opt-in must be an explicit consent screen with plain-language text and a checkbox, off by default, and pose samples must never include video, images, or a player identifier.
+    - Open-source code is allowed only if "the participant's original contribution is clearly identified". The README must list every vendored or adapted third-party file and library and state what the team wrote.
+    - No third-party IP: only openly licensed avatar models, sounds, and fonts, with licenses listed in the README.
     - **AI counts in general.** A Meta staff member answered in Discord that this criterion means "use of AI in general! You do not have to use Muse", and teams may use their own ML models. The pose-tracking model counts.
     - **Human connection is the largest weight.** The pitch and video must lead with friends fighting each other remotely or side by side, the rivalry card, and rematches.
     - **Meta's required video structure, 2 to 3 minutes:**
@@ -160,11 +163,11 @@ The clips are for local testing only. They stay out of the public repo (`clips/`
 | Time | Milestone | Owner |
 |---|---|---|
 | Sat 7:15 PM | Handoff: this spec and the implementation prompt committed | Planner |
-| 8:30 PM | Risk spikes 1 and 2 proven; bare pose page deployed over HTTPS | Implementation agent |
-| 11:00 PM | MVP deployed: pose, avatar mirroring, punch, block, practice vs bot, health and KO | Implementation agent |
-| 11:00 PM | Draft Devpost text committed (`submission/devpost.md`) | Implementation agent |
+| 9:30 PM | Risk spikes 1 and 2 proven; bare pose page deployed over HTTPS | Implementation agent |
+| 11:00 PM | Draft Devpost text committed (`submission/devpost.md`), so the planner can do the soft submission | Implementation agent |
+| Sun 12:30 AM | MVP deployed: pose, avatar mirroring, punch, block, practice vs bot, health and KO | Implementation agent |
 | 11:30 PM | Soft submission on Devpost | Planner |
-| Sun 3:00 AM | All P0 features done: supers, local 2-player, movement, mobile | Implementation agent |
+| 4:00 AM | All P0 features done: supers, local 2-player, movement, mobile | Implementation agent |
 | 6:30 AM | P1 features as far as they go: online 1v1, Forge, commentator, Elo, store | Implementation agent |
 | 7:30 AM | Feature freeze | Both |
 | 10:15 AM | Video published as a GitHub release asset; final Devpost text, per-track paragraphs, judging scripts, pitch deck, DEV.to draft committed under `submission/` | Implementation agent |
