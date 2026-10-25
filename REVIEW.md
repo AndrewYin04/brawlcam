@@ -560,3 +560,32 @@ Also add a **gesture debug overlay** at `?debug=1`, small and in a corner, so th
 - the last 5 detected actions with timestamps, plus any grab-cancel reasons from the sim (`grab_cancel` hit, miss, or iron)
 
 This turns "it doesn't work" into a specific failure step. Add GRAB and SHOULDER THROW prompts to drill mode when `&grapple=1` is set, so the user can record labeled attempts.
+
+## 2026-10-25 4:25 AM CDT: the user's first drill session: forward/back is broken (top priority)
+Session `fda75d56-17f5-48ab-aa2c-69caa142f646` (Tiger `research_frames`; the user also has `throwhands-research-2026-10-25T09-13-15.jsonl` and `.webm`). 156 s, 2,399 frames, **pose rate 15.4 fps**, up from 6.9 and still under 20. The planner computed from the JSONL `move` per drill label (`move = [strafe, fwd]`; +fwd = forward, +strafe = the fighter's own left):
+
+| Drill | mean fwd | frames fwd > 0.1 | frames fwd < -0.1 | mean strafe | drill result |
+|---|---|---|---|---|---|
+| still (20 s) | **+0.28** | **39%** | 0% | 0.00 | n/a |
+| straight_big | +0.22 | 23% | 2% | 0.00 | 0/4 |
+| hook_L_big | **+0.58** | 58% | 0% | 0.00 | 1/4 |
+| hook_R_big | +0.48 | 48% | 0% | 0.00 | 2/4 |
+| uppercut_big | +0.29 | 29% | 0% | 0.00 | 1/3 |
+| step_fwd | +0.41 | 47% | 0% | +0.06 | 3/3 |
+| **step_back** | **+0.40** | 43% | **0%** | +0.01 | **0/3** |
+| lean_fwd | +0.32 | 35% | 0% | **+0.41** | 3/3 |
+| **lean_back** | **+0.66** | 74% | **0%** | -0.15 | **0/3** |
+| step_left | +0.49 | 51% | 0% | -0.03 | 2/3 |
+| step_right | +0.60 | 61% | 0% | +0.07 | 2/3 |
+| lean_left | +0.37 | 42% | 0% | **-0.11** | 3/3 |
+| lean_right | +0.50 | 52% | 0% | **+0.07** | 3/3 |
+
+**Findings (reproduce with this session as the fixture, rule 3):**
+1. **Backward never happens.** Across the whole session, forward/back input is below -0.1 in about 0% of frames. Step back and lean back both produce **forward** input (+0.40, and **+0.66** for lean back, the strongest forward value of any drill). The torso-lean forward/back term appears to have its **sign inverted** (MediaPipe world z grows away from the camera, so leaning back raises `MS[2] - midHip[2]`). Because `fwd` takes the larger-magnitude of lean and step, the inverted lean term also overrides a correct step-back signal.
+2. **Forward drift while standing still:** +0.28 mean, forward on 39% of frames during the 20 s stand-still. The baseline (calibrated neutral) looks biased, or the inverted lean term plus normal posture adds a constant forward. With a symmetric dead zone around a correct baseline, still should be about 0.
+3. **Big punches still produce forward movement** (+0.22 to +0.58): the 2:55 AM gate doesn't cover these on a real person. It may be the same lean bug: big punches lean the torso.
+4. **Strafe sign is suspect:** lean_left gives -0.11 and lean_right gives +0.07, the wrong signs per the code's "+ = own left" (small magnitudes; verify). lean_fwd adds +0.41 strafe, so there is cross-talk between axes.
+5. **Big-punch classification:** straight_big was detected 0/4 (read as uppercut R ×5 and hooks); hook_L_big 1/4 (read as jab L ×3); uppercut 1/3; hook_R 2/4. Big committed punches from a real person are misclassified. Retune on this session; add the drill fixtures to `eval-gestures`.
+6. **Drill scoring vs the movement signal:** lean_left and lean_right score 3/3 despite the wrong-signed strafe. Check how drill reps are judged; they should require the correct sign.
+
+**Order:** 1 and 2 (forward/back correctness and baseline), then 4, then 3, then 5. Each with a unit test on this session, showing per-drill signed means before and after; the targets are still about 0, step and lean back below -0.3, and big punches about 0. Ask the user to re-run the drills after the fix. Grappling and visuals come after this: if players can't move back, the game is broken for judges.
