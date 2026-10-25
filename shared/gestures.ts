@@ -505,7 +505,8 @@ export class GestureRecognizer {
   private calibrationStep(P: V3[], t: number, imgSW: number, imgCX: number, frame: PersonFrame) {
     let guidance: string | null = null;
     const noseVis = frame.image[0][3] > 0.5 && frame.image[0][1] > 0.02;
-    if (imgSW > 0.42) guidance = 'Step back: too close to the camera';
+    const shoulderAtEdge = [11, 12].some((i) => frame.image[i][0] < 0.03 || frame.image[i][0] > 0.97);
+    if (imgSW > 0.42 || ((!noseVis || shoulderAtEdge) && imgSW > 0.3)) guidance = 'Step back: too close to the camera';
     else if (imgSW < 0.1) guidance = 'Step closer to the camera';
     else if (!noseVis) guidance = 'Keep your head in the frame';
     else if (imgCX < 0.2 || imgCX > 0.8) guidance = 'Move to the center of the frame';
