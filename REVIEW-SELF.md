@@ -324,3 +324,39 @@ High findings, grouped:
 - **brawl8:** the "you" marker drifts to another fighter, and other fighters fill the foreground.
 
 Fixes for these are queued after the drill-session work (planner 4:35 AM order); round 10 follows them.
+
+## Round 10: camera rules (commit 2830acf), Sun Oct 25 ~5:55 AM CDT, two reviewers (workflow wf_eb60965b-1e7)
+Both reviewers looked at all 23 scenes. **Stop condition not met.**
+
+Status of the round 9 high findings:
+- **Fixed or improved:**
+  - camera clipping into an airborne opponent (uppercut, energy_blast, cage_corner)
+  - the fist hidden at impact
+  - the stale tip
+  - the Brawl marker drifting (fixed for one reviewer)
+- **Unchanged:**
+  - KO camera against your back
+  - getting_hit framing and foot slide
+  - false SUPER UPPERCUT! banner in shield
+  - body interpenetration
+  - Brawl fighters in the foreground
+
+New highs: throw and clinch framing (grappling, beta behind `?grapple=1`), and cage_near and cage_corner starting with the camera inside your fighter.
+
+## Round 11: fixes 2d1d580 + 5b730ef, Sun Oct 25 6:15-6:40 AM CDT (self-check on the changed scenes, no fresh reviewers yet)
+Fixes:
+- **KO:** side shot of both fighters.
+- **Knocked down:** the camera aims between the fighters.
+- **Camera cut:** on any jump of 1 m or more (scene placements, round start).
+- **Banner:** SUPER UPPERCUT! only when the hit lands unshielded.
+- **Framing rise:** capped at 0.4 m. Rising to 3 m read as a top-down view in the video footage.
+
+Measured on the r11 captures:
+- **Opponent visible:** ko 85% (the downed body is framed in the KO shot), getting_hit 99.7%, cage_near 99.1%, cage_corner 98.1%.
+- **Camera jumps:** cage_near and cage_corner 0, ko 13 (was 31).
+
+Known and not fixed before the freeze:
+- other Brawl fighters filling the foreground
+- body interpenetration in close exchanges
+- foot slide while knocked down
+- contact distances in this round are inflated by GPU contention (round 9's exact build measured the same today)
