@@ -130,6 +130,87 @@ Paths not yet run are listed in `STATUS.md` until they have a row here.
 | Grappling (flagged ?grapple=1) | `tests/unit/grapple-gestures.ts`, `grapple-sim.ts`, `tests/tools/grapple-scan.ts` | 0 grab/throw false triggers on all 37 clips; synthetic grab 4/4, throw 4/4; triangle rules, escapes, throw damage; existing detection unchanged (eval-gestures identical) |
 | Camera (round 7 fixes) | `ROUND=<r> npx tsx video/review-capture.ts` | cage in line of sight ~0% in every scene; opponent visible 84-93% (cage_far 72%); no side flips in normal play |
 
+## Grab reach vs jab / energy blast, and real grapple footage (planner direction, Oct 25)
+
+The user's report ("it keeps registering as a punch"): the grab's two-arm reach fired a jab (and sometimes the energy
+blast) before the pull-in. Reproduced on the synthetic grab sequences in `tests/unit/grapple-gestures.ts` built from a
+real guard clip: before, every reach-and-pull fired `jab@1.33` (or `jab@1.4`) before the grab. Root cause: when both arms
+extend together, usually only one arm passes the jab rules (the other's speed sits just under `strikeMinSpeed`), so the
+two-hand palm pairing never runs and the single jab fires at once; a palm pair fired the blast on the spot with no hold.
+
+Rules added in `shared/gestures.ts` (`GRAPPLE_CFG.jabHold*`, `reachElbowMin`, `blastHold*`; they apply with or without
+`?grapple=1`):
+- **Jab hold.** A jab whose arm is out at reach length while the other arm is past 50% of a reach, still extending
+  (> 1.5 arm lengths/s) and opening its elbow (>= 105 deg) is held for up to 0.25 s. It fires as soon as the other arm
+  stops short or the jab arm comes back; it fires nothing if the arms form a reach. If both arms are already out together,
+  straight (both elbows >= 150 deg), in a reach that formed within 0.25 s, the jab is part of that reach and fires nothing.
+- **Energy blast hold.** A palm pair fires the blast only after the palms are held out for 0.3 s (both extensions >= 0.75,
+  elbows >= 105 deg, wrists >= 0.7 arm lengths in front of the shoulders); the pull-in pose or the arms coming back cancels it.
+  The blast now fires 0.3 s after the push by design; so does the palm frame that escapes a clinch (the sim reads the same
+  `palm` action).
+
+Thresholds were picked on the real clips: an elbow-free version swallowed real jabs (`jab_01` 2.7 s: the rear hand drifts
+forward with its elbow at ~100 deg), 140 deg dropped one-twos on `shadow_fighterF`, a "still rising" rate of 0 held five real
+single jabs (+33-133 ms), and the blast hold without the forward test fired a blast on `shadow_fighterI` (arms hanging in a
+karate ready stance).
+
+`npx tsx tests/tools/eval-gestures.ts`, before and after (identical):
+
+| move | TP | FP | FN | precision | recall |
+|---|---|---|---|---|---|
+| uppercut | 0 | 3 | 0 | 0% | - |
+| jab | 6 | 1 | 8 | 86% | 43% |
+| hook | 3 | 0 | 0 | 100% | 100% |
+| block | 3 | 3 | 1 | 50% | 75% |
+| xshield | 4 | 0 | 1 | 100% | 80% |
+| kick | 5 | 2 | 1 | 71% | 83% |
+| knee | 2 | 0 | 0 | 100% | 100% |
+
+(No palm row before or after: the recognizer detects 0 palm pushes on `palmpush_01/02`, both before and after; existing gap.)
+Detections that changed on unscored clips: `palmpush_01` lost jabL@8.27 + jabR@8.30 (frames: hands dropping to the belt, not a
+strike); `shadow_fighterI` lost jabL@0.33, jabR@0.53, jabL@0.67 (arms hanging in a ready stance); `crowd_01` (4 people,
+side-on sparring, the tracked person switches, excluded from eval) lost 6 of 15 jabs.
+
+Jab latency (`npx tsx tests/tools/jab-latency.ts`: arm extension peak to the frame the jab is emitted):
+
+| | labeled jabs | all jabs on all 37 clips |
+|---|---|---|
+| before | n 13, mean 46 ms, median 33, max 267 | n 72, mean 75 ms, median 33, max 333 |
+| after | n 13, mean 46 ms, median 33, max 267 | n 62, mean 75 ms, median 33, max 333 |
+
+Every jab that still fires is emitted on the same frame as before (the 10 fewer are the removals listed above), so
+single-arm jab latency did not rise.
+
+Synthetic grabs (`tests/unit/grapple-gestures.ts`, now asserted): no jab or palm from the start of the reach to 0.3 s after the
+grab in all five grab sequences (30 and 15 fps, arms together and 0.18 s apart, grab-then-throw); push and hold 1.2 s fires
+exactly one blast; `grapple-scan` still 0 grab / 0 throw on all 37 clips.
+
+### Real grab / throw footage (`npx tsx tests/tools/grapple-eval.ts`)
+
+Clips (local only, `clips/grapple/`, labels in `clips/grapple/groundtruth.json`, landmarks via
+`CLIPS_DIR=clips/grapple BASE_URL=... npx tsx tests/tools/dump-landmarks.ts`):
+
+| clip | source | content | labels |
+|---|---|---|---|
+| seoi_01 | youtube.com/watch?v=wFKVZnfg9hs 4.0-27.5 s | solo seoi-nage shadow uchikomi, 3/4 to side view | 17 throw reps (2 with the full hinge) |
+| seoi_02 | youtube.com/watch?v=WoH6L6UJDZI 86-116 s | solo drop-seoi drill, front-on start, turn, knee drop, hinge | 6 throws (all hinged) |
+| clinch_03 | youtube.com/watch?v=gYt6LvKoe2k 83-119 s | solo "clinch entry in shadowboxing" tutorial (frames, covers) | 0 grabs (no two-hand reach-and-pull in it) |
+| clinch_01 | youtube.com/watch?v=p-E5l0szE8Q 5.2-34 s | Muay Thai partner clinch-entry drill, side-on | not labeled (side-on, two people) |
+| clinch_02 | youtube.com/watch?v=g-_2EvQQvmg 0-16 s | hook block to clinch entry, side-on partner drill | not labeled |
+
+| | TP | FP | FN | precision | recall |
+|---|---|---|---|---|---|
+| throw (±0.5 s around the labeled interval) | 1 | 1 | 22 | 50% | **4%** (hinged reps 1/8) |
+| grab | - | 0 | - | - | not measured: no real front-on two-hand clinch entry found |
+
+Cross-triggers on these clips (none contains a punch or palm push): jab 18 before / **14 after** (8 / 6 inside a labeled
+throw), energy blast 2 before / **0 after**, plus hooks (9 on seoi_01, unchanged). No grab fired on any of the five clips.
+
+Why throws are missed (seoi_02 rep 1, per-frame features): the judo entry has almost no forward reach (both extensions rise
+0.77 -> 0.85, under `reachRise` 0.12, because the grip is already taken), the turn comes with the arms pulled in, and the
+hinge lands about 1.5 s after the turn, past `throwWindow` 0.8 s. **Default-on criterion (about 70% recall for grab and throw)
+is not met**: throw 4% on real drills, grab unmeasured. `?grapple=1` stays opt-in.
+
 ## Bugs found by these tests (reproduced first, fixed, re-run)
 
 | Bug | Repro | Root cause | Fix | Regression test |

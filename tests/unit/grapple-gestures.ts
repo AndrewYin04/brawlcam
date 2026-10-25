@@ -4,6 +4,8 @@
 //    kicks, knees, shadow boxing, walking, UFC footage).
 // 2. Positives: synthetic "reach and pull" and "reach, twist and hinge" sequences built by moving the arm / torso
 //    landmarks of a real guard clip (guard_01) over time, at 30 and 15 fps.
+// 2b. The grab's reach must not also read as a jab or an energy blast (planner direction, item 2: jab hold and blast
+//     hold): no jab / palm from the start of the reach until 0.3 s after the grab.
 // 3. Near misses that must NOT fire: push-and-hold (energy blast), pulling back too late, arms out one after the
 //    other (a one-two), pulling back only to the guard, twisting without hinging, hinging without twisting.
 import fs from 'fs';
@@ -32,7 +34,7 @@ const check = (ok: boolean, msg: string) => {
   check(rows.length >= 30, `scanned ${rows.length} landmark clips`);
   check(grabs === 0, `no grab false triggers on real clips (got ${grabs})`);
   check(throws === 0, `no throw false triggers on real clips (got ${throws})`);
-  console.log(`     (recognizer palm detections on the energy-blast clips, unchanged by this feature: ${palmClips.join(', ')})`);
+  console.log(`     (recognizer palm detections on the energy-blast clips: ${palmClips.join(', ')})`);
 }
 
 // ---------- synthetic sequences from a real guard clip ----------
@@ -132,14 +134,22 @@ function run(frames: Frame[]) {
       return orig(x);
     };
   }
+  if (process.env.RDEBUG) rec.debugLog = [];
   for (const f of frames) {
     const p = f.people[0];
-    for (const a of rec.update({ t: f.t, world: p.world, image: p.image }, f.t).actions) acts.push({ t: +a.t.toFixed(2), kind: a.kind });
+    const o = rec.update({ t: f.t, world: p.world, image: p.image }, f.t);
+    if (process.env.RDEBUG && o.debug && f.t > 0.9 && f.t < 1.8) console.log(`       ${f.t.toFixed(2)} eL ${o.debug.lExt.toFixed(2)} eR ${o.debug.rExt.toFixed(2)} elL ${o.debug.lEl.toFixed(0)} elR ${o.debug.rEl.toFixed(0)} ${rec.debugLog!.splice(0).filter((l) => !l.includes('byHand')).join(' | ')}`);
+    for (const a of o.actions) acts.push({ t: +a.t.toFixed(2), kind: a.kind });
   }
   return acts;
 }
 const fmt = (a: { t: number; kind: string }[]) => a.map((x) => `${x.kind}@${x.t}`).join(' ') || '(none)';
 const count = (a: { t: number; kind: string }[], k: string) => a.filter((x) => x.kind === k).length;
+/** Jab / palm actions between the start of the reach (t0) and 0.3 s after the grab. */
+const strikesAlongside = (a: { t: number; kind: string }[], t0: number) => {
+  const g = a.find((x) => x.kind === 'grab');
+  return a.filter((x) => (x.kind === 'jab' || x.kind === 'palm') && x.t >= t0 - 0.05 && x.t <= (g ? g.t : t0 + 1) + 0.3);
+};
 
 // Timeline: 1.0 s guard, reach over 0.22 s, short hold, pull over 0.2 s, hold at the chest, back to guard.
 const T0 = 1.0;
@@ -155,9 +165,11 @@ const grabScript = (pullStart: number, sync = 0, to: 'chest' | 'guard' = 'chest'
 for (const fps of [30, 15]) {
   const a = run(synth(grabScript(T0 + 0.35), 3, fps));
   check(count(a, 'grab') === 1 && count(a, 'throw') === 0, `${fps} fps reach-and-pull -> exactly one grab, no throw: ${fmt(a)}`);
+  check(strikesAlongside(a, T0).length === 0, `${fps} fps reach-and-pull -> no jab / palm alongside the grab (got ${fmt(strikesAlongside(a, T0))})`);
   // Spec: the second arm may arrive up to 0.25 s after the first.
   const b = run(synth(grabScript(T0 + 0.5, 0.18), 3, fps));
   check(count(b, 'grab') === 1, `${fps} fps reach-and-pull with the arms 0.18 s apart -> grab: ${fmt(b)}`);
+  check(strikesAlongside(b, T0).length === 0, `${fps} fps reach-and-pull 0.18 s apart -> no jab / palm alongside the grab (got ${fmt(strikesAlongside(b, T0))})`);
 }
 for (const fps of [30, 15]) {
   // Reach, then within 0.8 s twist 75 deg and hinge forward 40 deg (shoulders drop ~23% of the torso length).
@@ -184,6 +196,7 @@ for (const fps of [30, 15]) {
   };
   const a = run(synth(s, 3.5, 30));
   check(count(a, 'grab') === 1 && count(a, 'throw') === 1 && a.find((x) => x.kind === 'grab')!.t < a.find((x) => x.kind === 'throw')!.t, `reach, pull, twist and hinge -> grab then throw: ${fmt(a)}`);
+  check(strikesAlongside(a, T0).length === 0, `reach, pull, twist and hinge -> no jab / palm alongside the grab (got ${fmt(strikesAlongside(a, T0))})`);
 }
 
 // ---------- 3. near misses ----------
@@ -192,6 +205,8 @@ for (const fps of [30, 15]) {
   const s: Script = { reachL: reachTo(T0, 1.2), reachR: reachTo(T0, 1.2), pull: () => 0 };
   const a = run(synth(s, 3.5, 30));
   check(count(a, 'grab') === 0 && count(a, 'throw') === 0, `push and hold (energy blast) -> no grab/throw: ${fmt(a)}`);
+  // Blast hold: the held push still fires exactly one energy blast, at least blastHold after the push.
+  check(count(a, 'palm') === 1 && count(a, 'jab') === 0, `push and hold 1.2 s -> exactly one energy blast, no jab: ${fmt(a)}`);
 }
 {
   // Pulled to the chest, but too late (0.75 s after the reach > pullWindow 0.5 s).

@@ -1,12 +1,13 @@
 // Dump per-frame pose landmarks for each clip (clips/*.mp4) into clips/landmarks/NAME.json.
 // Usage: BASE_URL=http://localhost:4173 npx tsx tests/tools/dump-landmarks.ts [name ...]
+// CLIPS_DIR=clips/grapple dumps a different clip folder (its own groundtruth.json, frames/ and landmarks/).
 import { chromium } from '@playwright/test';
 import fs from 'fs';
 import path from 'path';
 import { execFileSync } from 'child_process';
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
-const CLIPS = path.join(ROOT, 'clips');
+const CLIPS = path.resolve(ROOT, process.env.CLIPS_DIR ?? 'clips');
 const BASE = process.env.BASE_URL ?? 'http://localhost:4173';
 const outDir = path.join(CLIPS, 'landmarks');
 fs.mkdirSync(outDir, { recursive: true });
