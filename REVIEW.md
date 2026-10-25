@@ -775,3 +775,13 @@ The user: "the grab is still not activating when it should be. I finally saw it 
 
 ### 6:37 AM ordering (the user): finish and publish your current work first
 Finish what you are doing now, deploy it to throwhands.tech, and post the deployed build in STATUS.md. **Then** start the 6:35 AM grab tuning loop.
+
+### 6:40 AM CORRECTION to the 6:35 AM targets (the user clarified "5%")
+The user meant **grabs misread as a strike**, not false grabs: "grabs where I intended to grab, but it instead recorded me as not doing grab but doing jab." Targets on the user's labeled grab reps (held-out session):
+- **at least 90%** detected as **grab**
+- **at most 5%** detected as a **jab or any other strike** (jab, straight, hook, uppercut, palm) instead
+- the remaining 5% or less: nothing detected
+
+Report each grab rep's outcome as **grab / strike-instead (which) / nothing**, with counts.
+
+False grabs (non-grab moves read as grab) are now a **no-regression guard**, not a target: keep them at today's level (0 on the 37 clips and on `ee6f97a0`; report the rate on the drill negatives). Everything else in the 6:35 AM and 6:37 AM notes stands: finish and deploy current work first; the grab-only drill; held-out validation; no changes to non-grapple code paths; don't delay the video.
