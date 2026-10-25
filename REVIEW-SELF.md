@@ -131,3 +131,87 @@ Highs (both reviewers):
 - **Silhouettes:** each roster slot has a top (none / tank / rash guard), fight pants, and hair (short / bun / long / mohawk) or headgear in the fighter's color; plus light/dark skin and heavy/lean builds.
 - **Dizzy:** an upright, head-shaking loop with a sway (the old clip folded the body backward).
 - **HUD:** the Brawl board moved below the bars; the movement indicator moved to a corner.
+
+## Round 4: build 72bc4f4 (camera clamp, KO fix, contact fixes), Sun Oct 25 ~2:40 AM CDT
+| Item | Motion | Visual |
+|---|---|---|
+| 1 Walk/run | 2 | 3 |
+| 2 Torso/head | 2 | 3 |
+| 3 Attacks | 2 | 3 |
+| 4 Reactions | 3 | 3 |
+| 5 Glows | 2 | 2 |
+| 6 Effects | 3 | 2 |
+| 7 Stage | 4 | 3 |
+| 8 Camera | 1 | 2 |
+| 9 Silhouettes | 3 | 2 |
+| Strikes connect | 2 | 3 |
+
+Highs:
+- **Camera goes top-down** near the fence (the clamp lifted it).
+- **Opponent hidden** behind you.
+- **Shockwave rings** fill half the screen.
+- **KO stand for 1.6 s:** the slow-mo plays the Death01 stagger.
+- **Black band across the eyes:** the hair cap sat too low.
+- **Steep Brawl camera.**
+- **Cage slam** flies over the rail.
+- **Bodies overlap**, and fighters stand too close.
+- **Iron Wall counter** has no effect on the attacker.
+- **Uppercut** launches before the glove arrives.
+
+### Fixes (round 5 build, 4e9eae1)
+- **Camera:** swings around you near the fence instead of lifting; wider shoulder offset.
+- **Range:** arm's length plus a step, and the lunge never enters the target.
+- **KO:** the fall starts on the KO frame.
+- **Hair:** sits above the brow.
+- **Rings:** bounded growth.
+- **Iron Wall:** the counter knocks the attacker back.
+- **Uppercut:** victims hold still until the glove lands (position and height).
+- **Hit reactions:** a reaction layer on top of the live pose.
+- **Side-steps:** walk at 60% speed.
+
+Round 5 was captured but not reviewed: the planner's 2:35–2:50 AM direction changed the camera, commentator and bug list before the review would have been useful.
+
+## Round 6: build 0290893 ("behind" camera with cage fading, plain fighters, announcer, HUD), Sun Oct 25 3:15 AM CDT
+Reviewers: one motion+visual, one "judge" lens.
+
+| Item | Reviewer A | Reviewer B (judge) |
+|---|---|---|
+| 1 Walk/run | 2 | 2 |
+| 2 Torso/head | 3 | 3 |
+| 3 Attacks | 2 | 2 |
+| 4 Reactions | 3 | 3 |
+| 5 Glows | 2 | 3 |
+| 6 Effects | 3 | 2 |
+| 7 Stage | 4 | 4 |
+| 8 Camera | 2 | 2 |
+| 9 Silhouettes | 2 | 3 |
+| Strikes connect | 3 | 2 |
+| Cage never blocks the fight | 1 | 1 |
+| Opponent visible | 2 | 2 |
+
+Highs:
+- **Behind mode leaves the cage:** posts fill a third of the frame, and the camera sits outside the octagon (walk_forward_back, cage scenes). Metrics: cage in line of sight 68–96%, opponent visible 58–72%.
+- **Faded parts read as grey veils.**
+- **Your fighter is a see-through ghost** during your own strikes.
+- **Fighters stand inside each other.**
+- **The KO is a stiff plank.**
+- **The super uppercut is a flat punch.**
+- **The cage slam never touches the fence.**
+- **The guard bubble looks like a full-body capsule.**
+- **No visible energy-blast projectile.**
+- **Brawl opening** shows two cropped foreground fighters, and you can't tell which one is you.
+- **Bot contact** is 17–23 cm after the range change.
+
+### Fixes (round 7 build, d807dee)
+- **Camera:** keeps the user's behind angle but swings around the fight whenever it would leave the cage (`?cam=free` keeps the unclamped version for comparison). Occluding and near-camera cage parts fade out completely.
+- **Measured locally after the fix:** cage in line of sight ≈ 0% in every scene (was up to 96%); opponent visible 97–100% (was 58–72%).
+- **Spacing:** fighters keep 0.95 m apart (minDist), with a 1.25 m engage distance.
+- **Contact:** the lunge may close to 0.5 m between roots. Measured: getting_hit 11.7 cm, cage scenes 3–5 cm, guard_break 7 cm.
+- **See-through:** only as a fallback, at 60% opacity and never during your own strike.
+- **KO:** a knockback tumble to the floor that stays down.
+- **Super uppercut:** dips and rises. The launch is lower and harder (vy 4.4), and the cage absorbs the slam (restitution 0.15), so the target hits the fence at chest height (`cage` event at y 1.13 m) and drops at its base.
+- **Guard bubble:** compact, around the head and arms.
+- **Energy blast:** slower (4.2 m/s) so it visibly crosses the gap.
+- **Brawl:** a marker over you, and a wider, higher opening shot.
+- **Effects:** sphere trails removed, glove glow capped.
+- **Camera cuts:** on teleports.
