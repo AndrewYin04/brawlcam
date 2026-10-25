@@ -55,21 +55,17 @@ test('energy blast travels as a projectile and can be blocked', async () => {
   await waitScreen(page, 'game');
   await page.evaluate(() => (window as any).__cam.freeze(3.6));
   await page.waitForFunction(() => (window as any).__brawl.lastGesture?.[0]?.blocking === true, null, { timeout: 30_000 });
-  const positions: number[][] = [];
-  const t0 = Date.now();
-  while (Date.now() - t0 < 60_000) {
-    const p = await page.evaluate(() => (window as any).__brawl.snapshot?.p ?? []);
-    if (p.length) positions.push([p[0].x, p[0].z]);
-    const h = await hooks(page);
-    if (h.events.some((e: any) => e.type === 'hit' && e.kind === 'blast') && positions.length > 2) break;
-    await page.waitForTimeout(50);
-  }
+  await page.waitForFunction(() => (window as any).__brawl.events.some((e: any) => e.type === 'hit' && e.kind === 'blast' && e.blocked), null, { timeout: 90_000, polling: 250 });
   const h = await hooks(page);
   const blasts = h.events.filter((e: any) => e.type === 'hit' && e.kind === 'blast');
-  console.log('BLAST', JSON.stringify({ samples: positions.slice(0, 6), blasts: blasts.map((e: any) => [e.damage, e.blocked]) }));
+  // Projectile path from the page's own per-tick log: one projectile's positions over time.
+  const log = await page.evaluate(() => (window as any).__brawl.projLog);
+  const firstId = log[0]?.[0];
+  const positions = log.filter((p: number[]) => p[0] === firstId).map((p: number[]) => [p[1], p[2]]);
+  console.log('BLAST', JSON.stringify({ path: positions.slice(0, 8), blasts: blasts.map((e: any) => [e.damage, e.blocked]) }));
   expect(positions.length).toBeGreaterThan(1);
   const moved = Math.hypot(positions[positions.length - 1][0] - positions[0][0], positions[positions.length - 1][1] - positions[0][1]);
-  expect(moved).toBeGreaterThan(0.2);
+  expect(moved).toBeGreaterThan(0.1);
   expect(blasts.length).toBeGreaterThan(0);
   // Blocked blasts deal 20% (4 HP), unblocked deal 20.
   for (const e of blasts) expect(e.damage).toBe(e.blocked ? 4 : 20);

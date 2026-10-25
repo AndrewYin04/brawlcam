@@ -39,11 +39,20 @@ export const hooks = {
   snapLog: [] as { t: number; at: number; round: number; timer: number; phase: string; hp: number[]; f: number[][] }[],
   targetChanges: 0,
   turns: 0,
+  projLog: [] as number[][],
   roster: null as any,
 };
 (window as any).__brawl = hooks;
 window.addEventListener('error', (e) => hooks.errors.push(String(e.message)));
 window.addEventListener('unhandledrejection', (e) => hooks.errors.push(String((e as PromiseRejectionEvent).reason)));
+
+// One-time migration from the working name's storage keys.
+try {
+  for (const k of ['nick', 'color']) {
+    const old = localStorage.getItem('brawlcam.' + k);
+    if (old != null && localStorage.getItem('throwhands.' + k) == null) localStorage.setItem('throwhands.' + k, old);
+  }
+} catch {}
 
 // ---------- state ----------
 FighterAvatar.lowGfx = params.has('lowgfx');
@@ -80,7 +89,7 @@ export function toast(msg: string, ms = 2500) {
 export function nickname(): string {
   let n = '';
   try {
-    n = localStorage.getItem('brawlcam.nick') ?? '';
+    n = localStorage.getItem('throwhands.nick') ?? '';
   } catch {}
   return n || 'Player';
 }
@@ -122,7 +131,7 @@ async function boot() {
   nickInput.value = nickname() === 'Player' ? '' : nickname();
   nickInput.addEventListener('change', () => {
     try {
-      localStorage.setItem('brawlcam.nick', nickInput.value.trim().slice(0, 16));
+      localStorage.setItem('throwhands.nick', nickInput.value.trim().slice(0, 16));
     } catch {}
   });
   show('menu');
@@ -212,7 +221,7 @@ export async function startMode(mode: string) {
 
 export function myColor(): string {
   try {
-    const c = localStorage.getItem('brawlcam.color');
+    const c = localStorage.getItem('throwhands.color');
     if (c && /^#[0-9a-f]{6}$/i.test(c)) return c;
   } catch {}
   return FIGHTER_COLORS[0];
@@ -432,6 +441,10 @@ function startLoop() {
           commentator.tick(r.snap);
         }
         hooks.snapshot = r.snap;
+        for (const pr of r.snap.p) {
+          hooks.projLog.push([pr.id, pr.x, pr.z, r.snap.t]);
+          if (hooks.projLog.length > 500) hooks.projLog.shift();
+        }
         const lastLog = hooks.snapLog[hooks.snapLog.length - 1];
         if (hooks.mode !== 'idle' && (!lastLog || lastLog.t !== r.snap.t)) {
           hooks.snapLog.push({ t: r.snap.t, at: (session as any).snapAt || performance.timeOrigin + performance.now(), round: r.snap.round, timer: r.snap.timer, phase: r.snap.phase, hp: r.snap.f.map((f) => f.hp), f: r.snap.f.map((f) => [f.id, f.x, f.z, f.hp, f.kb, f.kos, f.alive]) });

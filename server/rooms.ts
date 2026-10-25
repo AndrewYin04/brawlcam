@@ -145,7 +145,8 @@ export class Room {
     this.clients.delete(id);
     this.queue = this.queue.filter((q) => q !== id);
     this.broadcast({ type: 'peer_left', slot: c.slot, nickname: c.nickname });
-    this.onFighterGone(id);
+    // Pass the slot explicitly: the client is already removed from the map.
+    this.onFighterGone(id, c.slot);
     if (this.host === id) this.host = this.people.find((p) => p.connected)?.id ?? this.people[0]?.id ?? null;
     this.broadcastRoster();
   }
@@ -164,10 +165,10 @@ export class Room {
     }
   }
 
-  private onFighterGone(id: string) {
+  private onFighterGone(id: string, slot: number) {
     if (!this.sim || !this.fighters.includes(id)) return;
     const slotIdx = this.fighters.indexOf(id);
-    const client = this.slotOf(id);
+    const client: number | null = slot;
     if (this.sim.cfg.mode === 'brawl') {
       // Replace with a bot so the brawl keeps its numbers.
       const f = client != null ? this.sim.get(client) : undefined;

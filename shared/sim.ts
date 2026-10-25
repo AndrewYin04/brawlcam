@@ -141,7 +141,9 @@ export const TUNING = {
   superUppercutDamage: 25,
   superUppercutLunge: 3.2,
   blastDamage: 20,
-  blastSpeed: 9,
+  blastSpeed: 6,
+  blastHitRadius: 0.4,
+  blastSpawn: 0.3,
   shieldSeconds: 3,
   stunSeconds: 0.22,
   slowmoSuper: 1.2,
@@ -622,9 +624,9 @@ export class Sim {
         id: this.nextProjectileId++,
         owner: f.id,
         target: tgt?.id ?? null,
-        x: f.x + (dirx / len) * 0.5,
+        x: f.x + (dirx / len) * TUNING.blastSpawn,
         y: 1.25,
-        z: f.z + (dirz / len) * 0.5,
+        z: f.z + (dirz / len) * TUNING.blastSpawn,
         vx: (dirx / len) * TUNING.blastSpeed,
         vz: (dirz / len) * TUNING.blastSpeed,
         ttl: 2.5,
@@ -719,7 +721,7 @@ export class Sim {
       let hit = false;
       for (const o of this.fighters) {
         if (o.id === p.owner || !o.alive) continue;
-        if (Math.hypot(o.x - p.x, o.z - p.z) < 0.55) {
+        if (Math.hypot(o.x - p.x, o.z - p.z) < TUNING.blastHitRadius) {
           const owner = this.get(p.owner);
           if (owner) this.applyHit(owner, o, TUNING.blastDamage, 'blast', true, 0);
           hit = true;

@@ -173,16 +173,16 @@ test('Leaderboard: loads from Tiger Data; friendly error when unreachable; empty
   expect(Array.isArray(j.players)).toBe(true);
   // Unreachable database (simulated at the API): friendly error, game still works.
   await page.route('**/api/leaderboard', (r) => r.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"db_unavailable"}' }));
-  await page.click('[data-action=menu]');
+  await page.click('#screen-page [data-action=menu]');
   await page.click('[data-action=leaderboard]');
   await expect(page.locator('#lb-error')).toContainText('taking a breather');
   // Empty database.
   await page.unroute('**/api/leaderboard');
   await page.route('**/api/leaderboard', (r) => r.fulfill({ contentType: 'application/json', body: '{"players":[]}' }));
-  await page.click('[data-action=menu]');
+  await page.click('#screen-page [data-action=menu]');
   await page.click('[data-action=leaderboard]');
   await expect(page.locator('#lb-empty')).toBeVisible();
-  await page.click('[data-action=menu]');
+  await page.click('#screen-page [data-action=menu]');
   await page.click('[data-action=practice]');
   await page.waitForSelector('#calib:not(.hidden)', { timeout: 30_000 });
   await b.close();
