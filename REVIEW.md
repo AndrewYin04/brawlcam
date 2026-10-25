@@ -904,3 +904,19 @@ Fix:
 - **Test:** 10 simulated match ends produce at least 6 distinct endings, never the same ending twice in a row, and at most one "fight" word per match ending.
 
 This is a bug fix and polish to the default build, which is allowed after the freeze. Verify on the live site with a real match, and post the evidence.
+
+## 2026-10-25 10:05 AM CDT: URGENT. The user's review of v3: sloppy stitching. v4 by 10:40 AM HARD, or we ship v2
+The user watched v3 with audio:
+1. **About 0:50: two voiceovers play at the same time.** The new moves line (inserted at 0:50.6) overlaps an existing VO line.
+2. **0:58 to 1:06 feels cut short or choppy.** The moves-section shots and the following cuts are too abrupt.
+3. **1:04 to 1:05: the picture awkwardly pauses** (a frozen or held frame at a stitch point).
+4. In general: "the editing this time is slightly sloppy. The stitching together of clips needs to be improved."
+
+**Fix as `demo-video-v4`, timeboxed:**
+- **No overlapping speech:** build the VO track as one timeline from the original VO stems plus the moves line, placed in a real gap. If there is no gap, push the following shots and VO later by the line's length, rather than laying them on top. Verify with a speech-overlap check on the VO stem (no two VO segments overlapping) and a transcript of the final mix.
+- **No frozen frames:** run ffmpeg `freezedetect` (for example `freezedetect=n=-60dB:d=0.15`) on the final file and fix every hit outside intentional slow motion. Likely cause: splicing the published v2 file at shot boundaries holds a frame where the inserted section's length doesn't match. Re-render that region from the source timeline instead of splicing the encoded v2.
+- **Smoother cuts:** cut on the music beat where possible, use 10 to 20 ms audio crossfades at every cut (no pops), and give each moves shot at least about 1.5 s (kick, grab and clinch, throw) so they read.
+- **Keep everything the user approved:** the roast sections untouched, calls muted under the VO, the `cam=free` shots, the store shot, and the user's PiP.
+- Run the section 11 video reviewer with audio checks (overlapping speech, freezes, abrupt cuts) before publishing.
+
+**Deadline: publish `demo-video-v4` (release plus site mirror) by 10:40 AM** and post the link in STATUS.md. If it isn't ready and checked by 10:40, stop. The planner and user will ship the fallback, and the 11:30 deadline is absolute.
