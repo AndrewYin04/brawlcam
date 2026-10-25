@@ -31,7 +31,7 @@ export class Arena {
     this.camera = new THREE.PerspectiveCamera(55, 16 / 9, 0.05, 700);
     if (sky) {
       this.stage = new SkyStage(this.scene);
-      if (!lowPower) {
+      if (!lowPower && !new URLSearchParams(location.search).has('nobloom')) {
         // Bloom on emissive glows (gloves, edge, effects); high threshold keeps the scene itself crisp.
         this.composer = new EffectComposer(this.renderer);
         this.composer.addPass(new RenderPass(this.scene, this.camera));
@@ -132,7 +132,7 @@ export class Arena {
   /** Smoothly move the camera toward a pose; snap if requested. */
   setCamera(pos: THREE.Vector3, look: THREE.Vector3, dt: number, snap = false) {
     // Teleports (round start, respawn) cut instead of sweeping the camera across the arena.
-    const k = snap || this.camPos.distanceTo(pos) > 3 ? 1 : 1 - Math.exp(-dt * 5);
+    const k = snap ? 1 : 1 - Math.exp(-dt * 5);
     this.camPos.lerp(pos, k);
     this.camLook.lerp(look, k);
     this.camera.position.copy(this.camPos);

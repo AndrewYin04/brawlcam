@@ -315,7 +315,10 @@ export class MatchView {
         // Teleports (new round, respawn) snap instead of gliding across the stage. A fighter about to be hit holds
         // still until the fist lands (the knockback starts at the contact frame).
         const awaitingHit = this.pendingHits.some((p) => (p.e as any).target === f.id);
-        if (slot.pos.distanceTo(target) > 2.2) slot.pos.copy(target);
+        if (slot.pos.distanceTo(target) > 2.2) {
+          slot.pos.copy(target);
+          if (f.id === myId) this.camCut = true; // your fighter teleported (round start, respawn): cut, don't sweep
+        }
         else if (!awaitingHit) slot.pos.lerp(target, k);
         slot.yaw += wrap(f.yaw - slot.yaw) * k;
         slot.avatar.root.position.copy(slot.pos);
@@ -391,12 +394,14 @@ export class MatchView {
     } else if (this.opts.camera === 'wide') {
       const back = new THREE.Vector3(-Math.sin(me.yaw), 0, -Math.cos(me.yaw));
       if (USE_HEROES) {
-        // Brawl: centered on you, widened just enough for the fighters near you.
+        // Brawl: a chase camera behind your fighter (you stay nearest the camera and largest in frame).
         let near = 0;
-        for (const o of others) if (o.snap.alive) near = Math.max(near, Math.min(5, o.pos.distanceTo(me.pos)));
-        const d = (portrait ? 4.4 : 3.4) + near * 0.4;
-        pos = me.pos.clone().addScaledVector(back, d).addScaledVector(new THREE.Vector3(back.z, 0, -back.x), -1.0).setY((portrait ? 2.9 : 2.5) + near * 0.15);
-        look = me.pos.clone().addScaledVector(back, -1.6).setY(1.0);
+        for (const o of others) if (o.snap.alive) near = Math.max(near, Math.min(4, o.pos.distanceTo(me.pos)));
+        const fwd = new THREE.Vector3(-back.x, 0, -back.z);
+        const right = new THREE.Vector3(-fwd.z, 0, fwd.x);
+        pos = me.pos.clone().addScaledVector(fwd, portrait ? -3.6 : -3.0).addScaledVector(right, 1.1).setY((portrait ? 2.6 : 2.3) + near * 0.08);
+        const tgt = me.snap.tg != null ? this.slots.get(me.snap.tg) : undefined;
+        look = (tgt ? tgt.pos.clone().lerp(me.pos, 0.35) : me.pos.clone().addScaledVector(fwd, 1.6)).setY(1.1);
       } else {
         pos = me.pos.clone().addScaledVector(back, portrait ? 7 : 5).setY(portrait ? 6 : 4.2);
         look = me.pos.clone().addScaledVector(back, -2).setY(0.9);
@@ -425,9 +430,15 @@ export class MatchView {
       if (me.snap.y > 0.3 && opp) look = look.clone().lerp(me.pos.clone().setY(1 + me.snap.y), 0.5); // keep a launched you in frame
       if (this.slowmo && opp) {
         // Dramatic side angle during slow motion, framing both fighters and the launch.
-        const mid = me.pos.clone().add(opp.pos).multiplyScalar(0.5);
-        pos = mid.clone().addScaledVector(right, 3.4).setY(1.6);
-        look = opp.pos.clone().setY(1.3 + (opp.snap.y ?? 0) * 0.6);
+        // Frame both fighters (whoever is launched stays in shot until they land).
+        const a = me.avatar.root.position.clone().setY(1 + (me.snap.y ?? 0));
+        const b2 = opp.avatar.root.position.clone().setY(1 + (opp.snap.y ?? 0));
+        const mid = a.clone().add(b2).multiplyScalar(0.5);
+        const span = a.distanceTo(b2);
+        // Stay on the side the camera is already on (never flip across the fight).
+        const side = Math.sign(this.arena.camera.position.clone().sub(mid).dot(right)) || 1;
+        pos = mid.clone().addScaledVector(right, side * (3.0 + span * 0.8)).setY(1.5 + span * 0.15);
+        look = mid.clone();
       }
     }
     // Ring-out: the camera follows the falling fighter for a moment.
@@ -449,22 +460,35 @@ export class MatchView {
         }
         return m;
       };
-      if (me && outside(pos) > 0) {
+      if (me) {
+        // Orbit the camera around your fighter by a smoothed swing angle (no jumps between sides):
+        // the swing grows only as far as needed to stay inside the cage, or to see the opponent past your fighter.
         const off = pos.clone().sub(me.pos);
-        let best = pos;
-        let bestOut = outside(pos);
-        for (const deg of [20, -20, 40, -40, 60, -60, 80, -80, 100, -100]) {
-          const cand = me.pos.clone().add(off.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), (deg * Math.PI) / 180));
-          cand.y = pos.y;
-          const o = outside(cand);
-          if (o < bestOut - 1e-6) {
-            best = cand;
-            bestOut = o;
-            if (o <= 0) break;
-          }
+        const rot = (deg: number) => {
+          const c = me.pos.clone().add(off.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), (deg * Math.PI) / 180));
+          c.y = pos.y;
+          return c;
+        };
+        let want = 0;
+        if (outside(pos) > 0) {
+          // Smallest swing that fits, preferring the side we're already swung to.
+          const side = this.camSwing >= 0 ? 1 : -1;
+          let found = false;
+          for (let d = 10; d <= 120 && !found; d += 10)
+            for (const sgn of [side, -side])
+              if (outside(rot(sgn * d)) <= 0) {
+                want = sgn * d;
+                found = true;
+                break;
+              }
+          if (!found) want = this.camSwing;
         }
-        // Prefer the smallest swing that fits; keep a smooth orbit memory so it doesn't flip sides each frame.
-        pos = best;
+        // Opponent hidden behind you: swing toward your fighter's left (camera moves right of the line), a bit at a time.
+        if (this.camStats.oppVisible < 0.8) this.camVisBias = Math.min(35, this.camVisBias + 60 * dt);
+        else this.camVisBias = Math.max(0, this.camVisBias - 25 * dt);
+        want += want >= 0 ? this.camVisBias : -this.camVisBias; // +angle widens the over-the-shoulder offset
+        this.camSwing += (want - this.camSwing) * Math.min(1, dt * 3);
+        if (Math.abs(this.camSwing) > 0.5) pos = rot(this.camSwing);
       }
       for (let k = 0; k < 8; k++) {
         const ang = ((k + 0.5) / 8) * Math.PI * 2 + Math.PI / 8;
@@ -475,7 +499,9 @@ export class MatchView {
         }
       }
     }
-    this.arena.setCamera(pos, look, dt);
+    this.arena.setCamera(pos, look, dt, this.camCut);
+    if (this.camCut) this.camSwing = 0;
+    this.camCut = false;
     this.updateVisibility(dt);
     void s;
   }
@@ -483,6 +509,9 @@ export class MatchView {
   /** Review metrics (section 11): cage occlusion, opponent visibility, camera jumps. */
   camStats = { occlusion: 0, oppVisible: 1, jumps: 0, frames: 0, occlusionSum: 0, oppVisibleSum: 0 };
   private lastCamPos: THREE.Vector3 | null = null;
+  private camSwing = 0;
+  private camCut = false;
+  private camVisBias = 0;
 
   /** Fade cage parts that hide a fighter; make your own fighter see-through when it covers the opponent. */
   private updateVisibility(dt: number) {
@@ -506,9 +535,8 @@ export class MatchView {
         if (!me.avatar.blocksRay(camPos, dir.normalize(), d)) seen++;
       }
       vis = op.length ? seen / op.length : 1;
-      // See-through is a fallback only: never during your own strike (you must see your punch), and never below 60%.
-      const striking = me.snap.atk && me.snap.atk.age < 0.5;
-      me.avatar.setOpacity(vis < 0.8 && !striking ? 0.6 : 1, dt);
+      // No see-through (a semi-transparent skinned mesh shows its inner surfaces): the camera swings instead.
+      me.avatar.setOpacity(1, dt);
     }
     const st = this.camStats;
     st.frames++;

@@ -191,6 +191,7 @@ export const TUNING = {
   roundEndPause: 3.5,
   gravity: 18,
   strafeScale: 0.6,
+  retreatScale: 0.7,
   bodyRadius: 0.32,
   cageBounceMin: 1.2, // m/s into the fence before it counts as a slam
   cageRestitution: 0.15, // the fence absorbs most of a slam: you drop at its base, not bounce back across the cage
@@ -500,6 +501,7 @@ export class Sim {
         const sp = TUNING.moveSpeed * (f.blocking ? 0.5 : 1) * (f.dizzyUntil > 0 ? TUNING.dizzyMoveScale : 1);
         // Side-steps are slower than advancing/retreating (a shuffle, not a sideways sprint).
         const ss = strafe * TUNING.strafeScale;
+        if (fwd < 0) fwd *= TUNING.retreatScale; // backing up is slower than advancing
         let mx = (fx * fwd + lx * ss) * sp * dt;
         let mz = (fz * fwd + lz * ss) * sp * dt;
         // do not walk through the target

@@ -542,18 +542,25 @@ export class HeroFighter {
     }
     if (opts.alive && !this.wasAlive) {
       this.actions.get('knockback')?.fadeOut(0.15);
+      this.actions.get('death')?.fadeOut(0.15);
       this.play('getUp', 0.12, 1, 1, 1.4);
       this.koTime = -1;
     }
     this.wasAlive = opts.alive;
+    if (!opts.alive && this.koTime >= 0 && time - this.koTime > 1.0 && this.oneShot?.name === 'knockback') {
+      this.play('death', 0.35, 1, 1, 1);
+      this.actions.get('death')!.time = this.actions.get('death')!.getClip().duration - 0.05; // limp, lying
+      this.oneShot!.until = Infinity;
+    }
     // While knocked out, the death clip (clamped on its last frame) always plays; nothing may replace it.
-    if (!opts.alive && this.oneShot?.name !== 'knockback') {
+    if (!opts.alive && this.oneShot?.name !== 'knockback' && this.oneShot?.name !== 'death') {
       this.play('knockback', 0.05, 1, 1, 0.9);
       this.oneShot!.until = Infinity;
     }
 
     // ---- airborne: tumble in the air, land, get up ----
-    if (airborne && !this.wasAirborne) this.play('airborne', 0.08, 1);
+    // Launched by a hit: tumble (arms flail, spine arches), not the jump loop's seated guard pose.
+    if (airborne && !this.wasAirborne) this.play(this.flinch > 0.3 ? 'knockback' : 'airborne', 0.06, 1);
     if (!airborne && this.wasAirborne) {
       if (this.tumble > 2.5 && opts.alive) this.play('getUp', 0.06, 1, 1, 1.8);
       else this.play('land', 0.05, 1);
@@ -580,7 +587,7 @@ export class HeroFighter {
         ang = ang > 0 ? ang - Math.PI : ang + Math.PI;
       }
       wantYaw = THREE.MathUtils.clamp(ang, -1.45, 1.45);
-      const run = speed > 1.5 && Math.abs(ang) < 0.6; // side-steps and back-steps always walk (a shuffle, not a sprint)
+      const run = speed > 1.5 && Math.abs(ang) < 0.6 && !back; // side-steps and back-steps always walk (a shuffle, not a sprint)
       const w = THREE.MathUtils.clamp((speed - 0.15) / 0.35, 0, 1);
       target = { idle: 1 - w, walk: run ? 0 : w, run: run ? w : 0 };
       rate = (run ? speed / RUN_SPEED : speed / WALK_SPEED) * (back ? -1 : 1);

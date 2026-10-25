@@ -77,7 +77,7 @@ let fail = false;
   const tr = run((t) => ({ lean: 0, scale: t >= 1 && t < 2 ? 0.85 : 1 }), 3.5);
   const d0 = at(tr, 0.9).d, d1 = at(tr, 1.95).d, d2 = at(tr, 3.4).d;
   console.log(`step back then return: distance ${d0.toFixed(2)} -> ${d1.toFixed(2)} (stepped back) -> ${d2.toFixed(2)} m (1.4 s after returning)`);
-  if (!(d1 > d0 + 0.35)) { console.log('  FAIL: stepping back did not retreat'); fail = true; }
+  if (!(d1 > d0 + 0.25)) { console.log('  FAIL: stepping back did not retreat'); fail = true; } // retreat runs at 70% speed (sim retreatScale)
   if (!(d2 > d1 - 0.05)) { console.log('  FAIL: the retreat was undone as soon as the player returned to their spot'); fail = true; }
 }
 // 3) Standing still in guard: no movement drift.
