@@ -232,9 +232,11 @@ export const TUNING = {
   throwRange: 1.35, // m (or from the clinch)
   throwStartup: 0.3, // s: a strike landing on the thrower meanwhile cancels it (the meter is not refunded)
   throwDamage: 25, // unblockable by the guard; the Iron Wall stops it (0 damage + its counter)
-  throwLand: 1.0, // m behind the thrower (along the thrower's facing) where the target lands
+  throwLand: 1.3, // m behind the thrower (along the thrower's facing) where the target lands (its hips; lying on its back,
+  // its head ends about 0.4 m in front of the thrower's feet instead of under them)
   throwVy: 4, // m/s upward: a short airborne arc for clients to animate
-  throwStun: 0.8, // s the thrown fighter is stunned (airborne, then getting up)
+  throwStun: 2.6, // s the thrown fighter is stunned and can't be hit: over the shoulder (0.5 s), flat on its back (1.15 s),
+  // then the get-up clip (1.3 s), less the slow motion (REVIEW.md 7:05 AM: stay down at least 1 s; it was 0.8 s in all)
   slowmoThrow: 0.4, // real s of slow motion when a throw lands
 };
 
@@ -1082,7 +1084,10 @@ export class Sim {
       tgt.y = 0;
       tgt.vx = tgt.vz = 0;
       tgt.vy = TUNING.throwVy;
-      if (tgt.alive) tgt.stunUntil = Math.max(tgt.stunUntil, this.t + TUNING.throwStun);
+      if (tgt.alive) {
+        tgt.stunUntil = Math.max(tgt.stunUntil, this.t + TUNING.throwStun);
+        tgt.invulnUntil = Math.max(tgt.invulnUntil, this.t + TUNING.throwStun); // no hits on a fighter lying on the mat
+      }
       this.slowmoUntil = Math.max(this.slowmoUntil, this.realT + TUNING.slowmoThrow);
       this.emit({ type: 'throw', id: f.id, target: tgt.id, damage: dealt, x: +lx.toFixed(3), y: 0, z: +lz.toFixed(3) });
     }
