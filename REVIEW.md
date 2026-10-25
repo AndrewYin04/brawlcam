@@ -456,3 +456,44 @@ Session `ee6f97a0…` (Tiger `research_frames`; the user also has the local `.we
 The user confirmed they **were moving** during session `ee6f97a0` (stepping left, right, forward and back, and strafing). So the "254 of 534 frames nonzero between strikes" figure is mostly real movement, **not** evidence of bug A. Don't use this session as the bug A repro. The only bug-relevant signal in it is the frames within 0.6 s of strikes (20 of 551 nonzero, 9 backward, minimum -1.00), and those may include intentional steps.
 
 **A clean repro still needs the "big punches while standing still" drill.** Ship the minimal drill mode (stand still, big punches standing still, and movement) as the next item, so the user can record it. The 6.9 fps pose-rate finding (item 1 of the 3:08 AM note) still stands and is high priority.
+
+## 2026-10-25 3:15 AM CDT: the user's test of 83ba7df (commentator and crowd)
+1. **"i dont hear it anymore"**: the user hears no commentator at all. Checked so far:
+   - the user's Chrome has `throwhands.mute = 0` and no saved voice volume (default 0.9); the user set crowd to 0.1
+   - the server is healthy (`/api/health`: geminiCalls 7, gemini429 0, tts429 0), and `/calls/big_hit_0.mp3` serves 200 audio/mpeg; 41 call files are in `web/public/calls`
+
+   So it is a client playback problem, or the gates are too strict. Reproduce in a real browser, not only headless, and log for one practice match:
+   - `AudioContext.state`, and whether `resume()` runs on the first user click on the menu or in the match
+   - the voice bus gain
+   - `announcer.log` (which calls fired)
+   - `commentaryLog` with its `spoken` values (`tts`, `none`, `muted`)
+   - whether `loadBuffer` and `playVoiceBuffer` succeed
+
+   **Expected:** a round-start call ("ROUND ONE, FIGHT!") is always heard, and a typical 60 s practice match has at least 4 spoken lines. Add a Playwright check: the announcer log has a round-start entry, the AudioContext is `running`, and the voice bus gain is above 0.
+   - **AI lines:** the user expected live commentary too. Voice the AI lines whenever no stock call played in the last 3 s and fewer than 8 lines were spoken in the last minute; today they are mostly captions.
+2. **"the audience crowd noise sounds like wind blowing / white noise than human noise."** The synthesized noise crowd isn't working. Replace it with **real crowd audio**:
+   - **Preferred:** ElevenLabs sound effects (text to sound effects), pre-rendered once:
+     - an arena crowd bed loop (30 s, seamless, murmur and chatter)
+     - 3 or 4 big cheers or roars
+     - 2 "ooooh"s for blocked heavy hits
+     - a gasp for a guard break
+     - a building chant for low HP
+     - a boo for a whiff streak (optional)
+
+     Check the current API and its credit cost first: 1,309 of 10,000 characters are used. Keep total usage under 50% of what remains, and record it in STATUS.md.
+   - **Fallback:** CC0 recordings from Freesound, verifying each license and crediting it in the README.
+   - **Mix:** duck the crowd under the commentator's voice, about -8 dB while a line plays, so it never covers a call. Keep the separate volume sliders.
+   - **Review:** add a review-loop audio check: record 60 s of match audio, and have reviewers rate "crowd sounds like people" and "commentary audible over crowd" from 1 to 5.
+
+### 3:20 AM: the voice reads its own directions aloud
+The user: "the eleven labs api speaks out the prompt too, like 'speak excitedly like a commentator in a big fight' is also spoken. otherwise the voice is a lot better."
+
+Two places put a delivery instruction inside the text to be spoken:
+1. **Stock calls** (`video/stock-calls.ts:16`): `text = "[shouting excitedly] " + line`, with `stability: 0.0`. eleven_v3 audio tags are meant not to be spoken, but at stability 0.0 (most variable) they can be.
+2. **Live AI lines** (`server/ai.ts:196`): Gemini TTS receives `"You are a live fight commentator in a packed arena. Say this <mood>: <line>"`. TTS models can read such instructions aloud.
+
+**Fix and verify:**
+- **Transcribe every audio clip** (all 40 stock calls, plus about 30 sampled live Gemini TTS lines across the moods) with a speech-to-text model, as you did for the video narration. Compare each transcript to the intended line. Any clip with extra words ("shouting", "excitedly", "commentator", "say this", and so on) fails. Report the leak rate before and after in STATUS.md; the target is 0.
+- **Stock calls:** regenerate only the failing ones. Options to test against the transcript check: drop the tag and rely on `style` plus capitals and punctuation; raise `stability` to about 0.35 to 0.5; or check the current ElevenLabs docs for how v3 audio tags are meant to be used. Keep the delivery as energetic as now; the user likes it.
+- **Live lines:** test which Gemini TTS request format never leaks: for example, the style only in a system instruction if TTS supports one (check the docs), a shorter "Excitedly:" prefix, or no instruction with a more energetic prebuilt voice. If none reaches 0 leaks, voice live lines with ElevenLabs instead (a low-latency model; spend at most 50% of the remaining quota), or keep them caption-only.
+- Add the transcript check as a test that runs whenever calls are regenerated.
