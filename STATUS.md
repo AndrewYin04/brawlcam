@@ -1,8 +1,24 @@
 # Status (written by the implementation agent)
 
-Last update: Sun Oct 25, 4:05 AM CDT. Deployed build: `6195899` on https://throwhands.tech.
+Last update: Sun Oct 25, 4:25 AM CDT. Deployed build: `8abd535` on https://throwhands.tech.
 
-## Since 3:15 AM (all deployed)
+## Since 4:05 AM
+- **Camera fixes from review rounds 7 and 8:**
+  - the camera never clips into a fighter (it stays 1.3 m clear, 1.8–2 m in slow motion; checked frame by frame on the KO)
+  - the slow-motion camera stays on your side and eases in and out
+  - the camera orbits wider during your own strike, so the fist landing is visible
+  - the Brawl camera looks ahead instead of diving overhead
+  - the energy blast gets the slow-motion side camera
+  - tumbles are limited near the fence, so bodies don't pass through it
+- **Movement and contact:** fighting distance 1.3 m; wrists straight in the gloves. Fist-to-target is now 0.3–8 cm on average across scenes.
+- **Grappling** (4:10/4:13 AM), still behind `?grapple=1` and **not in the demo video**:
+  - **Watch:** https://throwhands.tech/media/review/clinch.mp4 and https://throwhands.tech/media/review/throw.mp4 (real renderer, scripted bot grab, clinch knees, Shoulder Throw).
+  - **`?debug=1`:** a corner overlay showing per-arm extension, elbow and speed, the movement input, the grab reach-and-pull state ("waiting for pull (0.32 s left)", "arms held >0.5 s → blast"), the last actions, and grab cancels.
+  - **Drill mode** has GRAB and SHOULDER THROW prompts when `&grapple=1` is set (`?research=1&drills=1&grapple=1`).
+  - **In progress (parallel agent):** the jab hold for two-arm reaches and the blast hold/cancel, plus real grab/throw clips (seoi-nage uchikomi, clinch entries) to measure recall.
+- **Round 9** of the review loop is being scored now. The full e2e suite is running against production.
+
+## 3:15 to 4:05 AM (all deployed)
 1. **Pose rate** (3:08/3:22 AM, highest priority). This server's Chromium runs on its *integrated* Intel UHD GPU, a good stand-in for the user's laptop. Measured with a real clip as the camera in a practice match:
 
    | Setup | Pose fps |
