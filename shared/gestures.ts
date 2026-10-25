@@ -67,7 +67,8 @@ export const GESTURE_CFG = {
   kneeUpVel: 1.4,
   kneeHighAboveHip: -0.22, // knee y > hip y + this
   ankleKickVel: 2.6,
-  kickRefractory: 0.6,
+  kickRefractory: 0.7,
+  kneeLiftY: 0.39, // m below hip: knee above this height counts as lifted (standing knee is ~0.42)
   // movement
   leanDead: 0.035, // m
   leanFull: 0.1,
@@ -124,6 +125,7 @@ export class GestureRecognizer {
   private renderFilter = new VecFilter(15 * 3, 1.2, 0.6);
   private gestFilter = new VecFilter(15 * 3, 6, 0.8);
   private lastStrike: Record<string, number> = { L: -9, R: -9, kickL: -9, kickR: -9 };
+  private lastCandidate: Record<string, number> = {};
   private pending: { hand: 'L' | 'R'; a: Action; t: number } | null = null;
   private blockOnAt = -1;
   private blockOffAt = -1;
@@ -139,6 +141,8 @@ export class GestureRecognizer {
   private standingAnkleY: [number, number] | null = null;
   private legsBusyUntil = -9;
   private pointSince: Record<string, number | null> = {};
+  /** Set to [] to collect per-frame candidate/suppression notes (tuning tools). */
+  debugLog: string[] | null = null;
 
   /** Start (or restart) the 3-second guard calibration. */
   beginCalibration() {
@@ -261,6 +265,7 @@ export class GestureRecognizer {
       const k = n - 2;
       const pk = F[k];
       if (pk.t - this.lastStrike[hi.h] < this.cfg.handRefractory) continue;
+      if (pk.t - (this.lastCandidate[hi.h] ?? -9) < 0.12) continue;
       const peakOf = (key: 'ext' | 'y' | 'u' | 'elbow') => {
         if (!(pk[key] >= F[k - 1][key] && pk[key] > F[n - 1][key])) return null;
         let minV = pk[key];
@@ -279,7 +284,12 @@ export class GestureRecognizer {
       // Jab/straight: the elbow opens quickly (robust even when the punch points at the camera).
       const jab = peakOf('elbow');
       if (jab && jab.rise >= this.cfg.jabElbowRise && pk.elbow >= this.cfg.elbowOpenMin && pk.ext - jab.start.ext >= this.cfg.jabExtRise) {
-        candidates.push({ hand: hi.h, kind: 'jab', score: jab.rise / this.cfg.jabElbowRise, speed: Math.max(jab.peakSpeed, ((pk.ext - jab.start.ext) * this.calib.armLen) / jab.dt), t: pk.t });
+        // The elbow also opens during a hook: if the wrist swept far toward the midline in the same window, it is a hook.
+        let uMin = pk.u;
+        for (let i = k; i >= 0 && pk.t - F[i].t <= this.cfg.riseWindow; i--) uMin = Math.min(uMin, F[i].u);
+        const uNow = Math.max(pk.u, F[n - 1].u);
+        const kind: ActionKind = uNow - uMin >= this.cfg.hookRise * 1.2 && pk.elbow < this.cfg.hookElbowMax ? 'hook' : 'jab';
+        candidates.push({ hand: hi.h, kind, score: jab.rise / this.cfg.jabElbowRise, speed: Math.max(jab.peakSpeed, ((pk.ext - jab.start.ext) * this.calib.armLen) / jab.dt), t: pk.t });
       }
       const up = peakOf('y');
       if (up && up.rise >= this.cfg.upRise && up.start.y < -this.cfg.upStartBelow && pk.elbow < this.cfg.upElbowMax) {
@@ -290,6 +300,7 @@ export class GestureRecognizer {
         candidates.push({ hand: hi.h, kind: 'hook', score: hook.rise / this.cfg.hookRise, speed: Math.max(hook.peakSpeed, hook.rise / hook.dt), t: pk.t });
       }
     }
+    if (this.debugLog) for (const c of candidates) this.debugLog.push(`${t.toFixed(2)} cand ${c.kind}${c.hand} score ${c.score.toFixed(2)} speed ${c.speed.toFixed(2)} peakT ${c.t.toFixed(2)}`);
     // Ignore slow, gestural movements.
     for (let i = candidates.length - 1; i >= 0; i--) if (candidates[i].speed < this.cfg.strikeMinSpeed) candidates.splice(i, 1);
     // Strongest candidate per hand.
@@ -335,11 +346,16 @@ export class GestureRecognizer {
       for (const [kneeI, ankI] of [[J.lKnee, J.lAnk], [J.rKnee, J.rAnk]] as const) {
         const kneeV = (P[kneeI][1] - past.p[kneeI][1]) / dt;
         const ankV = len(sub(P[ankI], past.p[ankI])) / dt;
-        if (P[kneeI][1] > midHipNow[1] - 0.3 || kneeV > 0.9 || ankV > 1.6) legsBusy = true;
+        // Kick motion only (knee raised or rising fast). Plain steps and foot pivots during hooks don't count.
+        void ankV;
+        // Kick motion: knee near hip height, or rising fast once already lifted above standing height
+        // (bouncing boxers move their knees fast without lifting them).
+        if (P[kneeI][1] > midHipNow[1] - 0.3 || (kneeV > 1.2 && P[kneeI][1] > midHipNow[1] - this.cfg.kneeLiftY)) legsBusy = true;
       }
     }
     if (legsBusy) this.legsBusyUntil = t + 0.25;
     const suppressAll = this.blocking || this.xshield || t < this.legsBusyUntil;
+    if (this.debugLog && byHand.size) this.debugLog.push(`${t.toFixed(2)} byHand ${[...byHand.values()].map((c) => c.kind + c.hand).join(',')} suppress=${suppressAll} (block ${this.blocking} x ${this.xshield} legs ${t < this.legsBusyUntil}) defensiveEnd=${defensiveEnd} pending=${!!this.pending}`);
     const otherSpeed = (h: 'L' | 'R') => handInfo.find((x) => x.h !== h)!.speed;
     const decideBilateral = (a: (typeof candidates)[number], b: { hand: 'L' | 'R'; a: Action; t: number } | (typeof candidates)[number]) => {
       const bAction: Action = 'a' in b ? b.a : { kind: b.kind, hand: b.hand, speed: b.speed };
@@ -353,16 +369,16 @@ export class GestureRecognizer {
       out.actions.push({ ...keep, t });
     };
     const cands = [...byHand.values()];
+    // Any candidate blocks the same hand briefly (one motion, one decision); the full refractory starts only when a strike is emitted.
+    for (const c of cands) this.lastCandidate[c.hand] = c.t;
+    const nBefore = out.actions.length;
     if (suppressAll) {
-      for (const c of cands) this.lastStrike[c.hand] = c.t;
       this.pending = null;
     } else if (cands.length === 2) {
-      for (const c of cands) this.lastStrike[c.hand] = c.t;
       this.pending = null;
       decideBilateral(cands[0], cands[1]);
     } else if (cands.length === 1) {
       const c = cands[0];
-      this.lastStrike[c.hand] = c.t;
       if (this.pending && this.pending.hand !== c.hand && t - this.pending.t <= this.cfg.palmPairWindow) {
         const p = this.pending;
         this.pending = null;
@@ -378,6 +394,10 @@ export class GestureRecognizer {
       // Window passed with no partner: emit unless the arms ended in a defensive pose.
       if (!defensiveEnd && !this.blocking && !this.xshield) out.actions.push({ ...this.pending.a, t: this.pending.t });
       this.pending = null;
+    }
+    for (const a of out.actions.slice(nBefore)) {
+      if (a.hand === 'L' || a.hand === 'R') this.lastStrike[a.hand] = a.t;
+      else if (a.hand === 'B') this.lastStrike.L = this.lastStrike.R = a.t;
     }
 
     const handsSlow = handInfo.every((h) => h.speed < 2.5);
@@ -405,7 +425,8 @@ export class GestureRecognizer {
           ['R', J.rKnee, J.rAnk, 1],
         ] as const) {
           const key = 'kick' + leg;
-          if (t - this.lastStrike[key] < this.cfg.kickRefractory) continue;
+          // One kick at a time: the cooldown is shared by both legs.
+          if (t - Math.max(this.lastStrike.kickL, this.lastStrike.kickR) < this.cfg.kickRefractory) continue;
           const knee = P[kneeI];
           const ank = P[ankI];
           const kneeV = (knee[1] - past.p[kneeI][1]) / dt;
@@ -414,6 +435,7 @@ export class GestureRecognizer {
           const ankleUp = ank[1] - this.standingAnkleY[k] > 0.3;
           if ((kneeHigh && kneeV > this.cfg.kneeUpVel) || (ankleUp && ankV > this.cfg.ankleKickVel)) {
             this.lastStrike[key] = t;
+            this.legsBusyUntil = t + 0.35; // arm swing right after a kick is balance, not a strike
             out.actions.push({ kind: 'kick', hand: leg as Hand, speed: Math.max(ankV, kneeV), t });
           }
         }
