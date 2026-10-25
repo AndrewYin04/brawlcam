@@ -58,6 +58,7 @@ Downloaded shadowboxing clips got gestures working, but the first real laptop se
 - **Laptops hide the hips.** The torso-lean signal measured shoulders against hip depth, but at a laptop the hips are out of frame and their depth is a guess. Forward/back now reads apparent body size (rotation-corrected shoulder width) against "your spot": the median size over the last 10 s the player stood settled. Stepping back went from never registering to 3 of 3.
 - **Big punches are not small punches.** Real big hooks open the elbow to 160° and sweep the wrist about 1 m; a 150° elbow cap called them jabs. Classifying big swings by the whole motion (sweep, rise, torso turn) took hooks from 0/4 to 3/4 and uppercuts from 0/3 to 3/3, with no change on the labeled clips.
 - **The video is the ground truth.** Some misses were reps where no punch was thrown. Contact sheets from the player's webcam settled each one.
+- **Grappling came last, and stays labeled beta.** Grab (reach with both arms and pull in), clinch knees and the Shoulder Throw were tuned on the same player's recorded grab drills: 4/4 grabs detected in one session and 3/4 in the next (the miss read as a strike). There were 0 false grabs across 37 real clips. With grappling on, strike replays only lost misreads, never gained one. It ships on by default; `?grapple=0` turns it off.
 
 ## What's next
 
