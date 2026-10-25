@@ -9,7 +9,7 @@ import { MotionRecorder } from './input/motion';
 import { startCamera, CameraFailure } from './input/camera';
 import { research } from './research';
 import * as sfx from './game/audio';
-import { Commentator, setMuted, isMuted, commentaryLog, setVoiceGate } from './game/commentary';
+import { Commentator, setMuted, isMuted, commentaryLog, setVoiceGate, setRoastPlayer } from './game/commentary';
 import type { SimEvent } from '../../shared/sim';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -95,6 +95,8 @@ commentator.mayVoice = () => !!view && !view.announcer.spokeWithin(3) && view.an
 for (const ev of ['pointerdown', 'keydown', 'touchstart'] as const) addEventListener(ev, () => sfx.audioResume(), { passive: true });
 document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && sfx.audioResume());
 setVoiceGate(() => commentator.mayVoice()); // online rooms' server lines follow the same budget
+// Caption-only AI lines get a matching pre-voiced generic roast (planner 5:10 AM item 2), paced like the other calls.
+setRoastPlayer((key) => view?.announcer.roast(key));
 sfx.setVoiceMuted(isMuted());
 const motion = new MotionRecorder();
 commentator.enabled = !params.has('nocomment');

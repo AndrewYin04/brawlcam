@@ -33,7 +33,18 @@ export const CALLS: Record<string, string[]> = {
   meter_ready: ['THE SUPER IS READY!', 'METER IS FULL!'],
   filler: ['KEEP THOSE HANDS UP!', 'PRESSURE, PRESSURE!', 'THE CROWD IS LOVING THIS!', 'WHAT A FIGHT WE HAVE!', 'WATCH THE JAB!', 'BEAUTIFUL MOVEMENT!'],
   clinch: ['CLINCH!'],
+  // Generic roasts (planner 5:10 AM item 2): no names, school-appropriate. Played when the live Gemini roast for that
+  // moment is caption-only (Gemini TTS is out of quota); the caption keeps the specific Gemini line.
+  roast_whiff: ['Swing and a miss! The air is winning.', 'That punch is still looking for a target.', 'Bold strategy, hitting nothing.', 'The wind felt that one.'],
+  roast_guard_break: ['Guard? What guard?', 'Turtle mode has been cancelled.', 'Those arms have left the building.'],
+  roast_big_hit: ["That one's going in the highlight reel!", "Somebody check if they're still logged in.", "Oof. That's gonna leave a pixel."],
+  roast_comeback: ["Don't call it a comeback!", 'Plot twist! We have a fight!', 'The underdog has teeth!'],
+  roast_ko: ['Rest in pixels.', 'Taking a nap on the mat!', 'Rematch button is right there.'],
+  roast_blocked: ["Knock knock. Nobody's home.", 'Punching a wall would be faster.'],
+  roast_idle: ['Are we fighting or slow dancing?', 'Even the crowd is doing more cardio.'],
 };
+// Delivery: announcer calls are shouted; roasts are wry.
+const tagFor = (key: string) => (key.startsWith('roast_') ? '[mischievously] ' : process.env.TAG ?? '[shouting excitedly] ');
 const OUT = path.join(ROOT, 'web/public/calls');
 fs.mkdirSync(OUT, { recursive: true });
 const sub = await (await fetch('https://api.elevenlabs.io/v1/user/subscription', { headers: { 'xi-api-key': KEY } })).json();
@@ -41,14 +52,14 @@ const remaining = sub.character_limit - sub.character_count;
 const items = Object.entries(CALLS).flatMap(([k, lines]) => lines.map((text, i) => ({ id: `${k}_${i}`, key: k, text })));
 const ONLY = process.argv.slice(2);
 const todo = items.filter((it) => (ONLY.length ? ONLY.includes(it.id) : !fs.existsSync(path.join(OUT, it.id + '.mp3')) || process.env.FORCE));
-const cost = todo.reduce((n, it) => n + it.text.length + (process.env.TAG ?? '[shouting excitedly] ').length, 0);
+const cost = todo.reduce((n, it) => n + it.text.length + tagFor(it.key).length, 0);
 console.log(`ElevenLabs: ${sub.character_count}/${sub.character_limit} used, ${remaining} remaining; this run needs ${cost} characters (cap ${Math.floor(remaining / 2)})`);
 if (cost > remaining / 2) throw new Error('over the 50% budget');
 for (const it of todo) {
   const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${VOICE}?output_format=mp3_44100_128`, {
     method: 'POST',
     headers: { 'xi-api-key': KEY, 'content-type': 'application/json' },
-    body: JSON.stringify({ text: (process.env.TAG ?? '[shouting excitedly] ') + it.text, model_id: MODEL, voice_settings: { stability: 0.0, similarity_boost: 0.8, style: 0.9, use_speaker_boost: true } }),
+    body: JSON.stringify({ text: tagFor(it.key) + it.text, model_id: MODEL, voice_settings: { stability: 0.0, similarity_boost: 0.8, style: 0.9, use_speaker_boost: true } }),
   });
   if (!r.ok) {
     console.log(it.id, 'ERR', r.status, (await r.text()).slice(0, 200));

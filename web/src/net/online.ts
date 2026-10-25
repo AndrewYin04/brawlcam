@@ -5,7 +5,7 @@ import type { Snapshot, SimEvent, Mode } from '../../../shared/sim';
 import { packJoints } from '../../../shared/joints';
 import type { GestureOutput } from '../../../shared/gestures';
 import { escapeHtml, safeColor } from '../game/view';
-import { playLine } from '../game/commentary';
+import { onlineLine, noteOnlineEvents } from '../game/commentary';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -159,6 +159,7 @@ class Conn {
         break;
       case 'events':
         this.events.push(...m.e);
+        noteOnlineEvents(m.e);
         break;
       case 'match_over':
         this.matchOver = m;
@@ -171,7 +172,7 @@ class Conn {
         window.dispatchEvent(new CustomEvent('throwhands:rivalry', { detail: m }));
         break;
       case 'commentary':
-        playLine(m.text, m.audio ?? null, m.source);
+        onlineLine(m.text, m.audio ?? null, m.source, this.snap);
         break;
       case 'cheer':
         showCheer(m.emoji, m.nickname);

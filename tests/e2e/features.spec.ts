@@ -133,6 +133,10 @@ test('Commentator: lines arrive during play; mute and unmute', async () => {
   const gaps = log.slice(1).map((l: any, i: number) => (l.at - log[i].at) / 1000);
   for (const g of gaps) expect(g).toBeGreaterThanOrEqual(3.4); // one line every 3-4 s at most
   await expect(page.locator('#commentary')).toContainText('King Magma');
+  // The mocked lines have no audio (caption-only): each gets a matching pre-voiced generic roast, paced like the calls.
+  await page.waitForFunction(() => (window as any).__brawl.announcer().some((c: any) => c.key.startsWith('roast_')), null, { timeout: 30_000 });
+  const roasts = await page.evaluate(() => (window as any).__brawl.announcer().filter((c: any) => c.key.startsWith('roast_')).map((c: any) => [c.key, c.text]));
+  console.log('ROASTS', JSON.stringify(roasts));
   // The sound button opens the volume panel; its "Mute commentator" button mutes the voice (captions keep coming).
   await page.click('#btn-mute');
   await expect(page.locator('#vol-mute')).toBeVisible();

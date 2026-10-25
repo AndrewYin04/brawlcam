@@ -56,6 +56,11 @@ export class Announcer {
     return true;
   }
 
+  /** A pre-voiced generic roast (roast_* keys), under the same pacing as the other calls. */
+  roast(key: string) {
+    return key.startsWith('roast_') && this.say(key);
+  }
+
   /** One event as it is shown on screen (hits arrive at the contact frame). */
   onEvent(e: SimEvent, snap: Snapshot | null) {
     const t = performance.now() / 1000;

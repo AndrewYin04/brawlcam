@@ -35,7 +35,7 @@ let hideTimer: number | undefined;
 export const commentaryLog: { at: number; text: string; source: string; spoken: 'tts' | 'browser' | 'muted' | 'none' }[] = [];
 
 /** Show and speak one line. audio is a data URL from Gemini TTS, or null to use the browser voice. */
-export function playLine(text: string, audio: string | null, source = '') {
+export function playLine(text: string, audio: string | null, source = ''): 'tts' | 'browser' | 'muted' | 'none' {
   const el = $('commentary');
   el.textContent = text;
   el.classList.add('show');
@@ -55,6 +55,45 @@ export function playLine(text: string, audio: string | null, source = '') {
   }
   commentaryLog.push({ at: Date.now(), text, source, spoken });
   if (commentaryLog.length > 200) commentaryLog.shift();
+  return spoken;
+}
+
+/**
+ * Which pre-voiced generic roast fits a batch of events (planner 5:10 AM item 2). Played when the live Gemini roast for
+ * the batch is caption-only; the caption keeps Gemini's specific line.
+ */
+export function roastKey(events: SimEvent[], whiffs: number, snap: Snapshot): string {
+  const hits = events.filter((e) => e.type === 'hit') as Extract<SimEvent, { type: 'hit' }>[];
+  if (events.some((e) => e.type === 'ko')) return 'roast_ko';
+  if (events.some((e) => e.type === 'guard_break')) return 'roast_guard_break';
+  const hp = (id: number) => snap.f.find((f) => f.id === id)?.hp ?? 100;
+  if (hits.some((h) => !h.blocked && hp(h.attacker) + 30 <= hp(h.target))) return 'roast_comeback';
+  if (hits.some((h) => !h.blocked && (h.damage >= 12 || h.isSuper))) return 'roast_big_hit';
+  if (whiffs >= 2) return 'roast_whiff';
+  if (hits.length >= 2 && hits.filter((h) => h.blocked).length >= hits.length / 2) return 'roast_blocked';
+  if (!hits.length) return 'roast_idle';
+  return whiffs ? 'roast_whiff' : 'roast_big_hit';
+}
+
+/** Plays a pre-voiced roast (set by the app to the announcer). */
+let roastPlayer: ((key: string) => void) | null = null;
+export function setRoastPlayer(f: (key: string) => void) {
+  roastPlayer = f;
+}
+// Online rooms: the server writes the lines; the events since the last line pick the voiced roast.
+const onlineBuf: SimEvent[] = [];
+let onlineWhiffs = 0;
+export function noteOnlineEvents(events: SimEvent[]) {
+  for (const e of events) {
+    if (e.type === 'whiff') onlineWhiffs++;
+    else onlineBuf.push(e);
+  }
+  if (onlineBuf.length > 200) onlineBuf.splice(0, onlineBuf.length - 200);
+}
+export function onlineLine(text: string, audio: string | null, source: string, snap: Snapshot | null) {
+  if (playLine(text, audio, source) === 'none' && snap) roastPlayer?.(roastKey(onlineBuf, onlineWhiffs, snap));
+  onlineBuf.length = 0;
+  onlineWhiffs = 0;
 }
 
 /** Local-mode commentator: asks the API server every ~3.5 s when something happened. */
@@ -66,8 +105,13 @@ export class Commentator {
   /** Whether this line may be voiced (the announcer's stock calls cover big moments; keep to ~6-8 spoken lines/min). */
   mayVoice: () => boolean = () => true;
 
+  private whiffs = 0;
+
   push(events: SimEvent[]) {
-    for (const e of events) if (e.type !== 'whiff' && e.type !== 'super_denied' && e.type !== 'respawn') this.buf.push(e);
+    for (const e of events) {
+      if (e.type === 'whiff') this.whiffs++;
+      if (e.type !== 'whiff' && e.type !== 'super_denied' && e.type !== 'respawn') this.buf.push(e);
+    }
   }
 
   tick(snap: Snapshot | null) {
@@ -77,12 +121,14 @@ export class Commentator {
     if (snap.phase !== 'fight' && !this.buf.some((e) => e.type === 'ko' || e.type === 'match_over')) return;
     this.last = now;
     const summary = summarize(this.buf, snap);
+    const roast = roastKey(this.buf, this.whiffs, snap);
     this.buf = [];
+    this.whiffs = 0;
     this.inflight = true;
     fetch('/api/commentary', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ summary, voice: LIVE_VOICE && !muted && this.mayVoice() }) })
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
-        if (j?.text) playLine(j.text, j.audio ?? null, j.source);
+        if (j?.text && playLine(j.text, j.audio ?? null, j.source) === 'none') roastPlayer?.(roast);
       })
       .catch(() => {})
       .finally(() => (this.inflight = false));
@@ -90,6 +136,7 @@ export class Commentator {
 
   reset() {
     this.buf = [];
+    this.whiffs = 0;
     this.last = performance.now();
   }
 }

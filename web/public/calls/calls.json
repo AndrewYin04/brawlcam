@@ -236,6 +236,100 @@
     "id": "clinch_0",
     "text": "CLINCH!"
    }
+  ],
+  "roast_whiff": [
+   {
+    "id": "roast_whiff_0",
+    "text": "Swing and a miss! The air is winning."
+   },
+   {
+    "id": "roast_whiff_1",
+    "text": "That punch is still looking for a target."
+   },
+   {
+    "id": "roast_whiff_2",
+    "text": "Bold strategy, hitting nothing."
+   },
+   {
+    "id": "roast_whiff_3",
+    "text": "The wind felt that one."
+   }
+  ],
+  "roast_guard_break": [
+   {
+    "id": "roast_guard_break_0",
+    "text": "Guard? What guard?"
+   },
+   {
+    "id": "roast_guard_break_1",
+    "text": "Turtle mode has been cancelled."
+   },
+   {
+    "id": "roast_guard_break_2",
+    "text": "Those arms have left the building."
+   }
+  ],
+  "roast_big_hit": [
+   {
+    "id": "roast_big_hit_0",
+    "text": "That one's going in the highlight reel!"
+   },
+   {
+    "id": "roast_big_hit_1",
+    "text": "Somebody check if they're still logged in."
+   },
+   {
+    "id": "roast_big_hit_2",
+    "text": "Oof. That's gonna leave a pixel."
+   }
+  ],
+  "roast_comeback": [
+   {
+    "id": "roast_comeback_0",
+    "text": "Don't call it a comeback!"
+   },
+   {
+    "id": "roast_comeback_1",
+    "text": "Plot twist! We have a fight!"
+   },
+   {
+    "id": "roast_comeback_2",
+    "text": "The underdog has teeth!"
+   }
+  ],
+  "roast_ko": [
+   {
+    "id": "roast_ko_0",
+    "text": "Rest in pixels."
+   },
+   {
+    "id": "roast_ko_1",
+    "text": "Taking a nap on the mat!"
+   },
+   {
+    "id": "roast_ko_2",
+    "text": "Rematch button is right there."
+   }
+  ],
+  "roast_blocked": [
+   {
+    "id": "roast_blocked_0",
+    "text": "Knock knock. Nobody's home."
+   },
+   {
+    "id": "roast_blocked_1",
+    "text": "Punching a wall would be faster."
+   }
+  ],
+  "roast_idle": [
+   {
+    "id": "roast_idle_0",
+    "text": "Are we fighting or slow dancing?"
+   },
+   {
+    "id": "roast_idle_1",
+    "text": "Even the crowd is doing more cardio."
+   }
   ]
  }
 }
