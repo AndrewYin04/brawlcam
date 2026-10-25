@@ -696,3 +696,6 @@ Target: no reversals from noise while the user stands and punches, and p95 angul
 - Keep the angle the user likes (behind, slightly over the right shoulder).
 
 Before and after: a 30 s clip of the same scene, plus the metrics, in STATUS.md.
+
+### 5:48 AM: the user's camera A/B: `?cam=free` "was doing well"
+In `view.ts`, `?cam=free` skips the whole block at line 495 (`CAM_MODE !== 'free'`): the cage clamp, the swing-to-fit, `camVisBias` (visibility swing), and the strike-triggered swing. The user saw the twitch in the default mode and not in `free`, so **the cause is inside that block** (items 1 and 2 of the 5:35 AM note, plus the per-wall clamp), not yaw noise or the post-smoothing pushes. Fix that block first. A valid option: make the default behave like `free` (no strike swing, no visibility swing), and keep only a slow, hysteresis-gated swing for the "pinned on the far fence" case, with cage parts fading instead of the camera moving. Show before and after with the metrics.
