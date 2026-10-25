@@ -9,6 +9,10 @@ BASE_URL=https://144-202-71-213.sslip.io npx playwright test practice online   #
 
 **GPU (since 11:05 PM):** the test server has an NVIDIA GTX 1650 Ti, and Chromium gets hardware WebGL with `--use-angle=gl-egl` (verified with `WEBGL_debug_renderer_info`: "ANGLE (NVIDIA Corporation, NVIDIA GeForce GTX 1650 Ti/PCIe/SSE2, OpenGL ES 3.2)"). Tests now run the production configuration: real VRM fighters and the MediaPipe GPU delegate (practice: 26 pose fps, 61 render fps, 16.6 ms inference). Runs before 11:05 PM used the CPU-only setup (`PW_GL=swiftshader`): `?cpu` (MediaPipe CPU delegate) and `?lowgfx` (capsule stand-ins drawn from the same joints, because the VRM rendered at ~7 fps on SwiftShader and starved pose detection). `?nocomment` and `?aifixture` keep automated runs off live Gemini/Meta (recorded responses; spec 10 budget). Test-only knobs: `?skipcal`, `?botlevel=-1..3` (-1 = passive dummy, 3 = aggressive), `?roundsecs=N`, `?meter=N`.
 
+## Latest full run
+
+Sun Oct 25, 12:35 AM CDT (GPU setup): `npx playwright test` -> 46 passed, 1 skipped (`@live` Forge, run separately with `LIVE_AI=1`), 2 failed (the two 8-browser-scale specs, which ran in parallel with other browser tests on this 7 GB machine and timed out). Re-run alone at 12:55 AM: both passed (`BRAWL_BOTS {"kos":2,"kofeed":2}`; `WSO {"matches":4,"cheerChecked":true,"reconnectChecked":true}`, queue identical after reconnect). The suite now defaults to 1 worker.
+
 ## Gesture accuracy (spec 9.1 ground truth)
 
 Labeled clips: `clips/groundtruth.json` (timestamps read from 10 fps frame sheets). Landmarks come from the real Pose Landmarker (lite, CPU) run frame by frame over each clip in headless Chromium (`tests/tools/dump-landmarks.ts`); `tests/tools/eval-gestures.ts` replays them through the shipped recognizer (`shared/gestures.ts`) and matches events within ±300 ms. Precision counts only clips whose labels are exhaustive (`tests/gesture-eval.json`); recall uses every confident label. Re-run after every threshold change:
