@@ -143,7 +143,8 @@ test('Commentator: lines arrive during play; mute and unmute', async () => {
   await page.click('#vol-mute');
   await expect(page.locator('#vol-mute')).toHaveText('Unmute commentator');
   expect(await page.evaluate(() => localStorage.getItem('throwhands.mute'))).toBe('1');
-  const n = log.length;
+  // Count the lines now, after muting: lines that arrived during the roast wait above were logged before the mute.
+  const n = await page.evaluate(() => (window as any).__brawl.commentary.length);
   await page.waitForFunction((n) => (window as any).__brawl.commentary.length > n, n, { timeout: 20_000 });
   log = await page.evaluate(() => (window as any).__brawl.commentary.slice());
   expect(log[log.length - 1].spoken).toBe('muted');
