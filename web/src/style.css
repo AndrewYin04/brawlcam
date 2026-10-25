@@ -14,7 +14,9 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; overflow: hidden; -webkit-tap-highlight-color: transparent; }
 #game { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; display: block; }
-.screen { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; padding: 16px; z-index: 10; overflow-y: auto; }
+.screen { position: fixed; inset: 0; display: none; align-items: flex-start; justify-content: center; padding: 16px; z-index: 10; overflow-y: auto; }
+/* Safe centering: centered when it fits, scrollable from the top when it does not. */
+.screen > * { margin-top: auto !important; margin-bottom: auto !important; }
 .screen.active { display: flex; }
 #screen-menu, #screen-loading, #screen-camera, #screen-join, #screen-lobby, #screen-page { background: radial-gradient(ellipse at 50% 30%, rgba(40, 20, 70, 0.75), rgba(5, 7, 15, 0.92)); }
 .overlay-screen { background: rgba(5, 7, 15, 0.55); }
@@ -118,7 +120,7 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 .fx-label.fx-super { font-size: 56px; color: var(--gold); text-shadow: 0 0 22px #ff7a3d, 0 4px 0 #000; }
 .fx-label.fx-block { font-size: 22px; color: #bde; text-shadow: 0 0 8px #39f, 0 2px 0 #000; }
 @keyframes pop { 0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; } 15% { transform: translate(-50%, -80%) scale(1.15); opacity: 1; } 100% { transform: translate(-50%, -190%) scale(1); opacity: 0; } }
-.ko-title { font-family: 'Bungee', sans-serif; font-size: clamp(48px, 12vw, 96px); margin: 0; color: var(--gold); text-shadow: 0 0 30px rgba(255, 140, 60, 0.8), 0 5px 0 #000; }
+.ko-title { font-family: 'Bungee', sans-serif; white-space: nowrap; font-size: clamp(34px, 7vw, 66px); margin: 0; color: var(--gold); text-shadow: 0 0 30px rgba(255, 140, 60, 0.8), 0 5px 0 #000; }
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin: 12px 0; }
 .stats div { background: rgba(255, 255, 255, 0.05); border-radius: 10px; padding: 8px; font-size: 12px; color: var(--muted); }
 .stats b { display: block; font-size: 20px; color: var(--text); }

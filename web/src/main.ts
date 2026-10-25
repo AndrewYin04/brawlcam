@@ -367,12 +367,12 @@ async function makeRivalryCard(online: { matchId: string; waitRivalry: (id: stri
   hooks.rivalry = card;
   box.innerHTML = '';
   const wrap = document.createElement('div');
-  wrap.style.cssText = 'border:1px solid var(--line);border-radius:14px;overflow:hidden;margin:10px auto;max-width:320px;background:#0d1020';
+  wrap.style.cssText = 'border:1px solid var(--line);border-radius:14px;overflow:hidden;margin:10px auto;max-width:min(300px,26vh);background:#0d1020';
   if (card?.image) {
     const img = document.createElement('img');
     img.src = card.image;
     img.alt = 'Rivalry card art';
-    img.style.cssText = 'width:100%;display:block;aspect-ratio:3/4;object-fit:cover';
+    img.style.cssText = 'width:100%;display:block;aspect-ratio:3/4;object-fit:cover;max-height:34vh';
     wrap.appendChild(img);
   }
   const cap = document.createElement('div');

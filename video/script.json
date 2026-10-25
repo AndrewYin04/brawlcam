@@ -1,21 +1,104 @@
 {
-  "note": "Demo video plan. Follows Meta's required structure (problem/human connection ~30 s, demo ~90 s, AI ~30 s, tools ~30 s). Visuals: game footage rendered by video/record-scenes.ts (avatars only, no third-party footage), UI captures from the deployed site, and HTML title cards. Voiceover: ElevenLabs.",
-  "segments": [
-    { "id": "hook", "section": "hook", "visual": "shot:hook_uppercut", "title": "", "vo": "This is a real punch, thrown by a real body, landing on a friend across the country." },
-    { "id": "logo", "section": "hook", "visual": "card:logo", "vo": "Throw Hands. Your body is the controller." },
-    { "id": "problem", "section": "problem", "visual": "card:problem", "vo": "The best game nights are loud and physical. But motion games need a console, an accessory, and everyone in one room. Your friends are on other campuses, in other cities." },
-    { "id": "connect", "section": "problem", "visual": "shot:online_split", "vo": "So we built a fighting game that runs in any browser with a webcam. Send a friend a link, and you're trading punches in seconds, laptop or phone." },
-    { "id": "practice", "section": "demo", "visual": "shot:hook_uppercut_alt", "vo": "Raise your fists and your superhero mirrors you. Throw a jab, a hook, an uppercut: faster punches hit harder. Forearms up blocks." },
-    { "id": "supers", "section": "demo", "visual": "shot:supers", "vo": "Land hits to fill your super meter. Cross your arms for a shield. Push both palms forward for an energy blast. Drive a fist up for a slow-motion super uppercut." },
-    { "id": "local2p", "section": "demo", "visual": "shot:duel_side", "vo": "Two friends can share one camera. Each person controls their own fighter." },
-    { "id": "online", "section": "demo", "visual": "ui:lobby", "vo": "Or play online. Create a room, share the four-letter code. Friends can watch, cheer, and queue up for winner stays on." },
-    { "id": "brawl", "section": "demo", "visual": "shot:brawl", "vo": "Brawl puts up to eight fighters in one ring, with knockback, ring-outs, and a live KO feed. Bots fill the empty spots." },
-    { "id": "forge", "section": "demo", "visual": "ui:forge", "vo": "Fighter Forge turns one sentence into your own fighter. Meta's Muse Spark writes the name, story, and moves, Muse Image paints the card, and your suit takes its colors." },
-    { "id": "rivalry", "section": "demo", "visual": "ui:rivalry", "vo": "After an online match you get a rivalry card to send the friend you just beat. Then hit rematch." },
-    { "id": "board", "section": "demo", "visual": "ui:leaderboard", "vo": "Online wins feed an Elo leaderboard." },
-    { "id": "ai", "section": "ai", "visual": "card:ai", "vo": "AI is the controller. A pose model runs in your browser, so no video ever leaves your device. Our gesture engine turns joint angles into punches, blocks, and supers. Gemini calls the fight out loud, and Meta's Muse models make every fighter unique." },
-    { "id": "tools", "section": "tools", "visual": "card:tools", "vo": "We built it in a weekend with Claude Code. Playwright tests play pro fighters' shadowboxing footage into headless browsers as a fake webcam, and check that both players' screens agree on every tick. A Vultr server runs the game and every online room, and Tiger Data stores the stats." },
-    { "id": "business", "section": "tools", "visual": "card:business", "vo": "Next: skins and a season pass, ranked play, and opt-in motion data for robotics labs." },
-    { "id": "close", "section": "close", "visual": "card:close", "vo": "Pull up a friend. Throw hands, at throwhands dot tech." }
-  ]
+ "note": "Demo video plan. Follows Meta's required structure (problem/human connection ~30 s, demo ~90 s, AI ~30 s, tools ~30 s). Visuals: game footage rendered by video/record-scenes.ts (avatars only, no third-party footage), UI captures from the deployed site, and HTML title cards. Voiceover: ElevenLabs.",
+ "segments": [
+  {
+   "id": "hook",
+   "section": "hook",
+   "visual": "shot:hook_uppercut",
+   "title": "",
+   "vo": "This is a real punch, thrown by a real body, landing on a friend across the country.",
+   "offset": 2.2,
+   "hold": 2.2
+  },
+  {
+   "id": "logo",
+   "section": "hook",
+   "visual": "card:logo",
+   "vo": "Throw Hands. Your body is the controller."
+  },
+  {
+   "id": "problem",
+   "section": "problem",
+   "visual": "card:problem",
+   "vo": "The best game nights are loud and physical. But motion games need a console, an accessory, and everyone in one room. Your friends are on other campuses, in other cities."
+  },
+  {
+   "id": "connect",
+   "section": "problem",
+   "visual": "shot:online_split",
+   "vo": "So we built a fighting game that runs in any browser with a webcam. Send a friend a link, and you're trading punches in seconds, laptop or phone."
+  },
+  {
+   "id": "practice",
+   "section": "demo",
+   "visual": "shot:hook_uppercut_alt",
+   "vo": "Raise your fists and your superhero mirrors you. Throw a jab, a hook, an uppercut: faster punches hit harder. Forearms up blocks."
+  },
+  {
+   "id": "supers",
+   "section": "demo",
+   "visual": "shot:supers",
+   "vo": "Land hits to fill your super meter. Cross your arms for a shield. Push both palms forward for an energy blast. Drive a fist up for a slow-motion super uppercut."
+  },
+  {
+   "id": "local2p",
+   "section": "demo",
+   "visual": "shot:duel_side",
+   "vo": "Two friends can share one camera. Each person controls their own fighter."
+  },
+  {
+   "id": "online",
+   "section": "demo",
+   "visual": "ui:lobby",
+   "vo": "Or play online. Create a room, share the four-letter code. Friends can watch, cheer, and queue up for winner stays on."
+  },
+  {
+   "id": "brawl",
+   "section": "demo",
+   "visual": "shot:brawl",
+   "vo": "Brawl puts up to eight fighters in one ring, with knockback, ring-outs, and a live KO feed. Bots fill the empty spots."
+  },
+  {
+   "id": "forge",
+   "section": "demo",
+   "visual": "ui:forge",
+   "vo": "Fighter Forge turns one sentence into your own fighter. Meta's Muse Spark writes the name, story, and moves, Muse Image paints the card, and your suit takes its colors."
+  },
+  {
+   "id": "rivalry",
+   "section": "demo",
+   "visual": "ui:rivalry",
+   "vo": "After an online match you get a rivalry card to send the friend you just beat. Then hit rematch."
+  },
+  {
+   "id": "board",
+   "section": "demo",
+   "visual": "ui:leaderboard",
+   "vo": "Online wins feed an Elo leaderboard."
+  },
+  {
+   "id": "ai",
+   "section": "ai",
+   "visual": "card:ai|shot:duel_side_alt",
+   "vo": "AI is the controller. A pose model runs in your browser, so no video ever leaves your device. Our gesture engine turns joint angles into punches, blocks, and supers. Gemini calls the fight out loud, and Meta's Muse models make every fighter unique."
+  },
+  {
+   "id": "tools",
+   "section": "tools",
+   "visual": "card:tools|card:tests",
+   "vo": "We built it in a weekend with Claude Code. Playwright tests play pro fighters' shadowboxing footage into headless browsers as a fake webcam, and check that both players' screens agree on every tick. A Vultr server runs the game and every online room, and Tiger Data stores the stats."
+  },
+  {
+   "id": "business",
+   "section": "tools",
+   "visual": "card:business",
+   "vo": "Next: skins and a season pass, ranked play, and opt-in motion data for robotics labs."
+  },
+  {
+   "id": "close",
+   "section": "close",
+   "visual": "card:close",
+   "vo": "Pull up a friend. Throw hands, at throwhands dot tech."
+  }
+ ]
 }

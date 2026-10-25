@@ -7,7 +7,7 @@ BASE_URL=https://throwhands.tech npx playwright test          # full suite
 BASE_URL=https://144-202-71-213.sslip.io npx playwright test practice online   # subsets
 ```
 
-Test settings used on this CPU-only server (no GPU, SwiftShader WebGL): `?cpu` (MediaPipe CPU delegate, allowed by spec section 5), `?lowgfx` (capsule stand-ins drawn from the same joints instead of the VRM model: the VRM costs ~120 ms per frame on SwiftShader and starved pose detection to 4-5 fps; with capsules pose runs at 10-16 fps), `?nocomment` (no live Gemini calls; commentary has its own tests with recorded responses). The VRM visuals are checked separately with screenshots. Test-only knobs: `?skipcal`, `?botlevel=-1..3` (-1 = passive dummy, 3 = aggressive), `?roundsecs=N`, `?meter=N`.
+**GPU (since 11:05 PM):** the test server has an NVIDIA GTX 1650 Ti, and Chromium gets hardware WebGL with `--use-angle=gl-egl` (verified with `WEBGL_debug_renderer_info`: "ANGLE (NVIDIA Corporation, NVIDIA GeForce GTX 1650 Ti/PCIe/SSE2, OpenGL ES 3.2)"). Tests now run the production configuration: real VRM fighters and the MediaPipe GPU delegate (practice: 26 pose fps, 61 render fps, 16.6 ms inference). Runs before 11:05 PM used the CPU-only setup (`PW_GL=swiftshader`): `?cpu` (MediaPipe CPU delegate) and `?lowgfx` (capsule stand-ins drawn from the same joints, because the VRM rendered at ~7 fps on SwiftShader and starved pose detection). `?nocomment` and `?aifixture` keep automated runs off live Gemini/Meta (recorded responses; spec 10 budget). Test-only knobs: `?skipcal`, `?botlevel=-1..3` (-1 = passive dummy, 3 = aggressive), `?roundsecs=N`, `?meter=N`.
 
 ## Gesture accuracy (spec 9.1 ground truth)
 
@@ -89,6 +89,9 @@ What changed to get here (each verified on these clips before and after):
 | Leaderboard and Elo | Page loads (real Tiger Data); unreachable => friendly error; empty | PASS | Oct 24 10:18 PM | features | Table rendered; 503 => "taking a breather"; empty => "No ranked fights yet"; practice still starts |
 | Leaderboard and Elo | Updates after an online match | PASS | Oct 24 9:10 PM | `npx playwright test online` | `elo_delta {"1":-16,"2":16}` from Tiger Data; players table rows updated |
 | Store | Browse, mock purchase, equip shows in game, opt-in persists | PASS | Oct 24 10:18 PM | features | 8 skins with "Demo: no charge"; Buy => Equip => Equipped; in-game color `#ffc53d`; consent persists across reload |
+| Browsers | WebKit (proxy for iOS Safari): pose drives the fighter, practice plays | PASS | Oct 24 11:04 PM | `npx playwright test tests/e2e/browsers.spec.ts` | `BROWSER webkit {"delegate":"GPU","poseFps":12,"renderFps":28,"actions":2,"hits":2}` via the main-thread pose fallback (WebKit has no WebGL in workers) |
+| Browsers | Firefox | PARTIAL | Oct 24 11:04 PM | same | Headless Firefox on this server has no WebGL at all (no display, no Xvfb, no sudo); the game shows a clear "can't run 3D graphics" message instead of crashing. Gameplay in Firefox is unverified here. |
+| Browsers | Chromium mobile viewport, landscape and portrait | PASS | Oct 24 11:04 PM | same | 844x390 and 390x844, gestures register, no console errors |
 | Motion data dashboard | Opted-in match writes samples (counts update); opted-out writes none; export JSON | PASS | Oct 24 10:16 PM | features | `MOTION {"sent":1,"before":1,"after":2}`; 0 requests when opted out; export has 33-point frames and no player identifiers |
 | Online 1v1 | Invalid code | PASS (protocol) | Oct 24 9:03 PM | `npx tsx tests/tools/ws-smoke.ts` | `invalid code -> room_not_found` (UI test pending) |
 
@@ -104,6 +107,11 @@ Paths not yet run are listed in `STATUS.md` until they have a row here.
 | Chosen color and name ignored in game | features spec: expected `#ffc53d`, got `#ff3d6e` | Game read `brawlcam.*` keys, Store/Forge wrote `throwhands.*` | One key set + migration | features spec (Forge, Store) |
 | Energy blast hit instantly at duel range (no visible travel) | supers spec: 1 projectile position | Spawned 0.5 m out with a 0.55 m hit radius | Spawn at the hands, 6 m/s, 0.4 m radius | supers spec |
 | Camera-denied test used the wrong failure | headless without permission gives `NotSupportedError`, not a denial | Test setup | `--use-fake-ui-for-media-stream=deny` (real `NotAllowedError`) | firstload spec |
+
+| Safari/WebKit never started pose tracking | `tests/tools` WebKit probe: stage stuck at camera, then 0 grabs | (1) camera video was inside a `display:none` HUD, and WebKit does not load a stream into it; (2) MediaPipe needs WebGL in the worker, which WebKit lacks; (3) the main-thread wasm loader must be the classic build | Camera video moved out of the HUD; main-thread pose fallback with the classic loader; time-boxed camera start; time-based frame grab | browsers spec (WebKit) |
+| No-WebGL browsers crashed at boot | Firefox headless: `Error creating WebGL context` page error, stuck on loading | Arena creation threw | Friendly message | browsers spec (Firefox) |
+| Rivalry card requested by every client (429s, duplicate Meta calls) | WSO spec: `Failed to load resource: 429` | Each of 8 clients POSTed `/api/rivalry` after each match | Server generates once per match and broadcasts; in-flight dedupe | wso spec |
+| Leaderboard stats stuck at 0 after a cleanup | `leaderboard_daily` had no rows for new events | Refreshing the daily aggregate with an open end moved the watermark past "now" | Recreated the aggregates; cleanup refreshes complete buckets only | manual check (`/api/leaderboard` shows KOs, fastest punch, dmg/min) |
 
 ## Known intermittent
 

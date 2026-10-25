@@ -220,6 +220,7 @@ export class MatchView {
         slot.avatar.setJoints(joints);
         slot.avatar.update(animDt, this.time, { shield: f.sh, meterFull: f.meter >= 100, airborne: f.y, alive: !!f.alive || s.f.length <= 2 });
         slot.avatar.setTargeted(s.f.length > 2 && me?.tg === f.id);
+        slot.avatar.setSeeThroughCape(this.opts.camera !== 'side' && f.id === myId);
         if (f.hp < slot.lastHp && f.hp > 0 && f.hp < 30 && slot.lastHp >= 30 && this.opts.localIds.includes(f.id)) this.hint('Low health: block with forearms up!');
         slot.lastHp = f.hp;
         // Punch trails for strikes in progress
@@ -268,9 +269,10 @@ export class MatchView {
       pos = me.pos.clone().addScaledVector(fwd, portrait ? -3.6 : -2.7).addScaledVector(right, portrait ? 0.7 : 1.05).setY(portrait ? 2.3 : 2.0);
       look = (opp ? opp.pos.clone() : me.pos.clone().addScaledVector(fwd, 1.5)).setY(1.2);
       if (this.slowmo && opp) {
-        // Dramatic angle during slow motion.
-        pos = opp.pos.clone().addScaledVector(right, 2.2).addScaledVector(fwd, -0.6).setY(1.2);
-        look = opp.pos.clone().setY(1.4 + (opp.snap.y ?? 0));
+        // Dramatic side angle during slow motion, framing both fighters and the launch.
+        const mid = me.pos.clone().add(opp.pos).multiplyScalar(0.5);
+        pos = mid.clone().addScaledVector(right, 3.4).setY(1.6);
+        look = opp.pos.clone().setY(1.3 + (opp.snap.y ?? 0) * 0.6);
       }
     }
     this.arena.setCamera(pos, look, dt);

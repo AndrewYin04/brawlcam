@@ -11,7 +11,7 @@ const base = (body: string) => `<!doctype html><html><head><meta charset="utf-8"
 <style>
 *{box-sizing:border-box} html,body{margin:0;width:1280px;height:720px;overflow:hidden;background:#070912;color:#eef2ff;font-family:Inter,system-ui,sans-serif}
 .bg{position:absolute;inset:0;background:radial-gradient(ellipse at 75% 20%,rgba(255,61,110,.25),transparent 55%),radial-gradient(ellipse at 15% 85%,rgba(51,181,255,.2),transparent 55%)}
-.wrap{position:absolute;inset:0;padding:70px 90px;display:flex;flex-direction:column;justify-content:center}
+.wrap{position:absolute;inset:0;padding:50px 90px 120px;display:flex;flex-direction:column;justify-content:center}
 h1{font-family:Bungee;font-size:132px;line-height:.95;margin:0;letter-spacing:3px;text-shadow:0 0 40px rgba(255,61,110,.5)} h1 span{color:#ff3d6e}
 h2{font-family:Bungee;font-size:58px;line-height:1.05;margin:0 0 28px}
 .k{font-weight:800;letter-spacing:.3em;text-transform:uppercase;color:#ffc53d;font-size:20px;margin-bottom:18px}
@@ -39,6 +39,17 @@ const CARDS: Record<string, string> = {
       <div class="c"><b>Tiger Data</b><span>Match events, Elo leaderboard, motion-data counts</span></div>
     </div>
     <div style="margin-top:14px"><span class="tag">0 mismatches across 2,160 shared ticks</span><span class="tag">6/6 jabs at 10-30 fps</span><span class="tag">three.js · MediaPipe · VRM</span></div>`,
+  tests: `<div class="k">Tested end to end, every user path</div><h2>Real fighters' footage as the webcam</h2>
+    <pre style="font:20px/1.45 ui-monospace,Menlo,monospace;background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.12);border-radius:14px;padding:18px 22px;margin:0;color:#c9d4ff;white-space:pre-wrap">$ npx playwright test online        # against the live server
+ONLINE {"samples":2160,"mismatches":0,"p95ArrivalSkewMs":29,
+        "aHits":33,"bHits":33,"winner":2,"elo_delta":{"1":-16,"2":16}}
+  <span style="color:#3dff9a">✓</span> fighter A vs fighter B: full online best-of-3 (1.9m)
+
+$ npx playwright test wso brawl practice supers
+  <span style="color:#3dff9a">✓</span> winner stays on: 8 browsers, 4 matches, cheers, reconnect
+  <span style="color:#3dff9a">✓</span> 8 browsers, 8 fighter clips: 0 state mismatches
+  <span style="color:#3dff9a">✓</span> won by KO · lost by KO · won on time · drawn round
+  <span style="color:#3dff9a">✓</span> shield blocks all damage for 3 s; blast can be blocked</pre>`,
   business: `<div class="k">What's next</div><h2>How it makes money</h2>
     <div class="grid" style="grid-template-columns:repeat(3,1fr)"><div class="c"><b>Cosmetics</b><span>Skins, auras, AI-forged fighters; $5/month season pass</span></div><div class="c"><b>Ranked play</b><span>Elo matchmaking and seasons</span></div><div class="c"><b>Motion data</b><span>Opt-in, anonymized strike and block sequences for robotics labs</span></div></div>`,
   close: `<div class="k">Pull up a friend</div><h1 style="font-size:110px">THROW<br><span>HANDS</span></h1><div class="url" style="margin-top:20px">throwhands.tech</div><p style="font-size:22px">Built at HackTX 2026 with Claude Code</p>`,

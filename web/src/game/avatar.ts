@@ -211,8 +211,8 @@ export class FighterAvatar {
     // Superhero cape and chest emblem, on the normalized chest bone (follows the pose; -Z is the back).
     const chest = this.vrm.humanoid.getNormalizedBoneNode('upperChest') ?? this.vrm.humanoid.getNormalizedBoneNode('chest');
     if (chest) {
-      const capeGeo = new THREE.PlaneGeometry(0.5, 1.0, 6, 12);
-      capeGeo.translate(0, -0.5, 0); // hang from the top edge
+      const capeGeo = new THREE.PlaneGeometry(0.48, 0.8, 6, 10);
+      capeGeo.translate(0, -0.4, 0); // hang from the top edge
       const capeColor = new THREE.Color(this.style.color).multiplyScalar(0.55);
       const capeMat = new THREE.MeshStandardMaterial({ color: capeColor, emissive: glow.clone().multiplyScalar(0.12), side: THREE.DoubleSide, roughness: 0.6, metalness: 0.1 });
       const cape = new THREE.Mesh(capeGeo, capeMat);
@@ -267,6 +267,18 @@ export class FighterAvatar {
     this.targetRing.position.y = 0.02;
     this.targetRing.visible = false;
     this.root.add(this.targetRing);
+  }
+
+  /** Your own fighter seen from behind: a see-through cape so it never hides your punches. */
+  setSeeThroughCape(on: boolean) {
+    if (!this.cape) return;
+    const m = this.cape.material as THREE.MeshStandardMaterial;
+    if (m.transparent !== on) {
+      m.transparent = on;
+      m.opacity = on ? 0.35 : 1;
+      m.depthWrite = !on;
+      m.needsUpdate = true;
+    }
   }
 
   setTargeted(on: boolean) {
@@ -390,7 +402,8 @@ export class FighterAvatar {
     // Flinch: shove the body away from the hit, in the root's local frame.
     const local = this.flinchDir.clone().applyQuaternion(this.root.quaternion.clone().invert());
     this.body.position.set(local.x * this.flinch * 0.18, opts.airborne, local.z * this.flinch * 0.18);
-    this.body.rotation.x = -this.flinch * 0.25 * Math.sign(local.z || 1);
+    // Launched fighters tilt back as they fly (reads clearly in slow motion).
+    this.body.rotation.x = -this.flinch * 0.25 * Math.sign(local.z || 1) - Math.min(1.1, opts.airborne * 0.75);
     this.glowBoost = Math.max(0, this.glowBoost - dt * 3);
     if (this.auraMat) {
       this.auraMat.uniforms.time.value = time;

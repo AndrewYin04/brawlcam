@@ -48,19 +48,19 @@ const SHOTS: Shot[] = [
     name: 'duel_side',
     seconds: 10,
     warmup: 30 * 3.2,
-    cfg: { mode: 'duel', camera: 'side', players: [{ name: 'Maya', color: P1, landmarks: LM('jab_01') }, { name: 'Leo', color: P2, landmarks: LM('shadow_fighterF') }] },
+    cfg: { mode: 'duel', camera: 'side', players: [{ name: 'Maya', color: P1, landmarks: LM('jab_01') }, { name: 'Leo', color: P2, landmarks: LM('hook_01') }] },
   },
   {
     name: 'online_p1',
     seconds: 8,
     warmup: 30 * 3.2,
-    cfg: { mode: 'duel', camera: 'behind', follow: 0, players: [{ name: 'Maya', color: P1, landmarks: LM('jab_01') }, { name: 'Leo', color: P2, landmarks: LM('shadow_fighterF') }] },
+    cfg: { mode: 'duel', camera: 'behind', follow: 0, players: [{ name: 'Maya', color: P1, landmarks: LM('jab_01') }, { name: 'Leo', color: P2, landmarks: LM('hook_01') }] },
   },
   {
     name: 'online_p2',
     seconds: 8,
     warmup: 30 * 3.2,
-    cfg: { mode: 'duel', camera: 'behind', follow: 1, players: [{ name: 'Maya', color: P1, landmarks: LM('jab_01') }, { name: 'Leo', color: P2, landmarks: LM('shadow_fighterF') }] },
+    cfg: { mode: 'duel', camera: 'behind', follow: 1, players: [{ name: 'Maya', color: P1, landmarks: LM('jab_01') }, { name: 'Leo', color: P2, landmarks: LM('hook_01') }] },
   },
   {
     name: 'supers',
@@ -106,7 +106,7 @@ async function runShot(page: Page, shot: Shot) {
 
 const only = process.argv.slice(2);
 fs.mkdirSync(OUT, { recursive: true });
-const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader-webgl', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+const browser = await chromium.launch({ args: ['--use-angle=gl-egl', '--ignore-gpu-blocklist', '--enable-gpu'] });
 const ctx = await browser.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: 1 });
 await ctx.route((u) => u.pathname.startsWith('/__landmarks/'), (route) => {
   const f = path.join(ROOT, 'clips/landmarks', path.basename(new URL(route.request().url()).pathname));

@@ -24,7 +24,8 @@ if (before) {
   const r = await c.query(`DELETE FROM pose_samples WHERE time < $1`, [before]);
   console.log('deleted pose samples', r.rowCount);
 }
-// Refresh the continuous aggregates so the leaderboard and dashboard reflect the deletes.
-await c.query(`CALL refresh_continuous_aggregate('leaderboard_daily', NULL, NULL)`);
-await c.query(`CALL refresh_continuous_aggregate('motion_label_counts', NULL, NULL)`);
+// Refresh only complete buckets (end = start of the current bucket). Refreshing with an open end would materialize the
+// current partial bucket and move the watermark past "now", hiding today's new rows from real-time aggregation.
+await c.query(`CALL refresh_continuous_aggregate('leaderboard_daily', NULL, date_trunc('day', now()))`);
+await c.query(`CALL refresh_continuous_aggregate('motion_label_counts', NULL, date_trunc('hour', now()))`);
 await c.end();
