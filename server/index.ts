@@ -24,7 +24,7 @@ const rooms = new RoomManager({
   async commentary(summary, voice, room) {
     if (room.aiFixtures) return { text: 'Fixture commentary: what a punch!', source: 'fixture', audio: null };
     const line = await ai.commentaryLine(summary);
-    const audio = voice && line.source !== 'template' ? await ai.speak(line.text) : null;
+    const audio = voice && line.source !== 'template' ? await ai.speak(line.text, ai.moodFor(summary)) : null;
     return { text: line.text, source: line.source, audio: audio ? `data:${audio.mime};base64,${audio.b64}` : null };
   },
   async onMatchOver(room: Room, m: MatchSummary) {
@@ -148,7 +148,7 @@ const server = http.createServer(async (req, res) => {
       if (!rateOk(req, 'comment', 40)) return send(res, 429, { error: 'slow down' });
       const body = await readBody(req);
       const line = await ai.commentaryLine(String(body.summary ?? ''));
-      const audio = body.voice && line.source !== 'template' ? await ai.speak(line.text) : null;
+      const audio = body.voice && line.source !== 'template' ? await ai.speak(line.text, ai.moodFor(String(body.summary ?? ''))) : null;
       return send(res, 200, { text: line.text, source: line.source, audio: audio ? `data:${audio.mime};base64,${audio.b64}` : null });
     }
     if (p.startsWith('/api/rivalry/image/')) return sendFile(res, ai.rivalryPath(p.split('/')[4] ?? '', 'jpg'), 'image/jpeg');

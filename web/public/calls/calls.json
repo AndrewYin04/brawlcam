@@ -1,0 +1,205 @@
+{
+ "voice": "ElevenLabs \"Charlie\" (eleven_v3)",
+ "calls": {
+  "round1": [
+   {
+    "id": "round1_0",
+    "text": "Round one... FIGHT!"
+   }
+  ],
+  "round2": [
+   {
+    "id": "round2_0",
+    "text": "Round two! FIGHT!"
+   }
+  ],
+  "round3": [
+   {
+    "id": "round3_0",
+    "text": "Final round! FIGHT!"
+   }
+  ],
+  "fight": [
+   {
+    "id": "fight_0",
+    "text": "FIGHT!"
+   }
+  ],
+  "ko": [
+   {
+    "id": "ko_0",
+    "text": "K.O.!"
+   },
+   {
+    "id": "ko_1",
+    "text": "IT'S OVER!"
+   },
+   {
+    "id": "ko_2",
+    "text": "LIGHTS OUT!"
+   },
+   {
+    "id": "ko_3",
+    "text": "AND THAT'S THE FIGHT!"
+   },
+   {
+    "id": "ko_4",
+    "text": "GOOD NIGHT!"
+   }
+  ],
+  "guard_break": [
+   {
+    "id": "guard_break_0",
+    "text": "GUARD BROKEN!"
+   },
+   {
+    "id": "guard_break_1",
+    "text": "THE GUARD SHATTERS!"
+   },
+   {
+    "id": "guard_break_2",
+    "text": "WIDE OPEN!"
+   }
+  ],
+  "cage": [
+   {
+    "id": "cage_0",
+    "text": "INTO THE CAGE!"
+   },
+   {
+    "id": "cage_1",
+    "text": "OFF THE FENCE!"
+   },
+   {
+    "id": "cage_2",
+    "text": "SLAMMED INTO THE CAGE!"
+   }
+  ],
+  "super_uppercut": [
+   {
+    "id": "super_uppercut_0",
+    "text": "SUPER UPPERCUT!"
+   },
+   {
+    "id": "super_uppercut_1",
+    "text": "SKY HIGH!"
+   }
+  ],
+  "ironwall": [
+   {
+    "id": "ironwall_0",
+    "text": "IRON WALL!"
+   },
+   {
+    "id": "ironwall_1",
+    "text": "NOTHING GETS THROUGH!"
+   }
+  ],
+  "counter": [
+   {
+    "id": "counter_0",
+    "text": "COUNTERED!"
+   }
+  ],
+  "blast": [
+   {
+    "id": "blast_0",
+    "text": "ENERGY BLAST!"
+   }
+  ],
+  "big_hit": [
+   {
+    "id": "big_hit_0",
+    "text": "OHHH!"
+   },
+   {
+    "id": "big_hit_1",
+    "text": "WHAT A SHOT!"
+   },
+   {
+    "id": "big_hit_2",
+    "text": "BIG RIGHT HAND!"
+   },
+   {
+    "id": "big_hit_3",
+    "text": "THAT ONE LANDED!"
+   },
+   {
+    "id": "big_hit_4",
+    "text": "OOF!"
+   }
+  ],
+  "combo": [
+   {
+    "id": "combo_0",
+    "text": "COMBO!"
+   },
+   {
+    "id": "combo_1",
+    "text": "THREE IN A ROW!"
+   },
+   {
+    "id": "combo_2",
+    "text": "UNLOADING!"
+   }
+  ],
+  "low_hp": [
+   {
+    "id": "low_hp_0",
+    "text": "THEY'RE HURT!"
+   },
+   {
+    "id": "low_hp_1",
+    "text": "ONE MORE AND IT'S OVER!"
+   },
+   {
+    "id": "low_hp_2",
+    "text": "HANGING ON!"
+   }
+  ],
+  "blocked": [
+   {
+    "id": "blocked_0",
+    "text": "BLOCKED!"
+   },
+   {
+    "id": "blocked_1",
+    "text": "GREAT DEFENSE!"
+   }
+  ],
+  "match_over": [
+   {
+    "id": "match_over_0",
+    "text": "WHAT A FIGHT!"
+   },
+   {
+    "id": "match_over_1",
+    "text": "WE HAVE A WINNER!"
+   }
+  ],
+  "draw": [
+   {
+    "id": "draw_0",
+    "text": "IT'S A DRAW!"
+   }
+  ],
+  "time": [
+   {
+    "id": "time_0",
+    "text": "TIME!"
+   }
+  ],
+  "throw": [
+   {
+    "id": "throw_0",
+    "text": "SHOULDER THROW!"
+   }
+  ],
+  "clinch": [
+   {
+    "id": "clinch_0",
+    "text": "CLINCH!"
+   }
+  ]
+ }
+}

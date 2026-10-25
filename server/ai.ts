@@ -12,7 +12,8 @@ const META_BASE = 'https://api.meta.ai/v1';
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 // Verified 2026-10-24 against the key's model list: flash-lite answers in ~0.6 s without thinking.
 const GEMINI_TEXT_MODELS = ['gemini-3.5-flash-lite', 'gemini-3.8-flash'];
-const GEMINI_TTS_MODELS = ['gemini-3.8-flash-lite-tts', 'gemini-3.8-flash-tts'];
+// The full TTS model first (more expressive), the lite one as a fallback.
+const GEMINI_TTS_MODELS = ['gemini-3.8-flash-tts', 'gemini-3.8-flash-lite-tts'];
 // Meta prices (dev.meta.ai/docs/pricing-rate-limits, checked 2026-10-24): $1.25/M input, $4.25/M output, $0.01/image.
 const META_IN = 1.25 / 1e6;
 const META_OUT = 4.25 / 1e6;
@@ -173,7 +174,15 @@ function templateLine(summary: string): string {
   return lines[Math.floor(Math.random() * lines.length)];
 }
 
-export async function speak(text: string): Promise<{ mime: string; b64: string } | null> {
+/** Director-style delivery per moment (Gemini TTS follows natural-language style instructions in the prompt). */
+export function moodFor(summary: string): string {
+  if (/KO'd|wins the match|knocked out/i.test(summary)) return 'shouting at the top of your lungs, voice cracking with excitement, like the knockout of the year';
+  if (/BROKE|shattered|guard/i.test(summary)) return 'in rising disbelief, building to a shout';
+  if (/SUPER|Iron Wall|countered|cage/i.test(summary)) return 'explosive, hyped, fast';
+  return 'like an excited boxing play-by-play announcer, fast and punchy';
+}
+
+export async function speak(text: string, mood = 'like an excited boxing play-by-play announcer, fast and punchy'): Promise<{ mime: string; b64: string } | null> {
   const key = process.env.GEMINI_API_KEY;
   if (!key || !ttsLimiter.take()) return null;
   for (const model of GEMINI_TTS_MODELS) {
@@ -184,8 +193,8 @@ export async function speak(text: string): Promise<{ mime: string; b64: string }
           method: 'POST',
           headers: { 'x-goog-api-key': key, 'content-type': 'application/json' },
           body: JSON.stringify({
-            contents: [{ role: 'user', parts: [{ text: `Say it like an excited arena announcer: ${text}` }] }],
-            generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Puck' } } } },
+            contents: [{ role: 'user', parts: [{ text: `You are a live fight commentator in a packed arena. Say this ${mood}: ${text}` }] }],
+            generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Fenrir' } } } },
           }),
         },
         6000,

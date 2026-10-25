@@ -4,6 +4,7 @@ import { Arena } from './arena';
 import { FighterAvatar } from './avatar';
 import { HeroFighter, HERO_MODELS } from './hero';
 import { apothem } from './stage';
+import { Announcer } from './announcer';
 
 /** New Smash-style heroes by default; the original VRM renderer stays behind ?classic (and capsules behind ?lowgfx). */
 /** 1v1 camera: 'behind' (default) or 'inside' (clamped inside the cage), for the user to compare. */
@@ -47,6 +48,7 @@ export class MatchView {
   private slowmoUntil = 0;
   private hitStopUntil = 0;
   private pendingHits: { at: number; e: SimEvent }[] = [];
+  announcer = new Announcer();
   private fallCamUntil = 0;
   private fallTarget: number | null = null;
   private koFeed: HTMLElement;
@@ -98,6 +100,8 @@ export class MatchView {
   handleEvents(events: SimEvent[]) {
     for (const e of events) {
       this.onEvent?.(e);
+      // Announcer for everything except hits and KOs (those are announced when they land on screen, below).
+      if (e.type !== 'hit' && e.type !== 'ko') this.announcer.onEvent(e, this.snap);
       switch (e.type) {
         case 'hit': {
           // Hero renderer: the strike animation reaches the target a moment after the sim registers the hit;
@@ -113,6 +117,7 @@ export class MatchView {
               break;
             }
           }
+          this.announcer.onEvent(e, this.snap);
           const tgt = this.slots.get(e.target);
           const att = this.slots.get(e.attacker);
           if (att?.avatar instanceof HeroFighter) {
@@ -212,6 +217,7 @@ export class MatchView {
             this.pendingHits.push({ at: pend.at + 0.001, e: { ...e, __delayed: true } as SimEvent });
             break;
           }
+          this.announcer.onEvent(e, this.snap);
           const tgt = this.slots.get(e.target);
           if (tgt && USE_HEROES && e.ringout) {
             this.vfx.koStreak(tgt.pos.clone(), tgt.snap.color);
@@ -565,6 +571,7 @@ export class MatchView {
   }
 
   dispose() {
+    this.announcer.stop();
     for (const s of this.slots.values()) s.avatar.dispose();
     this.slots.clear();
     this.vfx.dispose();

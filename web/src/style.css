@@ -210,3 +210,9 @@ body.heroes #banner { top: 12%; font-size: clamp(30px, 7vw, 76px); }
 #research-bar { position: fixed; top: 8px; left: 50%; transform: translateX(-50%); z-index: 40; background: rgba(20, 8, 12, 0.85); border: 1px solid #ff3d6e; border-radius: 999px; padding: 6px 12px; font-size: 13px; display: flex; gap: 8px; align-items: center; white-space: nowrap; }
 #research-bar .rec-dot { width: 10px; height: 10px; border-radius: 50%; background: #ff2a3a; animation: pulse 1s infinite; }
 #research-last { color: var(--gold, #ffc53d); min-width: 90px; }
+
+/* Sound popover (closes on click-away or after 3 s) */
+#vol-pop { position: absolute; right: 0; bottom: 44px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; font-size: 13px; min-width: 210px; z-index: 30; pointer-events: auto; }
+#vol-pop.hidden { display: none; }
+#vol-pop label { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
+#vol-pop input[type=range] { width: 110px; }

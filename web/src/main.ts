@@ -9,7 +9,7 @@ import { MotionRecorder } from './input/motion';
 import { startCamera, CameraFailure } from './input/camera';
 import { research } from './research';
 import * as sfx from './game/audio';
-import { Commentator, setMuted, isMuted, commentaryLog } from './game/commentary';
+import { Commentator, setMuted, isMuted, commentaryLog, setVoiceGate } from './game/commentary';
 import type { SimEvent } from '../../shared/sim';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -29,6 +29,7 @@ export const hooks = {
   events: [] as { t: number; type: string; [k: string]: unknown }[],
   localActions: [] as { t: number; kind: string; hand: string; player: number }[],
   calibrated: false,
+  announcer: () => view?.announcer.log ?? [],
   motionStream: () => ({ sent: motion.streamSent }),
   tutorial: null as any,
   snapshot: null as unknown,
@@ -84,6 +85,10 @@ let resultsShown = false;
 let loopStarted = false;
 let resultsTimer = 0;
 const commentator = new Commentator();
+// Live AI lines are voiced only when the announcer hasn't just called a big moment and the spoken budget allows.
+commentator.mayVoice = () => !!view && !view.announcer.spokeWithin(2.5) && view.announcer.spokenLastMinute() < 6;
+setVoiceGate(() => commentator.mayVoice()); // online rooms' server lines follow the same budget
+sfx.setVoiceMuted(isMuted());
 const motion = new MotionRecorder();
 commentator.enabled = !params.has('nocomment');
 
@@ -629,7 +634,34 @@ $('cam-retry').onclick = () => {
 $('cam-demo').onclick = () => startMode('demo');
 $('btn-quit').onclick = () => backToMenu();
 setMuted(isMuted());
-$('btn-mute').onclick = () => setMuted(!isMuted());
+// Sound popover: commentator and crowd volume, mute. Closes on click-away or 3 s after the last change.
+{
+  const pop = $('vol-pop');
+  let closeTimer = 0;
+  const armClose = () => {
+    clearTimeout(closeTimer);
+    closeTimer = window.setTimeout(() => pop.classList.add('hidden'), 3000);
+  };
+  const vv = $<HTMLInputElement>('vol-voice');
+  const vc = $<HTMLInputElement>('vol-crowd');
+  vv.value = String(sfx.volumes.voice);
+  vc.value = String(sfx.volumes.crowd);
+  vv.oninput = () => (sfx.setVolume('voice', Number(vv.value)), armClose());
+  vc.oninput = () => (sfx.setVolume('crowd', Number(vc.value)), armClose());
+  $('vol-mute').onclick = () => {
+    setMuted(!isMuted());
+    $('vol-mute').textContent = isMuted() ? 'Unmute commentator' : 'Mute commentator';
+    armClose();
+  };
+  $('btn-mute').onclick = (e) => {
+    e.stopPropagation();
+    pop.classList.toggle('hidden');
+    $('vol-mute').textContent = isMuted() ? 'Unmute commentator' : 'Mute commentator';
+    armClose();
+  };
+  pop.addEventListener('click', (e) => e.stopPropagation());
+  document.addEventListener('click', () => pop.classList.add('hidden'));
+}
 (hooks as any).commentary = commentaryLog;
 (hooks as any).motion = motion;
 $('res-rematch').onclick = () => {

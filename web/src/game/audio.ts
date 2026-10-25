@@ -184,3 +184,175 @@ export function sfxGlass() {
     o.stop(st + 0.25);
   }
 }
+
+// ---------- Commentary voice + crowd (separate volumes) ----------
+let voiceBus: GainNode | null = null;
+let crowdBus: GainNode | null = null;
+function loadVol(k: string, d: number) {
+  try {
+    const v = Number(localStorage.getItem(k));
+    return Number.isFinite(v) && localStorage.getItem(k) != null ? Math.max(0, Math.min(1, v)) : d;
+  } catch {
+    return d;
+  }
+}
+export const volumes = { voice: loadVol('throwhands.vol.voice', 0.9), crowd: loadVol('throwhands.vol.crowd', 0.55) };
+let voiceMuted = false;
+function buses() {
+  if (!ctx) return false;
+  if (!voiceBus) {
+    voiceBus = ctx.createGain();
+    voiceBus.connect(ctx.destination);
+    crowdBus = ctx.createGain();
+    crowdBus.connect(ctx.destination);
+    applyVolumes();
+  }
+  return true;
+}
+function applyVolumes() {
+  if (voiceBus) voiceBus.gain.value = voiceMuted ? 0 : volumes.voice;
+  if (crowdBus) crowdBus.gain.value = muted ? 0 : volumes.crowd * 0.8;
+}
+export function setVolume(kind: 'voice' | 'crowd', v: number) {
+  volumes[kind] = Math.max(0, Math.min(1, v));
+  try {
+    localStorage.setItem('throwhands.vol.' + kind, String(volumes[kind]));
+  } catch {}
+  applyVolumes();
+}
+export function setVoiceMuted(m: boolean) {
+  voiceMuted = m;
+  applyVolumes();
+}
+
+const bufCache = new Map<string, Promise<AudioBuffer | null>>();
+export function loadBuffer(url: string): Promise<AudioBuffer | null> {
+  let p = bufCache.get(url);
+  if (!p) {
+    audioInit();
+    p = fetch(url)
+      .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(r.status)))
+      .then((b) => ctx!.decodeAudioData(b))
+      .catch(() => null);
+    bufCache.set(url, p);
+  }
+  return p;
+}
+let currentVoice: AudioBufferSourceNode | null = null;
+/** Play a pre-rendered announcer call on the voice bus (cuts off the previous one). Returns its duration. */
+export function playVoiceBuffer(buf: AudioBuffer): number {
+  if (!ctx || !buses()) return 0;
+  try {
+    currentVoice?.stop();
+  } catch {}
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+  src.connect(voiceBus!);
+  src.start();
+  currentVoice = src;
+  return buf.duration;
+}
+
+// Crowd: a looping noise bed shaped like a murmuring arena, plus roars, "ooh"s and a chant, all synthesized.
+let crowdBed: { src: AudioBufferSourceNode; gain: GainNode } | null = null;
+let chantTimer = 0;
+function noiseBuffer(sec: number) {
+  const b = ctx!.createBuffer(1, Math.floor(ctx!.sampleRate * sec), ctx!.sampleRate);
+  const d = b.getChannelData(0);
+  let last = 0;
+  for (let i = 0; i < d.length; i++) {
+    // Brown-ish noise with slow random swells (many voices).
+    last = last * 0.97 + (Math.random() * 2 - 1) * 0.03;
+    d[i] = last * 8 * (0.7 + 0.3 * Math.sin(i / (ctx!.sampleRate * 0.37)) * Math.sin(i / (ctx!.sampleRate * 1.3)));
+  }
+  return b;
+}
+export function crowdStart() {
+  if (!ctx || !buses() || crowdBed) return;
+  const src = ctx.createBufferSource();
+  src.buffer = noiseBuffer(6);
+  src.loop = true;
+  const bp = ctx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.value = 650;
+  bp.Q.value = 0.5;
+  const gain = ctx.createGain();
+  gain.gain.value = 0.18;
+  src.connect(bp).connect(gain).connect(crowdBus!);
+  src.start();
+  crowdBed = { src, gain };
+}
+export function crowdStop() {
+  try {
+    crowdBed?.src.stop();
+  } catch {}
+  crowdBed = null;
+  crowdChant(false);
+}
+/** Swell the crowd for a big moment (0..1). */
+export function crowdRoar(level = 1) {
+  if (!ctx || !crowdBed) return;
+  const g = crowdBed.gain.gain;
+  const t = ctx.currentTime;
+  g.cancelScheduledValues(t);
+  g.setValueAtTime(g.value, t);
+  g.linearRampToValueAtTime(0.18 + 0.75 * level, t + 0.12);
+  g.exponentialRampToValueAtTime(0.18, t + 1.4 + level);
+}
+/** Crowd "ooh" (blocked heavy hit, near miss): a falling vowel-like noise sweep. */
+export function crowdOoh() {
+  if (!ctx || !buses()) return;
+  const t = ctx.currentTime;
+  const src = ctx.createBufferSource();
+  src.buffer = noiseBuffer(1);
+  const bp = ctx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.Q.value = 6;
+  bp.frequency.setValueAtTime(520, t);
+  bp.frequency.exponentialRampToValueAtTime(300, t + 0.8);
+  const g = ctx.createGain();
+  env(g, t, 0.08, 0.9, 0.7);
+  src.connect(bp).connect(g).connect(crowdBus!);
+  src.start(t);
+  src.stop(t + 1);
+}
+/** Rhythmic crowd chant while someone is on low HP. */
+export function crowdChant(on: boolean) {
+  clearInterval(chantTimer);
+  chantTimer = 0;
+  if (!on || !ctx) return;
+  let n = 0;
+  chantTimer = window.setInterval(() => {
+    if (!ctx || !buses()) return;
+    const t = ctx.currentTime;
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuffer(0.4);
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.Q.value = 4;
+    bp.frequency.value = n++ % 2 ? 340 : 420;
+    const g = ctx.createGain();
+    env(g, t, 0.03, 0.5, 0.25);
+    src.connect(bp).connect(g).connect(crowdBus!);
+    src.start(t);
+    src.stop(t + 0.4);
+  }, 480);
+}
+/** Short arena music sting between rounds (synthesized). */
+export function roundSting() {
+  if (!ctx || !buses()) return;
+  const t = ctx.currentTime;
+  [261.6, 329.6, 392, 523.3].forEach((f, i) => {
+    const o = ctx!.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.value = f;
+    const lp = ctx!.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 1800;
+    const g = ctx!.createGain();
+    env(g, t + i * 0.11, 0.01, 0.12, 0.5);
+    o.connect(lp).connect(g).connect(crowdBus!);
+    o.start(t + i * 0.11);
+    o.stop(t + i * 0.11 + 0.7);
+  });
+}
