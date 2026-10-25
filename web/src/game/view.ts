@@ -670,6 +670,7 @@ export class MatchView {
       cam.far = 100;
       cam.updateProjectionMatrix();
       const all = [...pts(me), ...pts(opp)];
+      const baseY = pos.y;
       for (let step = 0; step < 10; step++) {
         cam.position.copy(p);
         cam.lookAt(look);
@@ -685,7 +686,12 @@ export class MatchView {
         const before = p.clone();
         p.addScaledVector(back, 0.35);
         clampCage(p);
-        if (p.distanceTo(before) < 0.1) p.y = Math.min(3.0, p.y + 0.3); // the cage stops pulling back: rise instead
+        // The cage stops pulling back: rise a little (at most 0.4 m above the normal height; rising to 3 m read as a
+        // top-down view in the v2 footage). Framing is best effort past that.
+        if (p.distanceTo(before) < 0.1) {
+          if (p.y >= baseY + 0.4) break;
+          p.y = Math.min(baseY + 0.4, p.y + 0.2);
+        }
       }
     }
     return p;
