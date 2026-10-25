@@ -44,6 +44,9 @@ export class Announcer {
   private match = new MatchTracker();
   /** The result and rematch calls wait a moment; a new round (rematch) or leaving the match cancels them. */
   private timers: ReturnType<typeof setTimeout>[] = [];
+  /** The match result was already called at the match-ending KO (one call, not "K.O.!" then the result). */
+  private resultCalled = false;
+  private matchEnded = false;
   private hitTimes = new Map<number, number[]>();
   private lowHpCalled = new Set<number>();
   private chant = false;
@@ -106,6 +109,8 @@ export class Announcer {
     switch (e.type) {
       case 'round_start':
         this.clearTimers();
+        this.resultCalled = false;
+        this.matchEnded = false;
         this.lowHpCalled.clear();
         this.setChant(false);
         sfx.crowdStart();
@@ -172,19 +177,33 @@ export class Announcer {
         this.say('counter');
         sfx.crowdRoar(0.7);
         break;
-      case 'ko':
-        this.say('ko');
+      case 'ko': {
+        // A KO that takes the match plays only the result line (REVIEW.md 7:58 AM); other KOs get a KO call. Decided a
+        // microtask later: the sim's round_end for this KO is in the same event batch, right after it.
+        const round = snap?.round ?? 0;
+        const fighters = snap?.f.length ?? 2;
+        queueMicrotask(() => {
+          if (this.matchEnded || this.resultCalled) return;
+          const end = this.match.koEnding(round, fighters);
+          if (end) this.resultCalled = this.say(end.slot, end.keys);
+          else this.say('ko');
+        });
         sfx.crowdRoar(1);
         this.setChant(false);
         break;
+      }
       case 'round_end':
         setTimeout(() => sfx.roundSting(), 1500);
         if ((e as any).reason === 'time') this.say('time');
         break;
       case 'match_over': {
         // The result line fits how the match went (comeback, flawless, close...), then a rematch prompt once it ends.
-        const end = matchEndKeys(this.match, e.winner, e.reason, snap?.f.length ?? 2);
-        this.later(1200, () => this.say(end.slot, end.keys, (sec) => this.later(sec * 1000 + 600, () => this.say('rematch'))));
+        this.matchEnded = true;
+        if (this.resultCalled) this.later(1200, () => this.say('rematch'));
+        else {
+          const end = matchEndKeys(this.match, e.winner, e.reason, snap?.f.length ?? 2);
+          this.later(1200, () => this.say(end.slot, end.keys, (sec) => this.later(sec * 1000 + 600, () => this.say('rematch'))));
+        }
         sfx.crowdRoar(1);
         this.setChant(false);
         break;

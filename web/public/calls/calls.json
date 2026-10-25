@@ -43,10 +43,6 @@
     "text": "LIGHTS OUT!"
    },
    {
-    "id": "ko_3",
-    "text": "AND THAT'S THE FIGHT!"
-   },
-   {
     "id": "ko_4",
     "text": "GOOD NIGHT!"
    }
@@ -173,10 +169,6 @@
   ],
   "match_over": [
    {
-    "id": "match_over_0",
-    "text": "WHAT A FIGHT!"
-   },
-   {
     "id": "match_over_1",
     "text": "WE HAVE A WINNER!"
    },
@@ -187,6 +179,14 @@
    {
     "id": "match_over_3",
     "text": "GREAT MATCH!"
+   },
+   {
+    "id": "match_over_4",
+    "text": "THAT'S A WRAP!"
+   },
+   {
+    "id": "match_over_5",
+    "text": "TAKE A BOW!"
    }
   ],
   "draw": [
@@ -233,10 +233,6 @@
    {
     "id": "filler_2",
     "text": "THE CROWD IS LOVING THIS!"
-   },
-   {
-    "id": "filler_3",
-    "text": "WHAT A FIGHT WE HAVE!"
    },
    {
     "id": "filler_4",

@@ -26,7 +26,7 @@ export const CALLS: Record<string, string[]> = {
   combo: ['COMBO!', 'THREE IN A ROW!', 'UNLOADING!'],
   low_hp: ["THEY'RE HURT!", "ONE MORE AND IT'S OVER!", 'HANGING ON!'],
   blocked: ['BLOCKED!', 'GREAT DEFENSE!'],
-  match_over: ['WHAT A FIGHT!', 'WE HAVE A WINNER!', "THAT'S THE MATCH!", 'GREAT MATCH!'],
+  match_over: ['WHAT A FIGHT!', 'WE HAVE A WINNER!', "THAT'S THE MATCH!", 'GREAT MATCH!', "THAT'S A WRAP!", 'TAKE A BOW!'],
   draw: ["IT'S A DRAW!"],
   time: ['TIME!', "THAT'S TIME!"],
   throw: ['SHOULDER THROW!'],
@@ -54,6 +54,9 @@ export const CALLS: Record<string, string[]> = {
   roast_blocked: ["Knock knock. Nobody's home.", 'Punching a wall would be faster.'],
   roast_idle: ['Are we fighting or slow dancing?', 'Even the crowd is doing more cardio.'],
 };
+// Retired (REVIEW.md 7:58 AM: "it's still saying 'what a fight' after every player wins"): kept above so the other ids
+// and their mp3s stay stable, but left out of calls.json so they never play.
+export const RETIRED = new Set(['filler_3', 'match_over_0', 'ko_3']);
 // Delivery: announcer calls are shouted; roasts are wry.
 const tagFor = (key: string) => (key.startsWith('roast_') ? '[mischievously] ' : process.env.TAG ?? '[shouting excitedly] ');
 const OUT = path.join(ROOT, 'web/public/calls');
@@ -62,7 +65,7 @@ const sub = await (await fetch('https://api.elevenlabs.io/v1/user/subscription',
 const remaining = sub.character_limit - sub.character_count;
 const items = Object.entries(CALLS).flatMap(([k, lines]) => lines.map((text, i) => ({ id: `${k}_${i}`, key: k, text })));
 const ONLY = process.argv.slice(2);
-const todo = items.filter((it) => (ONLY.length ? ONLY.includes(it.id) : !fs.existsSync(path.join(OUT, it.id + '.mp3')) || process.env.FORCE));
+const todo = items.filter((it) => !RETIRED.has(it.id) && (ONLY.length ? ONLY.includes(it.id) : !fs.existsSync(path.join(OUT, it.id + '.mp3')) || process.env.FORCE));
 const cost = todo.reduce((n, it) => n + it.text.length + tagFor(it.key).length, 0);
 console.log(`ElevenLabs: ${sub.character_count}/${sub.character_limit} used, ${remaining} remaining; this run needs ${cost} characters (cap ${Math.floor(remaining / 2)})`);
 if (cost > remaining / 2) throw new Error('over the 50% budget');
@@ -84,6 +87,6 @@ for (const it of todo) {
   const dur = execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', path.join(OUT, it.id + '.mp3')]).toString().trim();
   console.log(it.id, JSON.stringify(it.text), dur + ' s');
 }
-fs.writeFileSync(path.join(OUT, 'calls.json'), JSON.stringify({ voice: 'ElevenLabs "Charlie" (eleven_v3)', calls: Object.fromEntries(Object.entries(CALLS).map(([k, lines]) => [k, lines.map((text, i) => ({ id: `${k}_${i}`, text }))])) }, null, 1));
+fs.writeFileSync(path.join(OUT, 'calls.json'), JSON.stringify({ voice: 'ElevenLabs "Charlie" (eleven_v3)', calls: Object.fromEntries(Object.entries(CALLS).map(([k, lines]) => [k, lines.map((text, i) => ({ id: `${k}_${i}`, text })).filter((c) => !RETIRED.has(c.id))])) }, null, 1));
 const after = await (await fetch('https://api.elevenlabs.io/v1/user/subscription', { headers: { 'xi-api-key': KEY } })).json();
 console.log(`ElevenLabs after: ${after.character_count}/${after.character_limit}`);

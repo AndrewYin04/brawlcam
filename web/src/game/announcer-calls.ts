@@ -32,6 +32,17 @@ export class MatchTracker {
     } else if (e.type === 'ko') this.koKind = e.kind;
     else if (e.type === 'round_end') this.rounds.push({ n: e.n, winner: e.winner, reason: e.reason, hp: Object.fromEntries((snap?.f ?? []).map((f) => [f.id, f.hp])) });
   }
+
+  /** After a KO and its round_end have both been seen: the result call if that KO round took the duel, else null, so a
+   *  match-ending KO plays one call (REVIEW.md 7:58 AM). The sim emits ko then round_end in the same tick; the renderer
+   *  may hold the KO for the contact frame, so the announcer asks once both have arrived. */
+  koEnding(round: number, fighters: number): { slot: string; keys: string[] } | null {
+    if (fighters !== 2) return null;
+    const last = this.rounds[this.rounds.length - 1];
+    if (!last || last.n !== round || last.reason !== 'ko' || last.winner == null) return null;
+    if (this.rounds.filter((r) => r.winner === last.winner).length < WINS_TO_TAKE) return null;
+    return matchEndKeys(this, last.winner, 'rounds', 2);
+  }
 }
 
 /** Call keys for a round's "FIGHT!", most specific first. Brawls have one round and no score. */

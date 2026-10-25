@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { launchWithClip, openPage, hooks, waitScreen, injectCamera, TQ } from './helpers';
 import { chromium } from '@playwright/test';
 import { GL_ARGS } from '../../playwright.config';
+import { TUNING } from '../../shared/sim';
 
 async function practice(clip: string, q: string) {
   const b = await launchWithClip(clip);
@@ -108,7 +109,10 @@ test('guard: holding it drains the meter until it breaks, then a hit lands for f
   const snapAfter = h.snapLog.find((s: any) => s.at > brk.t);
   console.log('GUARD', JSON.stringify({ blockedBefore: blockedBefore.map((e: any) => [e.kind, e.damage, e.guard]), break: brk, dizzyHit: dizzyHit && [dizzyHit.kind, dizzyHit.damage, dizzyHit.blocked] }));
   expect(blockedBefore.length).toBeGreaterThan(0);
-  for (const e of blockedBefore) expect(e.damage).toBeLessThanOrEqual(2);
+  // Blocked hits deal blockFactor (10%) of the damage, rounded: <= 2 for strikes (max 18), 3 for a blocked Super
+  // Uppercut (25), 2 for a blast (20). The bot may land a super on the guard before it breaks.
+  const blockedCap = (k: string) => Math.max(1, Math.round((k === 'super_uppercut' ? TUNING.superUppercutDamage : k === 'blast' ? TUNING.blastDamage : 18) * TUNING.blockFactor));
+  for (const e of blockedBefore) expect(e.damage).toBeLessThanOrEqual(blockedCap(e.kind));
   if (dizzyHit) expect(dizzyHit.blocked).toBe(false);
   void snapAfter;
   await b.close();
