@@ -119,6 +119,11 @@ export class Room {
     this.queue.push(id);
     this.broadcast({ type: 'peer_joined', slot: c.slot, nickname: c.nickname });
     this.broadcastRoster();
+    // Joining while a match is running: enter it as a spectator.
+    if (this.sim && this.sim.phase !== 'match_over') {
+      const sim = this.sim;
+      setTimeout(() => this.sendTo(id, { type: 'match_start', mode: this.mode, matchId: this.matchId, fighters: sim.fighters.map((f) => ({ slot: f.id, name: f.name, color: f.color, bot: f.bot, card: f.card })) }), 50);
+    }
     return c;
   }
 

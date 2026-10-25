@@ -15,7 +15,7 @@ const params = new URLSearchParams(location.search);
 const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
 if (params.has('clean')) document.body.classList.add('clean');
 
-type Screen = 'loading' | 'menu' | 'camera' | 'join' | 'lobby' | 'results' | 'page' | 'game';
+type Screen = 'loading' | 'menu' | 'camera' | 'join' | 'lobby' | 'results' | 'page' | 'game' | 'record';
 
 // ---------- test/debug hooks ----------
 export const hooks = {
@@ -38,6 +38,7 @@ export const hooks = {
   /** Recent distinct snapshots with local arrival time (epoch ms), for sync assertions in tests. */
   snapLog: [] as { t: number; at: number; round: number; timer: number; phase: string; hp: number[]; f: number[][] }[],
   targetChanges: 0,
+  turns: 0,
   roster: null as any,
 };
 (window as any).__brawl = hooks;
@@ -108,6 +109,11 @@ async function boot() {
   } catch (e) {
     $('load-text').textContent = 'Loading failed. Check your connection and reload.';
     hooks.errors.push('boot: ' + e);
+    return;
+  }
+  if (params.has('record')) {
+    // Demo-video recording: no live loop; frames are stepped by the recorder.
+    await (await import('./record')).initRecord();
     return;
   }
   // Idle arena behind the menu
@@ -411,6 +417,7 @@ function startLoop() {
           const acts = pose!.takeActions(i);
           for (const a of acts) hooks.localActions.push({ t: performance.now(), kind: a.kind, hand: a.hand, player: i });
           if (i === 0) motion.observe(pose!, acts.map((a) => a.kind));
+          if (g.turn) hooks.turns++;
           session!.input(i, g, acts);
         });
         hooks.lastGesture = pose.latest.map((g) => ({ present: g.present, blocking: g.blocking, xshield: g.xshield, move: g.move, legs: g.legs }));
@@ -426,8 +433,8 @@ function startLoop() {
         }
         hooks.snapshot = r.snap;
         const lastLog = hooks.snapLog[hooks.snapLog.length - 1];
-        if (!lastLog || lastLog.t !== r.snap.t) {
-          hooks.snapLog.push({ t: r.snap.t, at: performance.timeOrigin + performance.now(), round: r.snap.round, timer: r.snap.timer, phase: r.snap.phase, hp: r.snap.f.map((f) => f.hp), f: r.snap.f.map((f) => [f.id, f.x, f.z, f.hp, f.kb, f.kos, f.alive]) });
+        if (hooks.mode !== 'idle' && (!lastLog || lastLog.t !== r.snap.t)) {
+          hooks.snapLog.push({ t: r.snap.t, at: (session as any).snapAt || performance.timeOrigin + performance.now(), round: r.snap.round, timer: r.snap.timer, phase: r.snap.phase, hp: r.snap.f.map((f) => f.hp), f: r.snap.f.map((f) => [f.id, f.x, f.z, f.hp, f.kb, f.kos, f.alive]) });
           const meF = r.snap.f.find((f) => session!.localIds.includes(f.id));
           if (meF && (hooks as any).lastTg !== undefined && (hooks as any).lastTg !== meF.tg) hooks.targetChanges++;
           if (meF) (hooks as any).lastTg = meF.tg;
@@ -498,6 +505,10 @@ $('join-go').onclick = () => {
   }
   import('./net/online').then((m) => m.joinRoom(code));
 };
+
+export function arenaRef() {
+  return arena;
+}
 
 export function getPose() {
   return pose;

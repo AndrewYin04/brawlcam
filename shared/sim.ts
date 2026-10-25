@@ -393,6 +393,8 @@ export class Sim {
     const stunned = this.t < f.stunUntil;
     f.blocking = fighting && inp.present && !stunned && (inp.blocking || (inp.xshield && f.meter < 100));
 
+    const walkFromX = f.x;
+    const walkFromZ = f.z;
     if (fighting && inp.present && !stunned && f.y === 0) {
       let [strafe, fwd] = inp.move;
       const tgt = f.target != null ? this.get(f.target) : undefined;
@@ -430,8 +432,19 @@ export class Sim {
     }
 
     // Arena bounds
-    const r = Math.hypot(f.x, f.z);
     const R = this.cfg.arenaRadius;
+    if (this.cfg.mode === 'brawl') {
+      // Walking alone never takes you out of the ring: only knockback can (ring-outs must be earned).
+      const before = Math.hypot(walkFromX, walkFromZ);
+      const after = Math.hypot(f.x, f.z);
+      const edge = R - 0.25;
+      if (after > edge && after > before && f.vx === 0 && f.vz === 0) {
+        const k = Math.max(before, edge) / after;
+        f.x *= k;
+        f.z *= k;
+      }
+    }
+    const r = Math.hypot(f.x, f.z);
     if (this.cfg.mode === 'duel') {
       if (r > R) {
         f.x *= R / r;

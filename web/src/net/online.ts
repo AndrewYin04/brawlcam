@@ -46,6 +46,7 @@ class Conn {
   private closedByUs = false;
   private reconnectUntil = 0;
   rtt = 0;
+  snapAt = 0;
   /** Test knob: ?netlag=N adds N ms of round-trip latency (N/2 each way) to everything on this client. */
   lag = Number(new URLSearchParams(location.search).get('netlag') ?? 0) / 2;
 
@@ -149,6 +150,8 @@ class Conn {
         break;
       case 'snapshot':
         this.snap = m.s;
+        // Arrival time at the socket (not at render), for sync measurements.
+        this.snapAt = performance.timeOrigin + performance.now();
         break;
       case 'events':
         this.events.push(...m.e);
@@ -389,6 +392,9 @@ export class OnlineSession implements Session {
   }
   get isHost() {
     return this.c.host;
+  }
+  get snapAt() {
+    return this.c.snapAt;
   }
 }
 
