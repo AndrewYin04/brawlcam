@@ -62,6 +62,16 @@ What changed to get here (each verified on these clips before and after):
 | Local 2-player | Full match, both people control their fighter | PASS | Oct 24 9:43 PM | `npx playwright test local2p` | Two real clips side by side: `LOCAL2P {"winner":1,"byPlayer":[33,25],"hits":20}` |
 | Local 2-player | One player leaves mid-round; both leave; both return | PASS | Oct 24 9:43 PM | same | Masked half => that fighter `present=0`, other `1`; blank => both 0; restore => both 1; no errors |
 | Online 1v1 | Fighter A vs fighter B full best-of-3 (create room, join by link) | PASS | Oct 24 9:10 PM | `npx playwright test online` | `{"samples":1715,"mismatches":0,"p95ArrivalSkewMs":49,"aHits":30,"bHits":30,"bActions":48,"winner":2,"elo_delta":{"1":-16,"2":16}}`: same tick => identical HP/round/timer on both; both agree on the winner; Elo written to Tiger Data |
+| Online 1v1 | Join by typed code | PASS | Oct 24 9:42 PM | `npx playwright test online2` | Lowercase code accepted; both rosters show 2 |
+| Online 1v1 | Invalid code (UI) | PASS | Oct 24 9:42 PM | same | "No room with that code. Check it and try again." |
+| Online 1v1 | Third person becomes a spectator, sees the live fight, cheers reach fighters | PASS | Oct 24 9:42 PM | same | Spectator snapshot has 2 fighters, time advances; cheer counted on host |
+| Online 1v1 | Ninth person refused with a clear message | PASS | Oct 24 9:42 PM | same | Room filled to 8 (3 browsers + 5 WebSocket clients); 9th browser: "That room is full (8 people max)." |
+| Online 1v1 | Guest disconnects mid-round | PASS | Oct 24 9:42 PM | same | Guest fighter idles (`present=0`), then after the 10 s grace host wins |
+| Online 1v1 | Host disconnects mid-round | PASS | Oct 24 9:42 PM | same | Guest wins, becomes host (rematch enabled) |
+| Online 1v1 | Reconnect within 10 s resumes | PASS | Oct 24 9:42 PM | same | `setOffline` 4 s; same slot, present again, match continued |
+| Online 1v1 | 200 ms added latency | PASS (simulated) | Oct 24 9:42 PM | same | Client-side `?netlag=200` (100 ms each way): `LAG200 {"winner":2,"bActions":18,"hits":5}`, both agree. Real cellular latency not measured here. |
+| Online 1v1 | Both players on phones | PASS (viewport) | Oct 24 9:42 PM | same | 844x390 mobile viewports, round completes, no overflow, no errors. Real phones: planner check pending |
+| Online 1v1 | One desktop, one phone | PASS (viewport) | Oct 24 9:42 PM | same | 1280x720 + 390x844 |
 | Online 1v1 | Invalid code | PASS (protocol) | Oct 24 9:03 PM | `npx tsx tests/tools/ws-smoke.ts` | `invalid code -> room_not_found` (UI test pending) |
 
 Paths not yet run are listed in `STATUS.md` until they have a row here.

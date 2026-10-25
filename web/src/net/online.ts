@@ -46,6 +46,8 @@ class Conn {
   private closedByUs = false;
   private reconnectUntil = 0;
   rtt = 0;
+  /** Test knob: ?netlag=N adds N ms of round-trip latency (N/2 each way) to everything on this client. */
+  lag = Number(new URLSearchParams(location.search).get('netlag') ?? 0) / 2;
 
   connect(first: { type: 'create' } | { type: 'join'; room: string }): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -56,6 +58,13 @@ class Conn {
       let settled = false;
       ws.onopen = () => ws.send(JSON.stringify({ ...first, clientId: clientId(), nickname: nickname(), color: myColor(), card: forgeCardName() }));
       ws.onmessage = (ev) => {
+        if (this.lag) {
+          setTimeout(() => handleMsg(ev), this.lag);
+          return;
+        }
+        handleMsg(ev);
+      };
+      const handleMsg = (ev: MessageEvent) => {
         const m = JSON.parse(String(ev.data));
         this.onMessage(m);
         if (!settled && m.type === 'welcome') {
@@ -98,7 +107,12 @@ class Conn {
   }
 
   send(m: unknown) {
-    if (this.ws?.readyState === 1) this.ws.send(JSON.stringify(m));
+    const data = JSON.stringify(m);
+    const go = () => {
+      if (this.ws?.readyState === 1) this.ws.send(data);
+    };
+    if (this.lag) setTimeout(go, this.lag);
+    else go();
   }
 
   close() {
