@@ -282,3 +282,51 @@ Video does not go into Postgres.
 6. Credits
 
 Run the section 11 loop after visual changes; the freeze is 7:30 AM. Update STATUS.md (last update 1:50 AM) with 78659ed's review-loop scores and fist-to-target numbers.
+
+## 2026-10-25 2:35 AM CDT: the user's test of the octagon build: camera occlusion, HUD overlap, monotone commentator
+Seen: 5936250 (step sideways, 88% on real footage), bebb164 (guard, Iron Wall, octagon, cage bounce), dc578b2 (research mode). STATUS.md still says 1:50 AM; update it.
+
+The user's screenshot (round 2, 1v1, Practice): "this is blocking my vision sometimes when the camera is at that angle." What it shows:
+
+### 1. The camera ends up outside the cage, so the fence blocks the fight
+- **What the screenshot shows:**
+  - a corner post fills about a quarter of the screen as a solid black shape, with no lighting or texture
+  - the top rail cuts a black band across the whole frame
+  - chain-link covers both fighters
+  - the damage number ("12") is hidden behind the rail
+- **Fixes:**
+  - **Keep the camera inside the octagon:** clamp its position to the cage radius minus about 0.6 m, and pull it in or up when the follow position would leave. Alternatively, raise it above the cage height and look down at a broadcast angle. Whichever you choose, the cage must never sit between the camera and the fighters.
+  - **Fade occluders:** any cage panel, post, or rail between the camera and either fighter fades to about 15% opacity, or dithers out, while it occludes. Many fighting games do this.
+  - **Post material:** the black post looks unlit or missing its material. Give the padded posts a lit, colored material.
+- **New review-loop measurement and checklist item:** environment occlusion. Cast rays from the camera to each fighter's head, chest, hands, and feet every frame, and report the percentage of rays blocked by the cage, posts, or rails; target under 5%. Add a "camera near the cage" scene to the section 11 captures (fighters pushed into a corner and against the fence).
+
+### 2. The player's own fighter hides the opponent
+In the screenshot the camera sits directly behind the player's fighter, whose back covers most of the opponent. Use an over-the-shoulder offset, shifting the camera to one side by about half a shoulder width, so the opponent's head and torso are always visible. If they still overlap on screen, make the player's fighter partly transparent. Add a measurement: the percentage of the opponent's upper body visible in 1v1, target over 80%.
+
+### 3. HUD overlap
+- the player's name is cut off at the left edge ("ESE EATER" for "CHEESE EATER")
+- the "THROW HANDS" arena banner sits behind and between the top HUD bars
+- the commentary caption, the volume slider, and the tutorial hint ("Block with forearms up!") overlap at the bottom center
+- the volume control stays open over the HUD
+
+Give each HUD element its own safe area; truncate long names with an ellipsis inside the bar; close the volume popup on click-away or after 3 s. Check at 1280x720, 1920x1080, and a phone landscape viewport.
+
+### 4. "The commentator is very monotone"
+**Root cause found by the planner in `server/ai.ts`:**
+- Gemini TTS is limited to `GEMINI_TTS_RPM` = 8 per minute, while lines arrive every 3 to 4 s (15 to 20 per minute)
+- template lines are never voiced by Gemini
+- a 429 backs off for 30 s
+
+So most lines play through the browser's `speechSynthesis`, which is flat and robotic, at rate 1.15 and pitch 1.05. Gemini is used only on the lite TTS model with a one-line prompt. Fixes:
+- **Fewer, bigger lines:** speak only on big moments: a combo, a super, a guard break, a cage slam, a KO, round start and end, low HP. Aim for at most 6 to 8 spoken lines per minute; the rest are caption-only.
+- **Pre-rendered stock calls:** generate 40 to 60 short, high-energy calls once at deploy time and store them as audio files served from the server. Examples: "OHHH!", "WHAT A SHOT!", "HE'S HURT!", "GUARD BROKEN!", "INTO THE CAGE!", "IT'S OVER!", "ROUND TWO, FIGHT!", plus versions with the fighter's name for the house fighters. Play these instantly (zero latency, no rate limit) for template moments.
+- **The most expressive voice available:** an ElevenLabs key exists on the server, used for the video's voiceover.
+  - Use it for the stock calls, with a high-energy sports-announcer style. Check the current ElevenLabs model names, the style and stability settings, and the account's remaining character quota through its API. Write the quota in STATUS.md, and never spend more than 50% of what remains.
+  - For live AI lines, try the full `gemini-3.8-flash-tts` before the lite one, with a director-style prompt that sets energy per event ("shouting, voice cracking with excitement" for a KO; "rising disbelief" for a guard break). Check Gemini's TTS docs for style control and two-speaker support (play-by-play plus color commentator) and use them if supported.
+- **Remove the `speechSynthesis` fallback during matches.** If no voiced audio is available, show the caption only, or play a stock call.
+- **Crowd audio:** a crowd roar layered under big hits, an "ooh" on blocked heavy hits, a building chant at low HP, and arena music between rounds (openly licensed; credit it).
+- **Mute:** keep the mute toggle, and let the user set commentary and crowd volume separately.
+- **Review:** add a commentary check to the section 11 loop, a 60-second match recording with audio. Reviewers rate energy and variety (1 to 5) and whether lines match on-screen events.
+
+### Order
+1, 2, and 4 first (they affect every match and the video), then 3, then the rest of the queue (opt-in streams, then credits). Freeze 7:30 AM.
