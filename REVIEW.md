@@ -526,3 +526,8 @@ So the cause is the **see-through mode from 012470a** ("your fighter turns see-t
 - **Metric:** in the close-range behind-camera scene, no back-facing or interior triangles of the player's fighter are visible (render a debug pass to confirm), and the opponent stays visible above 80%.
 
 Items 3 (fists, gloves, guard shape: check whether the bare-handed look is real or another transparency artifact) and 4 (the 6 fps pose rate, first priority) still stand.
+
+### 3:30 AM: the user confirmed the voice-leak source
+The leak is the **live Gemini TTS lines** (`server/ai.ts:196`, `"You are a live fight commentator in a packed arena. Say this <mood>: <line>"` gets read aloud). The user has **not** heard it in the ElevenLabs stock calls. **Do not regenerate the stock calls**; the user likes them. Run the transcript check on them once, as a regression test only.
+
+Fix the Gemini request format, then verify with transcripts of about 30 live lines across all four moods: zero extra words. If no format reaches 0 leaks, voice live lines with ElevenLabs (low-latency model, within 50% of the remaining quota) or keep them caption-only.
