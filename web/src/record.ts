@@ -150,6 +150,14 @@ export async function initRecord() {
       const f = session?.sim.get(session.localIds[i]);
       if (f) f.meter = v;
     },
+    /** Place a fighter (x, z) and optionally set its damage taken (knockback percent). */
+    place(id: number, x: number, z: number, kb?: number) {
+      const f = session?.sim.get(id);
+      if (!f) return;
+      f.x = x;
+      f.z = z;
+      if (kb != null) f.kb = kb;
+    },
     setHp(id: number, v: number) {
       const f = session?.sim.get(id);
       if (f) f.hp = v;
