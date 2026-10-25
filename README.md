@@ -8,15 +8,16 @@ Built at HackTX 2026 (October 24 to 25, 2026). **Built with Claude Code** (AI co
 
 ## What you can do
 
-- **Practice vs a bot**: best of 3, 60-second rounds, KO slow motion, rematch.
+- **Move with your body**: step or lean toward the camera to advance, back to retreat, sideways to circle (a short tutorial teaches it after calibration). Your fighter walks where you step.
+- **Practice vs a bot** in a UFC-style octagon: best of 3, 60-second rounds, HP KOs, big hits slam fighters into the cage, rematch.
 - **2 players, 1 camera**: two people side by side each control a fighter.
 - **Online 1v1**: create a room, share the link or 4-letter code, fight a friend on any device. Spectators can watch and send cheers.
-- **Brawl**: up to 8 fighters in one ring, bots fill empty slots, Smash-style knockback and ring-outs, live KO feed.
+- **Brawl**: up to 8 fighters in a larger octagon, bots fill empty slots, knockback that grows with damage taken, 3-second respawns, live KO feed.
 - **Winner stays on**: up to 8 friends, two fight at a time, the winner stays on.
 - **Guard**: both forearms up in front of the face blocks 90% of damage, but a GUARD meter drains while you hold it and when hits land on it; let it empty and your guard breaks (dizzy for 2 s).
 - **Super moves**: uppercut (fist driven up), Iron Wall (forearms crossed in an X above the face, elbows up: 2.5 s unbreakable guard that counters the first hit), energy blast (both palms pushed forward), when your meter is full.
 - **Fighter Forge**: describe a fighter; Meta's Muse Spark writes the name, story, and moves, Muse Image paints the card, and your suit takes the card's colors.
-- **Live commentator**: Gemini calls the fight every few seconds, spoken with Gemini TTS.
+- **Commentary**: an announcer calls the big moments instantly (pre-rendered ElevenLabs calls) over a real crowd recording; Gemini writes live lines about the fight (shown as captions).
 - **Rivalry card** after online matches, **Elo leaderboard** (Tiger Data), **store** (mock purchases, "Demo: no charge"), and an opt-in **motion data** program with an explicit consent screen (labeled move sequences plus continuous 15 fps body-point streams, capped at 10 minutes per match; coordinates only, never video; stored in compressed Tiger hypertables). A separate **research mode** (`?research=1`, consent every session) records the camera to a local file only and sends labeled landmarks for gesture tuning.
 
 No video ever leaves your device: pose tracking runs in your browser. Online play sends only joint positions and game actions.
@@ -25,7 +26,7 @@ No video ever leaves your device: pose tracking runs in your browser. Online pla
 
 - **Pose**: MediaPipe Pose Landmarker (lite) in a Web Worker, GPU delegate with CPU fallback. Camera frames are read straight from the camera track (`MediaStreamTrackProcessor`) where supported, so pose rate does not depend on render rate.
 - **Retargeting**: our own solver turns 15 world landmarks into bone rotations for a VRM humanoid (`web/src/game/avatar.ts`), mirror-correct, with a One Euro filter for low lag.
-- **Gestures**: rule-based (`shared/gestures.ts`): strikes are detected as elbow-angle / wrist-height / sideways-sweep peaks, so they work from 10 to 30 fps; block and X shield from measured arm geometry; a 3-second guard calibration sets body size. Tuned and scored against labeled video clips (see [TESTING.md](TESTING.md)).
+- **Gestures**: rule-based (`shared/gestures.ts`): strikes are detected as elbow-angle / wrist-height / sideways-sweep peaks, so they work from 10 to 30 fps; guard and the Iron Wall X from measured arm geometry; a 3-second guard calibration sets body size. Tuned and scored against labeled video clips (see [TESTING.md](TESTING.md)).
 - **Game**: one deterministic simulation (`shared/sim.ts`) for any number of fighters. It runs in the browser for local modes and on the server for online rooms, where the server decides every hit using the defender's latest block state.
 - **Server**: Node + `ws` on a Vultr VM in Dallas behind Caddy (automatic HTTPS). It relays rooms at 20 Hz, runs bots, and proxies Gemini, the Meta Model API, and Tiger Data so no key reaches the browser.
 - **Data**: Tiger Data (PostgreSQL + TimescaleDB): `match_events` and `pose_samples` hypertables; `leaderboard_daily` and `motion_label_counts` continuous aggregates with real-time aggregation and refresh policies.
