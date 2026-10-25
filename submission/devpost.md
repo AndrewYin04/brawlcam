@@ -4,7 +4,7 @@
 
 Play it: https://throwhands.tech (backup: https://144-202-71-213.sslip.io)
 
-Demo video (2:27): https://github.com/AndrewYin04/throwhands/releases/tag/demo-video-v2 (also at https://throwhands.tech/media/throwhands-demo-v2.mp4)
+Demo video (2:35): https://github.com/AndrewYin04/throwhands/releases/tag/demo-video-v3 (also at https://throwhands.tech/media/throwhands-demo-v3.mp4)
 
 ## Inspiration
 
@@ -21,6 +21,7 @@ Allow the camera and, after a 3-second guard calibration, a fighter in the octag
 - **Move with your body**: step or lean toward the camera to advance, back to retreat, sideways to circle. Your fighter really walks, turning its hips while it keeps facing the opponent.
 - **Jabs, hooks, uppercuts**: faster punches do more damage, and the fist visibly lands on the target.
 - **Guard** with both forearms in front of your face. The guard drains while you hold it and with every blocked hit; when it breaks you are dizzy for 2 seconds. **Kick** when your legs are in frame.
+- **Grappling (beta, `?grapple=1`)**: reach with both arms and pull in to grab into a clinch and drive knees, or turn and bend for a Shoulder Throw. It is off by default while we tune detection on real players' recorded drills.
 - **Supers** when your meter fills: a super uppercut that slams your opponent into the cage in slow motion, **Iron Wall** (cross your forearms above your face: 2.5 s of unbreakable guard that counters the first attacker), or a two-palm energy blast.
 
 Matches are best of 3 with HP KOs and a rematch button. Big moments get an instant announcer call ("GUARD BROKEN!", "INTO THE CAGE!", "K.O.!") over a synthesized crowd. Modes:
