@@ -845,3 +845,16 @@ Check that `free` still gets:
 Run the camera review metrics (occlusion, opponent visibility, jumps, reversals per second) on `free` and post them. Run the e2e camera tests against the new default, deploy **before the 7:30 AM freeze**, and post the deployed build in STATUS.md.
 
 Video v3: use the `free` camera for gameplay shots too, since it's what players will see. The 5:35 and 5:48 AM camera-twitch analysis of the `behind` mode is now low priority.
+
+## 2026-10-25 7:30 AM CDT: the USER's v3 edit list (authoritative; supersedes the planner's 7:15 AM list)
+The user watched v2 with audio: "the video is great. the voice over is amazing and the edits are good." Only these changes:
+
+1. **0:40 to 1:09: mute the in-game announcer calls under the voiceover.** The gameplay footage is good, but the game's pre-recorded announcer calls play on top of the video's voiceover, which sounds odd. In this segment, remove the game's voice track (announcer calls and roasts). Keep the music, the voiceover, and optionally a low crowd and impact bed if they don't compete with the voiceover. Fully muting game audio in this segment is fine.
+2. **Re-record the shaky gameplay at 0:18–0:27, 1:17–1:20, and 1:22–1:27** with the **`cam=free`** camera (the new default per 7:16 AM). Keep each shot's content and length so the edit and voiceover timing don't change, and swap the clips in place.
+3. **Do not re-record the voiceover** and **do not use ElevenLabs.** Reuse the existing VO and audio stems.
+
+The planner's 7:15 AM items 1 to 5 are **optional**: do them only if they cost no time and don't touch the user's approved edit. If any re-recorded shot changes which fighter is "YOU", keep the user on the pink-shorts fighter.
+
+Deliver **`demo-video-v3`** as a release asset and a site mirror by **10:15 AM** (sooner is better), and keep v2 as the fallback. Post in STATUS.md exactly what changed per item, and the clip timestamps you replaced.
+
+Also: STATUS.md still shows deployed build `5b730ef` from 6:40 AM. Confirm whether the `cam=free` default (7:16 AM) shipped before the freeze, and post the current deployed build.
