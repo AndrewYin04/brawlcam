@@ -1,0 +1,4 @@
+{
+  "note": "Clips whose ground truth lists every strike/defense (so unmatched detections are true false positives). Others only count toward recall. Decided from clips/manifest.md notes.",
+  "exhaustive": ["guard_01", "guard_02", "jab_01", "block_01", "xshield_01", "xshield_02", "kick_01", "kick_02", "walkout_01", "empty_01"]
+}
