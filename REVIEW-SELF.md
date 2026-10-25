@@ -304,3 +304,23 @@ Measured after the fixes (local build):
 | cage_far | 4.4 | 73% |
 
 Still below target: planted-foot slide during strikes (5–9 cm; a rear-foot IK pin was tried, did not change the metric, and was reverted).
+
+## Round 9: build 899b408 (slow-motion camera farther and perpendicular, nearer-camera rule, super uppercut IK, lunge cap, Iron Wall dome), Sun Oct 25 4:45 AM CDT
+Reviewer A only. Reviewer B was not run: the planner's 4:35 AM queue (drill sessions: movement, hooks, grab) took priority. **Stop condition not met: 13 high findings.**
+
+Scores:
+- **1–2:** walk/run 2, wind-up/extension 2, framing 2, strikes visibly connect 2, opponent visible 2, camera never clips 1
+- **3:** torso 3, flinch/tumble 3, super visuals 3, effects 3, presentation 3
+- **4:** stage 4, cage never blocks 4
+
+High findings, grouped:
+- **Camera clips into or crosses over a launched/airborne opponent** (uppercut f46–61, energy_blast f34–52, cage_corner f31–88): the near-clip clearance is not enforced against airborne bodies, and the camera crosses to the opponent's side of the fight line.
+- **Cage slam:** no slow-motion side camera; the opponent is hidden behind your fighter (cage_slam f46–64).
+- **Framing loses a fighter:** cage_far (70% visible), knockback (you leave the frame on launch), getting_hit (cut off at the bottom and sliding 75 cm while crouched), ko (camera against your back).
+- **Your own fist is hidden at impact** behind your back (jab, hook).
+- **False banners:** "SUPER UPPERCUT!" in shield f34–55 with no uppercut; a stale "Guard broken!" tip in strafe.
+- **big_punches:** about 1 m lunges in a stand-still scene.
+- **Body interpenetration:** in hook, big_punches, cage_far, cage_corner, guard_break and shield.
+- **brawl8:** the "you" marker drifts to another fighter, and other fighters fill the foreground.
+
+Fixes for these are queued after the drill-session work (planner 4:35 AM order); round 10 follows them.
