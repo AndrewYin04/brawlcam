@@ -589,3 +589,41 @@ Session `fda75d56-17f5-48ab-aa2c-69caa142f646` (Tiger `research_frames`; the use
 6. **Drill scoring vs the movement signal:** lean_left and lean_right score 3/3 despite the wrong-signed strafe. Check how drill reps are judged; they should require the correct sign.
 
 **Order:** 1 and 2 (forward/back correctness and baseline), then 4, then 3, then 5. Each with a unit test on this session, showing per-drill signed means before and after; the targets are still about 0, step and lean back below -0.3, and big punches about 0. Ask the user to re-run the drills after the fix. Grappling and visuals come after this: if players can't move back, the game is broken for judges.
+
+## 2026-10-25 4:35 AM CDT: drill session 2: right hooks read as jabs (root cause in the data)
+Session `2dd3adbd…` (`throwhands-research-2026-10-25T09-25-59.jsonl`; the user has the `.webm`). 185 s, 3,011 frames, **16.2 fps**. The user: "feels like the right hooks are not registering."
+
+| Drill | Reps detected | What fired instead |
+|---|---|---|
+| hook_R_big | **0/4** | jab:R ×4 |
+| uppercut_big | 0/3 | jab:R ×4, hook:R ×2 |
+| straight_big | 3/4 | (correct jabs) |
+| hook_L_big | 1/4 | jab:L, uppercut:R |
+| grab | **0/4** | jab:R ×6, jab:L ×5 (the 4:10 AM two-arm hold is not deployed yet) |
+| throw | 0/4 | mixed jabs and hooks |
+
+**Hook root cause.** Per-rep features from world landmarks (R arm = 12/14/16; lateral = wrist x relative to the shoulder center; yaw from shoulder z, which is noisy):
+
+| Rep | Elbow min to max | Wrist lateral range | Torso yaw range | Fired |
+|---|---|---|---|---|
+| hook_R 1 / 3 / 5 / 11 | 64–160 / 49–160 / 67–159 / 71–155° | 1.08 / 1.00 / 1.04 / 1.04 m | 122 / 100 / 104 / 128° | jab |
+| straight 7 / 8 / 9 | 68–140 / 63–127 / 65–135° | 0.05 / 0.11 / 0.07 m | 7 / 10 / 7° | jab / none / jab |
+| hook_L 12 (detected) | 73–134° | 0.46 m | 20° | hook |
+
+The user's big hooks open the elbow to **155 to 160°**, past `hookElbowMax: 150`, so the jab branch wins. Hooks and straights separate cleanly on **lateral sweep** (about 1 m vs at most 0.11 m) and **torso rotation** (100°+ vs at most 10°), not on elbow angle.
+
+**Fix:**
+- Classify a strike as a **hook** when the wrist's lateral sweep toward the midline is at least about 0.30 m, or torso yaw change is at least about 35° in the strike window, **regardless of elbow angle** (allow up to about 170°).
+- Classify a **jab or straight** only when the lateral sweep is under about 0.15 m and yaw change is under about 25°.
+- Tune the boundaries on this session plus the shadowboxing clips. Report hook and jab confusion before and after in TESTING.md.
+- Also check the uppercut misreads: compute vertical wrist rise vs lateral and forward motion for uppercut_big the same way.
+
+**Movement (not yet fixed; the 4:25 AM note is still open):**
+- still: fwd 0.00 (good this time)
+- step_back: 1/3 with mean fwd **+0.25**
+- lean_fwd: 1/3 with mean **-0.08**
+- lean_back: 2/3
+
+The forward/back signs are still unreliable.
+
+**Order:** the movement fix (4:25 AM), then the hook classification, then the grab two-arm hold (4:10 AM). Then ask the user to re-run the drills.
