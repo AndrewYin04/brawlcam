@@ -11,6 +11,19 @@ BASE_URL=https://144-202-71-213.sslip.io npx playwright test practice online   #
 
 ## Latest full run
 
+Sun Oct 25, 9:13–9:49 AM CDT, live build `fb00f2d` (grappling on by default for the trial):
+- `BASE_URL=https://throwhands.tech npx playwright test`: **59 passed, 1 failed, 1 skipped (36.1m)**.
+  - The skip is the `@live` Forge test, which runs separately.
+  - The failure is `brawl.spec.ts:57` (8 browsers): "Target crashed". Swap was full on this 7 GB machine.
+- **Rerun of the brawl test alone** on `66febd5`: `BRAWL8 {"samples":872,"mismatches":0,"p95":133,…,"fps":[6,8,8,7,8,8,9,8]}`. It fails `p95 < 100`: the clients all agree, but the 8 headless browsers ran at 6–9 fps.
+  - Online rooms run without grappling. Still, the suite was not a clean pass, so grappling went back to opt-in (`1adaff6`).
+- **Live after the rollback (`1adaff6`):** `tests/e2e/drills.spec.ts` passed (2.0m) with the 3 default sections: Stand still, Big punches standing still, Movement. There's no grab section without `?grapple=1`.
+- **Match-end calls, live** (`tests/e2e/match-end-calls.spec.ts`, 3 real matches with rematches):
+  - `a49b28f`: `MATCH_ENDS ["FLAWLESS!","NOT EVEN CLOSE!","TOTAL DOMINATION!"]`, 1 passed (4.7m)
+  - `66febd5`: `["FLAWLESS!","TOTAL DOMINATION!","NOT EVEN CLOSE!"]`, passed
+
+Earlier:
+
 Sun Oct 25, 12:35 AM CDT (GPU setup): `npx playwright test` -> 46 passed, 1 skipped (`@live` Forge, run separately with `LIVE_AI=1`), 2 failed (the two 8-browser-scale specs, which ran in parallel with other browser tests on this 7 GB machine and timed out). Re-run alone at 12:55 AM: both passed (`BRAWL_BOTS {"kos":2,"kofeed":2}`; `WSO {"matches":4,"cheerChecked":true,"reconnectChecked":true}`, queue identical after reconnect). The suite now defaults to 1 worker.
 
 ## Gesture accuracy (spec 9.1 ground truth)
