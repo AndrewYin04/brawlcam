@@ -35,6 +35,9 @@ Under the hood: pose tracking in your browser, our own avatar retargeting and ge
 **What was hard?**
 Punch detection that feels fair. A jab straight at the camera barely changes the arm's measured length, because one camera sees depth poorly. We switched to elbow-angle peaks and validated on labeled clips: on the clear jab clip, 6 of 6 jabs at 30, 15, and 10 fps, with no false positives. Blocks and the X shield needed measured geometry: pose tracking cannot separate tightly crossed wrists, so the X is recognized as "wrists together above the face, elbows raised and spread". Second: headless testing. Without a GPU the 3D scene starved pose detection, so we read camera frames straight from the camera track and decoupled pose rate from render rate.
 
+**Does it work in Safari / on iPhone?**
+WebKit (Safari's engine) passes our automated gameplay test after we fixed three Safari-specific problems; we also added a fallback that runs pose tracking on the main thread when Safari cannot run it in a worker. Real iPhone testing is listed in STATUS.md.
+
 **What is real and what is mocked?**
 Real: pose tracking, gestures, the game, bots, online rooms on our Vultr server, Gemini commentary and speech, Muse Spark and Muse Image fighter generation, the rivalry card, the Elo leaderboard and stats in Tiger Data, and opt-in motion data storage. Mocked: purchases in the store (labeled "Demo: no charge"). The motion-data business is a consented collection pipeline and dashboard; no data has been sold.
 
