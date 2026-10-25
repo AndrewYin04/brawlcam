@@ -30,6 +30,8 @@ interface Shot {
   /** Timed actions at a given second: set a player's meter, or perform a scripted move. */
   cues?: [number, Cue][];
   warmup?: number; // frames stepped before capture (skips countdown)
+  /** Ask the live commentator (Gemini, via /api/commentary) about this scene's own events every 5 s of scene time. */
+  roast?: boolean;
 }
 
 const LM = (n: string) => `/__landmarks/${n}.json`;
@@ -123,6 +125,8 @@ async function runShot(page: Page, shot: Shot) {
   const cues = [...(shot.cues ?? [])].filter(([t, c]) => !(t === 0 && c.op === 'call' && c.method === 'place')).sort((a, b) => a[0] - b[0]);
   const t0 = Date.now();
   const calls: { t: number; id: string; text: string }[] = [];
+  const roasts: { t: number; text: string; source: string; summary: string }[] = [];
+  let lastAsk = 0;
   let seen = (await page.evaluate(() => (window as any).__rec.calls?.() ?? [])).length;
   for (let i = 0; i < frames; i++) {
     while (cues.length && cues[0][0] * 30 <= i) {
@@ -138,6 +142,16 @@ async function runShot(page: Page, shot: Shot) {
     // Announcer calls fired this frame (mixed into the video's audio at this time).
     const log = await page.evaluate(() => (window as any).__rec.calls?.() ?? []);
     for (const c of log.slice(seen)) calls.push({ t: +(i / 30).toFixed(3), id: c.id, text: c.text });
+    // Gemini roasts written about this scene's events, logged at the moment they were written for.
+    if (shot.roast && i > 0 && i % 150 === 0 && Date.now() - lastAsk > 15_000) {
+      const w = (shot.warmup ?? 0) / 30;
+      const summary = await page.evaluate(([a, b]) => (window as any).__rec.summary(a, b), [w + (i - 150) / 30, w + i / 30]);
+      if (summary) {
+        lastAsk = Date.now();
+        const r = await fetch(BASE + '/api/commentary', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ summary, voice: false }) }).then((x) => x.json()).catch(() => null);
+        if (r?.text) roasts.push({ t: +(i / 30).toFixed(3), text: r.text, source: r.source, summary });
+      }
+    }
     seen = log.length;
     await page.screenshot({ path: path.join(dir, `${String(i + 1).padStart(5, '0')}.jpg`), type: 'jpeg', quality: 92 });
     if (i % 60 === 0) process.stdout.write(`${shot.name} ${i}/${frames} (${((Date.now() - t0) / 1000).toFixed(0)} s)\n`);
@@ -145,6 +159,7 @@ async function runShot(page: Page, shot: Shot) {
   const mp4 = path.join(OUT, `${shot.name}.mp4`);
   execFileSync('ffmpeg', ['-loglevel', 'error', '-y', '-framerate', '30', '-i', path.join(dir, '%05d.jpg'), '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '18', mp4]);
   fs.writeFileSync(path.join(OUT, `${shot.name}.calls.json`), JSON.stringify(calls));
+  if (shot.roast) fs.writeFileSync(path.join(OUT, `${shot.name}.roasts.json`), JSON.stringify(roasts, null, 1));
   console.log('wrote', mp4, 'calls:', calls.map((c) => `${c.t}s ${c.text}`).join(', '));
 }
 

@@ -147,7 +147,7 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 .card .price { color: var(--gold); font-weight: 700; }
 table.lb { width: 100%; border-collapse: collapse; }
 table.lb td, table.lb th { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: left; }
-.clean #preview-wrap, .clean .hud-buttons { display: none !important; }
+.clean #preview-wrap, .clean .hud-buttons, .clean #hint { display: none !important; }
 
 @media (max-width: 640px) {
   .name { font-size: 12px; }

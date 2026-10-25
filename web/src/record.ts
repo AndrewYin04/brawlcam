@@ -4,6 +4,7 @@
 import { MatchView } from './game/view';
 import { LocalSession } from './game/session';
 import { GestureRecognizer, type GestureOutput, type LM } from '../../shared/gestures';
+import { summarize } from '../../shared/commentary';
 import { proceduralJoints } from '../../shared/animate';
 import { arenaRef, show, hooks } from './main';
 import type { Joints } from '../../shared/joints';
@@ -87,6 +88,7 @@ export async function initRecord() {
       document.getElementById('hud')!.classList.toggle('hidden', cfg.hud === false);
       session.start();
       t = 0;
+      hooks.events.length = 0; // this scene's events only (summary windows use scene time)
       forcedMove.clear();
       forcedBlock.clear();
       // Let the avatars load.
@@ -167,6 +169,11 @@ export async function initRecord() {
       f.x = x;
       f.z = z;
       if (kb != null) f.kb = kb;
+    },
+    /** The commentary summary (the text the game sends to Gemini) for this scene's events between t0 and t1 s. */
+    summary(t0: number, t1: number) {
+      const evs = (hooks.events as any[]).filter((e) => e.t >= t0 * 1000 && e.t < t1 * 1000);
+      return hooks.snapshot && evs.length ? summarize(evs as any, hooks.snapshot as any) : '';
     },
     /** Announcer calls played so far in this record-mode view (for mixing into the video's audio). */
     calls() {
