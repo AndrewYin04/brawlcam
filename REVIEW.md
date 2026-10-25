@@ -14,7 +14,7 @@ Real-webcam and real-phone check results, and change requests in priority order.
 2. **GitHub access.** Until the user approves the collaborator invite, keep pushing to the fork and update the PR; the planner merges from there.
 3. **Real webcam and phone checks** start once the user is at the laptop. Results will be posted here.
 
-## 2026-10-25 1:15 AM CDT: video review and graphics/motion requests (top priority until the 7:30 AM freeze)
+## 2026-10-25 about 12:55 AM CDT: video review and graphics/motion requests (top priority until the 7:30 AM freeze)
 
 PR #1 is merged into main (`4252871`). Keep pushing to the fork until the collaborator invite is approved; the planner will merge.
 
@@ -53,10 +53,10 @@ The planner watched demo-video-v1 frame by frame (21 frames across all 2:27). Wh
 
 Test the motion changes with the same clip-driven suite, and add screenshot or frame-strip evidence of the before and after look to `STATUS.md`.
 
-## 2026-10-25 1:30 AM CDT: HTTPS diagnosis, and a Smash-style look and real locomotion (overrides items 1 to 8 above where they conflict)
+## 2026-10-25 about 1:00 AM CDT: HTTPS diagnosis, and a Smash-style look and real locomotion (overrides items 1 to 8 above where they conflict)
 
 ### A. throwhands.tech HTTPS is still down (blocks the live demo URL)
-Verified by the planner at 1:25 AM:
+Verified by the planner at about 1:00 AM:
 - **DNS:** correct everywhere. Google, Cloudflare, and the laptop's own resolver all answer 144.202.71.213 for `throwhands.tech` and `www.throwhands.tech`.
 - **Port 80:** Caddy answers `http://throwhands.tech` with `308` to https, so it knows the name.
 - **Port 443:** the TLS handshake fails for both names (curl: "failed to receive handshake"; Chrome: ERR_CONNECTION_CLOSED). `https://144-202-71-213.sslip.io` works.
@@ -94,7 +94,7 @@ In the user's words: "the movements are super awkward. the people are drifting a
 ### C. Video v2
 Re-record after B. Show walking, running, punches with body rotation, and a Smash-style KO in the hook. Keep the 2 to 3 minute length and Meta's four-part structure.
 
-## 2026-10-25 1:40 AM CDT: review your own work, plus adversarial reviewers
+## 2026-10-25 about 1:05 AM CDT: review your own work, plus adversarial reviewers
 The user wants every graphics, motion, and video change self-reviewed and checked by independent adversarial reviewer agents as you iterate. This is now **spec section 11** (`git pull` and read it). In short:
 - capture frame strips at 10 fps, short clips, and foot-slide/drift measurements before and after each change
 - self-review against the 10-item checklist
@@ -102,4 +102,4 @@ The user wants every graphics, motion, and video change self-reviewed and checke
 - fix all high-severity findings and repeat until a round has none
 - log each round in `REVIEW-SELF.md`
 
-The planner's earlier findings (the 1:15 AM and 1:30 AM sections above) are the starting checklist. Run the first round on the current build before you change anything, so the before scores exist.
+The planner's earlier findings (the 12:55 AM and 1:00 AM sections above) are the starting checklist. Run the first round on the current build before you change anything, so the before scores exist.
