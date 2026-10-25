@@ -344,3 +344,52 @@ The user's concern about clamping the camera inside the cage: when the fighters 
    Record both through the section 11 "camera near the cage" scene (fighters in a corner, against the fence on the camera's side, and on the far side). Report the occlusion percentage, opponent visibility, and camera jumps (frame-to-frame camera movement over 0.3 m) for each in STATUS.md, with screenshots. The user picks the default after trying both.
 3. **Post material:** the padded posts render as solid black in the user's screenshot. Fix the material and lighting.
 4. The 2:35 AM items 2 (only as described in point 2 here), 3 (HUD), and 4 (commentator) still stand.
+
+## 2026-10-25 2:50 AM CDT: bug ("a big punch moves me backward"), then new moves (shoulder-throw super and grappling)
+Seen: 41cb160 (opt-in streams), STATUS at 2:45 AM. Good.
+
+### A. Bug: throwing a big punch moves the player backward (fix first)
+The user: "when you throw a punch im p sure the shoulder frames looks smaller and so the player moves backward when you try to swing a big punch."
+
+Likely mechanism, from the planner reading `shared/gestures.ts`. Confirm it with a repro; do not assume:
+- forward/back comes from the image shoulder width, divided by `cos(yaw)`, with yaw estimated from **world-landmark z**, MediaPipe's noisiest axis
+- the correction is clamped at `cos >= 0.5` (a 60° twist)
+- the movement gate only starts on the frame a strike is *detected*, which is its peak; the wind-up and torso twist before detection still feed `ratioS` and `leanS`, and the 0.15 s smoothing spreads them out
+- the punching shoulder moving forward may also shift `MS[2]`, which feeds `leanFwd`
+
+Fix process (rule 3): reproduce it first with a clip of someone throwing big hooks and straights while standing still (from the user's research recordings if available, or a downloaded clip). Assert `move` stays within the dead zone, then fix. Ideas to evaluate against the repro:
+- start the movement gate at strike **onset**: when wrist speed or arm extension starts rising past a low threshold, not at detection. Hold forward/back at its pre-strike value until about 0.35 s after the strike ends.
+- use a distance cue that ignores twisting alongside shoulder width: torso length in the image (shoulder center to hip center), or eye or ear spacing, weighted toward whichever is steadiest. Ignore shoulder width when |yaw| > 35°.
+- require forward/back intent to persist for about 0.2 s before it moves the fighter
+- keep the repro as a regression test, and add a "big punches while standing still" scene to the section 11 captures, with the metric "fighter displacement during strikes", target under 5 cm
+
+### B. New moves: grappling (clinch) and a Shoulder Throw super (the user's request; also in the user's original concept)
+**Design: Smash's triangle.** Guard beats strikes, grabs beat guard, strikes interrupt grabs. Grabs give guarding players a counter, which pairs with the new guard meter. Starting thresholds below; tune them on clips and the user's recordings.
+
+1. **Grab, entering the clinch** (no meter):
+   - **Gesture:** within 1.1 m of the target, both arms extend forward together (both extensions above about 0.75, within 0.25 s of each other), then both wrists pull back toward the chest (extension below 0.45, wrists closer than one shoulder width) within 0.5 s. This "reach and pull" differs from the energy blast, which is palms pushed forward and held.
+   - **Rules:** startup 0.3 s. A strike landing on the grabber during startup cancels the grab (strike beats grab). A guarding target is grabbed anyway (grab beats guard). Iron Wall is immune.
+2. **Clinch state:** both fighters lock at about 0.6 m for up to 3 s.
+   - **Grabber:** knees (the existing knee lift) deal 8 damage each, and short hooks deal normal damage.
+   - **Escape:** the held fighter pushes both palms forward (a "frame"), or steps or leans back hard (forward input below -0.6 for 0.3 s). After 3 s the clinch breaks on its own.
+   - **Visuals:** paired animation with arms around the neck and shoulders, driven by IK onto the other fighter's neck and shoulders.
+3. **Shoulder Throw super** (full super meter):
+   - **Gesture:** from the clinch or within 1 m, grab (both hands forward), then within 0.8 s twist the torso by 60° or more and hinge forward (shoulders drop by at least 15% of torso length). This mimics a judo shoulder throw.
+   - **Effect:** 25 damage. Guard cannot block it. Iron Wall stops it. A strike landing in its first 0.3 s cancels it.
+   - **Presentation:** a paired throw animation. The attacker turns their back and the target arcs over the attacker's shoulder onto the mat, with a heavy slam, mat dust, a camera shake, about 0.4 s of slow motion, and a stock commentary call ("SHOULDER THROW!").
+   - **Animation:** if the Quaternius animation library has no throw clips, build it procedurally: attach the target's root to the attacker's shoulder and drive an arc in about 0.6 s, with ragdoll-like limb lag.
+4. **Bots:** occasionally grab a guarding player and clinch, so the triangle shows up in practice and in the video.
+5. **Teaching:** add Grab and Shoulder Throw to the tutorial and the menu controls list.
+6. **Tests and review:**
+   - unit tests for grab detection versus energy blast versus guard (no cross-triggers on labeled clips), clinch escape, the triangle rules, and throw damage
+   - an e2e path: guard, get grabbed, get thrown
+   - clinch and throw scenes in the section 11 captures
+
+### Order (freeze 7:30 AM)
+1. Bug A
+2. Camera: cage fade and the two camera modes (2:45 AM)
+3. Commentator (2:35 AM item 4)
+4. Grab and clinch, then the Shoulder Throw
+5. HUD overlap (2:35 AM item 3)
+
+If B is not solid by about 6:45 AM, put it behind `?grapple=1` so the default build stays stable for the demo.
