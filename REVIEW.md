@@ -531,3 +531,22 @@ Items 3 (fists, gloves, guard shape: check whether the bare-handed look is real 
 The leak is the **live Gemini TTS lines** (`server/ai.ts:196`, `"You are a live fight commentator in a packed arena. Say this <mood>: <line>"` gets read aloud). The user has **not** heard it in the ElevenLabs stock calls. **Do not regenerate the stock calls**; the user likes them. Run the transcript check on them once, as a regression test only.
 
 Fix the Gemini request format, then verify with transcripts of about 30 live lines across all four moods: zero extra words. If no format reaches 0 leaks, voice live lines with ElevenLabs (low-latency model, within 50% of the remaining quota) or keep them caption-only.
+
+## 2026-10-25 4:10 AM CDT: grappling needs real-video evidence and visible animation (answers the STATUS 4:05 AM open question)
+The user asked whether grab detection was ever tested on real video, and whether there is a video of the resulting animation. Per STATUS: only false positives were tested on real clips (0 in 37); true positives only on synthetic motion; the paired clinch and throw animation is not done. Requests:
+
+1. **Real positive clips.** Find real footage of the grab and throw motions done roughly toward a camera, and download them as test fixtures (local only, never in the repo or video):
+   - judo **seoi-nage uchikomi**, solo or partner drills, for the throw (the reach, turn, and hinge)
+   - MMA or Muay Thai **clinch entry** drills (both hands reaching to the neck and pulling in) for the grab
+   - Label them with timestamps, and report grab and throw recall and precision in TESTING.md, plus jab, palm, and blast cross-triggers on those clips.
+
+   The user will also record grab and throw drills once drill mode has those prompts. **Add "GRAB" and "SHOULDER THROW" prompts to drill mode** (`?research=1&drills=1&grapple=1`).
+2. **The open question (a grab's reach reading as a jab or palm).** The planner's direction; validate on the real clips:
+   - A **jab is one arm.** If the other arm is already past about 50% extension and still rising when a jab would fire, hold the jab until the two-arm window (0.25 s) resolves. Fire a jab only if the second arm doesn't follow; fire nothing if it becomes a reach. Single-arm jabs stay instant.
+   - The **energy blast** must not fire from a grab's reach: require the palms to be held out at least 0.3 s, and cancel a pending blast if the pull-in pose appears.
+   - Measure jab latency before and after; it must not rise for single-arm jabs. Report cross-trigger rates.
+3. **Visible paired animation, then a video to watch:**
+   - **Clinch:** the grabber's hands on the opponent's neck and shoulders (IK targets on the opponent's bones), foreheads close, both fighters swaying together, and knees animated.
+   - **Shoulder Throw:** the attacker turns their back; the target arcs over the attacker's shoulder, lands on their back on the mat, then gets up. Show the slam, dust, and shake, with the "SHOULDER THROW!" call.
+   - Capture a **10 to 15 s clip of each** through the section 11 loop (clip-driven, real renderer). Publish them on the live site, for example `https://throwhands.tech/media/review/clinch.mp4` and `throw.mp4`, and link them in STATUS.md so the user can watch them.
+4. **Default on only after** real-clip recall reaches about 70% or more for grab and throw, with no added jab or blast misfires, and after the user has watched the clips. Until then it stays behind `?grapple=1`, and the demo video must not show grappling.
