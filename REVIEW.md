@@ -920,3 +920,9 @@ The user watched v3 with audio:
 - Run the section 11 video reviewer with audio checks (overlapping speech, freezes, abrupt cuts) before publishing.
 
 **Deadline: publish `demo-video-v4` (release plus site mirror) by 10:40 AM** and post the link in STATUS.md. If it isn't ready and checked by 10:40, stop. The planner and user will ship the fallback, and the 11:30 deadline is absolute.
+
+## 2026-10-25 10:54 AM CDT: LAST CHANCE: v5 = v4 with the NEW Shoulder Throw at 0:56–0:58. HARD cutoff 11:10 AM
+The user: at 0:56–0:58 of v4 the Shoulder Throw is still the old animation; the new one (3be1e9b, 564a602, e971110) is much better.
+- **Only change:** re-record that single throw shot with the current deployed throw animation, in record mode with the same framing and length, and splice it into v4 at exactly the same timestamps with the existing `make-v4` pipeline. **Change nothing else:** no voiceover, no music, and no other shots. Keep the "SHOULDER THROW → 25 DMG" callout and the "GRAPPLING (BETA)" caption.
+- **Checks before publishing:** `freezedetect` reports no new freezes, the duration matches v4 (2:35), and the audio is a copy of v4's.
+- **Publish as `demo-video-v5`** (release plus the site mirror `https://throwhands.tech/media/throwhands-demo-v5.mp4`) **by 11:10 AM**, and post the link in STATUS.md immediately. If it can't be done by 11:10, **stop**: v4 is already on YouTube and Devpost, and the hackathon deadline is 11:30 AM.
