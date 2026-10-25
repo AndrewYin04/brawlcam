@@ -34,9 +34,12 @@ export const GESTURE_CFG = {
   // hook
   hookVel: 1.7, // m/s lateral wrist velocity toward the midline
   hookElbowMax: 150, // small hooks keep the elbow bent; big ones (sweep >= hookSweep) may open it fully
-  hookSweep: 0.3, // m toward the midline: a big hook, whatever the elbow does (straights sweep <= 0.11 m)
-  hookTurnDeg: 35, // deg torso turn within the strike window ...
-  hookSweepWithTurn: 0.15, // ... with at least this sweep also makes a hook
+  // Tuned on drill sessions fda75d56 / 2dd3adbd and the shadowboxing clips: the user's big hooks sweep 0.68-1.08 m;
+  // straights sweep <= 0.11 m from a square stance, but crosses from a bladed stance sweep 0.29-0.41 m.
+  hookSweep: 0.45, // m toward the midline: a big hook, whatever the elbow does
+  hookTurnDeg: 35, // deg torso turn within the strike window (shoulder-depth yaw is noisy) ...
+  hookSweepWithTurn: 0.3, // ... with at least this sweep also makes a hook
+  twoArmRise: 0.25, // m: both wrists rising at least this (and within 2x of each other) is a two-arm move, not a strike
   bigUpRise: 0.4, // m wrist rise: a big uppercut (hooks rise <= 0.43 m, and less than they sweep)
   upOverSweep: 0.75, // a big uppercut rises at least this fraction of its sweep
   // uppercut
@@ -122,6 +125,11 @@ export const GRAPPLE_CFG = {
   // Pull: then both wrists come back to the chest, close together.
   pullExt: 0.45, // both extensions below this
   pullGap: 1.0, // wrists closer than this many shoulder widths
+  pullSyncReach: 0.12, // s: ... or, after a reach whose arms rose within this of each other (a one-two is ~0.2-0.3 s apart),
+  pullReachUp: 0.25, // m both wrists rose (reaching up for the neck; punches go forward), and
+  pullToGuard: 0.05, // both arms back to within this of the guard the reach started from,
+  pullFromPeak: 0.15, // having come back at least this much from the reach,
+  pullGapVsGuard: 1.4, // with the hands within this multiple of the guard's spacing
   reachMaxHold: 0.5, // s: arms held out longer than this before coming back is a push-and-hold (energy blast), not a grab
   pullWindow: 0.5, // s from the arms starting back (first arm dropping below reachExt) to the pulled-in pose
   pullHold: 0.06, // s the pulled-in pose must persist (single-frame tracking glitches are not grabs)
@@ -169,6 +177,8 @@ export interface GrappleFeatures {
   yaw: number; // torso yaw, radians
   shH: number; // shoulder-centre height above the hip centre, meters
   torso: number; // shoulder-centre to hip-centre distance, meters
+  yL?: number; // wrist height relative to the shoulder line, meters (up = +)
+  yR?: number;
 }
 
 export class GrappleDetector {
@@ -176,11 +186,13 @@ export class GrappleDetector {
   private riseAt = { L: -9, R: -9 };
   private wasExt = { L: false, R: false };
   private wasReach = { L: false, R: false };
-  private hist: { t: number; L: number; R: number }[] = [];
+  private hist: { t: number; L: number; R: number; gap: number; yL: number; yR: number }[] = [];
   /** Time both arms were last out together (the later arm's rise), with the torso pose at that moment. */
-  private reach: { t: number; yaw: number; shH: number; torso: number; pulled: boolean; thrown: boolean; pullSince: number; throwSince: number; releasedAt: number } | null = null;
+  private reach: { t: number; yaw: number; shH: number; torso: number; pulled: boolean; thrown: boolean; pullSince: number; throwSince: number; releasedAt: number; loL: number; loR: number; guardGap: number; sync: number; peakL: number; peakR: number; yLoL: number; yLoR: number; upL: number; upR: number } | null = null;
   private lastGrab = -9;
   private lastThrow = -9;
+  /** Features of the last grab (tuning tools). */
+  lastGrabInfo: Record<string, number | boolean> | null = null;
 
   reset() {
     this.riseAt = { L: -9, R: -9 };
@@ -218,7 +230,7 @@ export class GrappleDetector {
   update(f: GrappleFeatures): ('grab' | 'throw')[] {
     const c = this.cfg;
     const out: ('grab' | 'throw')[] = [];
-    this.hist.push({ t: f.t, L: f.extL, R: f.extR });
+    this.hist.push({ t: f.t, L: f.extL, R: f.extR, gap: f.gap / Math.max(0.15, f.sw), yL: f.yL ?? 0, yR: f.yR ?? 0 });
     while (this.hist.length && f.t - this.hist[0].t > c.reachRiseWindow) this.hist.shift();
     for (const h of ['L', 'R'] as const) {
       const e = h === 'L' ? f.extL : f.extR;
@@ -227,17 +239,36 @@ export class GrappleDetector {
       let lo = e;
       for (const x of this.hist) lo = Math.min(lo, x[h]);
       const reaching = ext && e - lo >= c.reachRise;
-      if (reaching && !this.wasReach[h]) this.riseAt[h] = f.t;
+      // A fresh rise counts even if the arm never dropped below reachExt: a low guard can sit right at reachExt (drill
+      // session 2dd3adbd, ext 0.78-0.81), which left that arm "reached" from an old rise and never in sync with the other.
+      if (reaching && (!this.wasReach[h] || f.t - this.riseAt[h] > c.reachRiseWindow)) this.riseAt[h] = f.t;
       this.wasReach[h] = reaching || (this.wasReach[h] && ext); // stays "reached" while the arm stays out
       this.wasExt[h] = ext;
     }
     // Both arms out now, having risen within reachSync of each other: a (new) reach.
     if (this.wasReach.L && this.wasReach.R && Math.abs(this.riseAt.L - this.riseAt.R) <= c.reachSync) {
       const at = Math.max(this.riseAt.L, this.riseAt.R);
-      if (!this.reach || this.reach.t !== at) this.reach = { t: at, yaw: f.yaw, shH: f.shH, torso: f.torso, pulled: false, thrown: false, pullSince: -1, throwSince: -1, releasedAt: -1 };
+      if (!this.reach || this.reach.t !== at) {
+        // The guard the reach started from (the arms' recent lows): the pull is a return to it.
+        let loL = f.extL, loR = f.extR, guardGap = f.gap / Math.max(0.15, f.sw), lo = Infinity, yLoL = f.yL ?? 0, yLoR = f.yR ?? 0;
+        for (const x of this.hist) {
+          loL = Math.min(loL, x.L);
+          loR = Math.min(loR, x.R);
+          yLoL = Math.min(yLoL, x.yL);
+          yLoR = Math.min(yLoR, x.yR);
+          if (x.L + x.R < lo) (lo = x.L + x.R), (guardGap = x.gap);
+        }
+        this.reach = { t: at, yaw: f.yaw, shH: f.shH, torso: f.torso, pulled: false, thrown: false, pullSince: -1, throwSince: -1, releasedAt: -1, loL, loR, guardGap, sync: Math.abs(this.riseAt.L - this.riseAt.R), peakL: f.extL, peakR: f.extR, yLoL, yLoR, upL: (f.yL ?? 0) - yLoL, upR: (f.yR ?? 0) - yLoR };
+      }
     }
     const r = this.reach;
     if (!r) return out;
+    if (r.releasedAt < 0) {
+      r.peakL = Math.max(r.peakL, f.extL);
+      r.peakR = Math.max(r.peakR, f.extR);
+      r.upL = Math.max(r.upL, (f.yL ?? 0) - r.yLoL);
+      r.upR = Math.max(r.upR, (f.yR ?? 0) - r.yLoR);
+    }
     const age = f.t - r.t;
     if (r.releasedAt < 0 && !(this.wasExt.L && this.wasExt.R)) r.releasedAt = f.t;
     const grabLive = r.releasedAt >= 0 ? r.releasedAt - r.t <= c.reachMaxHold && f.t - r.releasedAt <= c.pullWindow : age <= c.reachMaxHold;
@@ -259,12 +290,20 @@ export class GrappleDetector {
       } else r.throwSince = -1;
     }
     if (!r.pulled && !r.thrown && grabLive && r.releasedAt >= 0 && f.t - this.lastGrab >= c.grabRefractory) {
-      if (f.extL < c.pullExt && f.extR < c.pullExt && f.gap < c.pullGap * f.sw && turn <= c.pullMaxTurnDeg) {
+      // Pulled in: both arms back to the chest; or, after a reach where both arms went out together (risen within
+      // pullSyncReach of each other, unlike a one-two), both arms brought well back from it to the guard it started
+      // from. A low guard sits at ext ~0.75, hands ~1.3 shoulder widths apart; that player reaches overhead and pulls
+      // down to it (drill session 2dd3adbd), never reaching pullExt.
+      const chest = f.extL < c.pullExt && f.extR < c.pullExt && f.gap < c.pullGap * f.sw;
+      const toGuard = (e: number, lo: number, pk: number) => e <= lo + c.pullToGuard && pk - e >= c.pullFromPeak;
+      const guardPull = r.sync <= c.pullSyncReach && Math.min(r.upL, r.upR) >= c.pullReachUp && toGuard(f.extL, r.loL, r.peakL) && toGuard(f.extR, r.loR, r.peakR) && f.gap < Math.max(c.pullGap, r.guardGap * c.pullGapVsGuard) * f.sw;
+      if ((chest || guardPull) && turn <= c.pullMaxTurnDeg) {
         if (r.pullSince < 0) r.pullSince = f.t;
         if (f.t - r.pullSince >= c.pullHold) {
           r.pulled = true;
           this.lastGrab = f.t;
           out.push('grab');
+          this.lastGrabInfo = { t: f.t, chest, sync: r.sync, upL: r.upL, upR: r.upR, riseL: r.peakL - r.loL, riseR: r.peakR - r.loR, peakL: r.peakL, peakR: r.peakR, loL: r.loL, loR: r.loR, gap: f.gap / Math.max(0.15, f.sw), guardGap: r.guardGap, reachToPull: f.t - r.t };
         }
       } else r.pullSince = -1;
     }
@@ -540,14 +579,17 @@ export class GestureRecognizer {
       // Big hooks sweep ~1 m toward the midline with a 70-120 deg torso turn; straights sweep <= 0.11 m and turn <= 10 deg;
       // big uppercuts raise the wrist 0.5-0.85 m. Small strikes keep the kind their peak gave them.
       if (candidates.some((c) => c.hand === hi.h)) {
-        let uMin = Infinity, yMin = Infinity, yawMin = Infinity, yawMax = -Infinity;
+        let uMin = Infinity, yMin = Infinity, yawMin = Infinity, yawMax = -Infinity, yaw0: number | null = null;
         const tEnd = F[n - 1].t;
         for (const f of F) {
           if (tEnd - f.t > this.cfg.riseWindow + 0.05) continue;
           uMin = Math.min(uMin, f.u);
           yMin = Math.min(yMin, f.y);
-          yawMin = Math.min(yawMin, f.yaw);
-          yawMax = Math.max(yawMax, f.yaw);
+          // Turn relative to the window's first frame, wrapped (yaw crossing +-180 deg is a small turn, not 358 deg).
+          if (yaw0 == null) yaw0 = f.yaw;
+          const dy = wrapRad(f.yaw - yaw0);
+          yawMin = Math.min(yawMin, dy);
+          yawMax = Math.max(yawMax, dy);
         }
         let uMax = -Infinity, yMax = -Infinity, seenUMin = false, seenYMin = false;
         for (const f of F) {
@@ -634,7 +676,7 @@ export class GestureRecognizer {
     // features, so running it before strike emission does not change its output; its actions are appended at the end.
     const midHipG = mid(P[J.lHip], P[J.rHip]);
     const yawG = Math.atan2(-(lS[2] - rS[2]), lS[0] - rS[0]);
-    const grappleActs = this.grapple.update({ t, extL: hL.ext, extR: hR.ext, gap: len(sub(lW, rW)), sw: SW, yaw: yawG, shH: MS[1] - midHipG[1], torso: len(sub(MS, midHipG)) });
+    const grappleActs = this.grapple.update({ t, extL: hL.ext, extR: hR.ext, gap: len(sub(lW, rW)), sw: SW, yaw: yawG, shH: MS[1] - midHipG[1], torso: len(sub(MS, midHipG)), yL: lW[1] - MS[1], yR: rW[1] - MS[1] });
     const nBefore = out.actions.length;
     const held: (Action & { t: number })[] = []; // strikes taken out of the stream this frame (they keep the hand refractory)
     const palmShape = () => wristsGap < this.cfg.palmMaxGap && ry(lW) < noseY - 0.05 && ry(rW) < noseY - 0.05;
@@ -651,6 +693,8 @@ export class GestureRecognizer {
     // past jabHoldProgress of a reach and still extending, hold it (resolved below); if both arms are already out
     // together in a fresh reach, it is part of that reach.
     const emitSingle = (a: Action & { t: number }) => {
+      // Both wrists rising together (a two-arm reach up to the head, drill session 2dd3adbd grab reps) is not one strike.
+      if ((a.kind === 'jab' || a.kind === 'uppercut' || a.kind === 'hook') && this.bothRising()) return twoArm(a, 'both arms rising together');
       if (a.kind === 'jab' && (a.hand === 'L' || a.hand === 'R')) {
         const o = a.hand === 'L' ? 'R' : 'L';
         if (bothOut(t - gc.reachSync)) return twoArm(a, 'both arms out in a reach');
@@ -909,6 +953,24 @@ export class GestureRecognizer {
 
     out.debug = { yaw, lean, ratio, stepFwd, leanFwd, leanZ: leanZ - (this.calib.leanZ ?? 0), size: this.sizeS, spot: this.sizeBase ?? 0, quiet: t < this.moveQuietUntil ? 1 : 0, fwdRaw: fwd, strafeRaw: strafe, torso: torsoImgDbg, lExt: handInfo[0].ext, rExt: handInfo[1].ext, lEl: handInfo[0].elbow, rEl: handInfo[1].elbow, lSp: handInfo[0].speed, rSp: handInfo[1].speed };
     return out;
+  }
+
+  /** Both wrists rose by a similar, large amount within the strike window (a two-arm move). */
+  private bothRising() {
+    const rise = (h: 'L' | 'R') => {
+      const F = this.feat[h];
+      if (F.length < 2) return 0;
+      const tEnd = F[F.length - 1].t;
+      let lo = Infinity, best = 0;
+      for (const f of F) {
+        if (tEnd - f.t > this.cfg.riseWindow + 0.05) continue;
+        lo = Math.min(lo, f.y);
+        best = Math.max(best, f.y - lo);
+      }
+      return best;
+    };
+    const a = rise('L'), b = rise('R');
+    return Math.min(a, b) >= this.cfg.twoArmRise && Math.min(a, b) >= 0.5 * Math.max(a, b);
   }
 
   private flushPending(t: number, out: GestureOutput, force: boolean) {
