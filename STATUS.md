@@ -1,6 +1,39 @@
 # Status (written by the implementation agent)
 
-Last update: Sun Oct 25, 7:50 AM CDT. **Deployed build: `4867e3f`** on https://throwhands.tech (deployed 7:43 AM).
+Last update: Sun Oct 25, 8:18 AM CDT. **Deployed build: `8feb4b4`** on https://throwhands.tech (deployed 8:14 AM).
+
+## 8:12 AM: demo-video-v3 published (REVIEW.md 7:30, 7:36 and 7:45 AM)
+- **Release:** https://github.com/AndrewYin04/throwhands/releases/tag/demo-video-v3 (`throwhands-demo-v3.mp4`, 2:35, 1080p30, −14.8 LUFS, −1.4 dBTP). Mirror: https://throwhands.tech/media/throwhands-demo-v3.mp4.
+- **Fallback:** v2 is unchanged at its release and https://throwhands.tech/media/throwhands-demo-v2.mp4.
+- **How it's built:** `video/v2/make-v3.ts` takes the **published v2 file itself** and swaps only the listed pieces, cut at v2's detected shot boundaries. The approved edit, the voiceover and the **Gemini roast sections are untouched**: same roasts, timing, captions and voicing.
+- **What changed, per item** (v3 timestamps):
+  1. **Game calls muted under the voiceover, 0:40–1:16.8** (v2's 0:40–1:09, shifted by the new moves section). The audio is remixed from the same stems by v2's own mixer, minus the calls in that window. The roast voices at 1:20–1:28 stay.
+  2. **Shaky shots re-recorded with `cam=free`, same lengths, user on the pink-shorts fighter:**
+     - 0:18.6–0:21.5 and 0:21.5–0:28.2: online 1v1 split screen
+     - 1:24.1–1:28.4: under the second Gemini roast; your recorded motion, with an empty meter so the fight stays mid-cage. The first free take drifted to the fence, where the camera sat outside the cage.
+     - 1:31.0–1:36.0: online split screen
+  3. **No voiceover re-recording.** The only new ElevenLabs line is the moves line below.
+  4. **Store** (7:36 AM): 2:24.2–2:31.1 is the new store, which shows one fighter switching from Crimson Comet to Azure Storm.
+  5. **Moves section** (7:45 AM), inserted at 0:50.6–0:58.5 right after the guard break:
+     - kick, with "KICK → 12-18 DMG"
+     - grab into the clinch with knees, driven by your own recorded grab rep (session 2, rep 1), with your webcam inset and "GRAB + CLINCH → KNEES 8 DMG"
+     - Shoulder Throw (current animation), with "SHOULDER THROW → 25 DMG"
+     - one new voiceover line: "Kick when your legs are in frame. Close the distance, grab with both hands and drive knees in the clinch, or load up the Shoulder Throw."
+     - **ElevenLabs: 136 characters.** The transcript check passed with 0 extra words, and its loudness (−23.8 LUFS) matches the other lines.
+     - The grappling shots carry a small "GRAPPLING (BETA)" caption. Grappling is still behind `?grapple=1`; see below.
+     - Damage numbers are from `shared/sim.ts`: kick 12–18, knee 8, throw 25.
+- **Throw animation:** the fix is in progress, due 9:20 AM. If it passes review by 9:30, I'll re-render the throw shot and replace the asset.
+
+## 7:59–8:14 AM: deployed (bug fixes and the allowed post-freeze items)
+- **Store (`bb926ad`):** each skin tile is a real render of the fighter in that skin (pre-rendered WebP stills; hovering or tapping plays a turntable). The equipped skin is marked. The store e2e passes on the live site.
+- **Bug fix: slow-3G first load (`486d2c3`).** About 77 announcer and crowd sounds started downloading with the page and starved the pose and fighter models, so the loading bar sat at 0%. They now load after the models. Live: `SLOW3G progress % [0,1,1,2,2,3]`, menu after 184 s, PASS.
+- **Bug fix: local 2-player (`486d2c3`).** A person who stepped in first always became player 1, even standing on the right (SPEC: left person = fighter 1). Players are now assigned by their side of the frame. A new unit test and a new e2e cover it; all 4 local2p e2e tests pass live.
+- **Mirror e2e:** it failed only under machine load from video rendering (first GPU pose detection 5.7 s). It passed 5/5 on an idle machine; no code change.
+- **Grab tuning (`8feb4b4`), behind `?grapple=1` only.** There's a new `grappleEnabled` recognizer flag. With grappling off, all strike and movement replays are byte-identical. With it on, two extra rules apply: a strike right after a grab is dropped, and one arm of a two-arm reach is dropped.
+  - **Your sessions:** session 2 grabs 4/4, with clean reps going 2/4 → 3/4. Session 3 grabs 3/4, with 1/4 reading as a strike instead. In that rep your grab lands 3.3 s after the prompt, outside the rep window.
+  - **Target not met:** the ≥ 90% / ≤ 5% target is not met on session 3. Four reps per session is too few to show 90%, and the new **grab-only drill** (`?research=1&grapple=1&drills=grab`, 8 reps) is there to collect more.
+  - **False grabs:** 0 on the 37 real clips. Labeled-clip strikes with grappling on: unchanged true positives and misses, with false jabs going from 1 to 0.
+- **Note:** some earlier grab-related strike rules from 4:10–6:30 AM run with grappling off: the jab hold, the blast hold (palms must be held 0.3 s), and the two-arm-rise drop. Gating them now would change default-build strike behavior after the freeze, so I left them as they are.
 
 ## 7:43 AM: `cam=free` is the default camera (REVIEW.md 7:16 AM)
 - **Timing:** it shipped at 7:43 AM, 13 minutes after the freeze, which the user's 7:16 AM request allows. Builds before it ran under the freeze: `b900939` at 7:13 (record-mode summary hook, tips hidden in record mode) and `ee43135` at 7:18 (Gemini 3.1-flash-lite first).
