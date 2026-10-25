@@ -456,3 +456,31 @@ Session `ee6f97a0…` (Tiger `research_frames`; the user also has the local `.we
 The user confirmed they **were moving** during session `ee6f97a0` (stepping left, right, forward and back, and strafing). So the "254 of 534 frames nonzero between strikes" figure is mostly real movement, **not** evidence of bug A. Don't use this session as the bug A repro. The only bug-relevant signal in it is the frames within 0.6 s of strikes (20 of 551 nonzero, 9 backward, minimum -1.00), and those may include intentional steps.
 
 **A clean repro still needs the "big punches while standing still" drill.** Ship the minimal drill mode (stand still, big punches standing still, and movement) as the next item, so the user can record it. The 6.9 fps pose-rate finding (item 1 of the 3:08 AM note) still stands and is high priority.
+
+## 2026-10-25 3:15 AM CDT: the user's test of 83ba7df (commentator and crowd)
+1. **"i dont hear it anymore"**: the user hears no commentator at all. Checked so far:
+   - the user's Chrome has `throwhands.mute = 0` and no saved voice volume (default 0.9); the user set crowd to 0.1
+   - the server is healthy (`/api/health`: geminiCalls 7, gemini429 0, tts429 0), and `/calls/big_hit_0.mp3` serves 200 audio/mpeg; 41 call files are in `web/public/calls`
+
+   So it is a client playback problem, or the gates are too strict. Reproduce in a real browser, not only headless, and log for one practice match:
+   - `AudioContext.state`, and whether `resume()` runs on the first user click on the menu or in the match
+   - the voice bus gain
+   - `announcer.log` (which calls fired)
+   - `commentaryLog` with its `spoken` values (`tts`, `none`, `muted`)
+   - whether `loadBuffer` and `playVoiceBuffer` succeed
+
+   **Expected:** a round-start call ("ROUND ONE, FIGHT!") is always heard, and a typical 60 s practice match has at least 4 spoken lines. Add a Playwright check: the announcer log has a round-start entry, the AudioContext is `running`, and the voice bus gain is above 0.
+   - **AI lines:** the user expected live commentary too. Voice the AI lines whenever no stock call played in the last 3 s and fewer than 8 lines were spoken in the last minute; today they are mostly captions.
+2. **"the audience crowd noise sounds like wind blowing / white noise than human noise."** The synthesized noise crowd isn't working. Replace it with **real crowd audio**:
+   - **Preferred:** ElevenLabs sound effects (text to sound effects), pre-rendered once:
+     - an arena crowd bed loop (30 s, seamless, murmur and chatter)
+     - 3 or 4 big cheers or roars
+     - 2 "ooooh"s for blocked heavy hits
+     - a gasp for a guard break
+     - a building chant for low HP
+     - a boo for a whiff streak (optional)
+
+     Check the current API and its credit cost first: 1,309 of 10,000 characters are used. Keep total usage under 50% of what remains, and record it in STATUS.md.
+   - **Fallback:** CC0 recordings from Freesound, verifying each license and crediting it in the README.
+   - **Mix:** duck the crowd under the commentator's voice, about -8 dB while a line plays, so it never covers a call. Keep the separate volume sliders.
+   - **Review:** add a review-loop audio check: record 60 s of match audio, and have reviewers rate "crowd sounds like people" and "commentary audible over crowd" from 1 to 5.
