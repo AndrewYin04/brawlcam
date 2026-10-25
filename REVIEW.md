@@ -128,3 +128,20 @@ What to build, in priority order:
    - block, shield, and super shown only while active, as a glow or outline
 6. **Rules and HUD:** keep the current 1v1 rules (HP bars, best of 3) and Brawl rules (knockback %, ring-outs, KOs). Restyle the HUD in a bold Smash-like way: character portrait, big numbers, and a damage percent in Brawl. Don't change what it tracks.
 7. Keep `?classic` working until the new look passes the full suite and the section 11 review loop.
+
+## 2026-10-25 1:15 AM CDT: the user likes the floating stage with knock-off edges; make it central in every mode
+This refines items 4 and 6 of the 1:12 AM decision. The camera stays 3D, behind the player's fighter.
+- **One stage for every mode** (practice, local 2-player, online 1v1, Brawl): a floating platform high in the sky, with clouds and a stylized city far below, no ropes, and a glowing edge. The edge reads as dangerous: a warning glow when a fighter is within about 1 m of it, and a camera nudge toward the drop.
+- **Ring-outs in 1v1 too:**
+  - Keep HP bars and best of 3, but add knockback that grows with damage taken, the way Smash's percent does: heavy hits (super uppercut, energy blast, the third hit of a combo) push the target back farther the more damage they have taken.
+  - A fighter knocked past the edge falls, with a KO flash, a streak, and the camera tracking the fall for about 0.5 s. That loses them the round immediately, the same as reaching 0 HP.
+  - The HUD shows HP plus a small knockback percent under each bar.
+- **Brawl:** unchanged rules (knockback %, ring-outs, KO count). It just uses the new sky stage.
+- **Recovery:** a fighter pushed to the edge without falling teeters with flailing arms (an animation), so near-misses read clearly.
+- **Tests:** add 1v1 ring-out paths to `tests/e2e` and `TESTING.md`:
+  - a ring-out ends the round for both clients
+  - a fighter at the edge survives a light hit
+  - knockback distance grows with damage taken (assert the numbers)
+
+  Re-run the full suite and the section 11 review loop.
+- **Video v2:** show a ring-out off the floating stage. It is the strongest Smash-like moment.
