@@ -6,6 +6,7 @@
 // Markers: Space = "I did a move and it did not register", F = "it fired a move I did not do",
 // 1..9 = "I just did move N" (see MOVES).
 import type { PoseInput } from './input/players';
+import { GRAPPLE } from './flags';
 
 export const MOVES = ['jab', 'hook', 'uppercut', 'block', 'xshield', 'palm', 'kick', 'step_side', 'step_fwd_back'];
 type Line = { t: number; at: number; world?: number[][]; image?: number[][]; actions?: { kind: string; hand: string; speed: number }[]; move?: [number, number]; blocking?: boolean; xshield?: boolean; marker?: string; event?: unknown };
@@ -25,6 +26,8 @@ class Research {
   frameListener: ((t: number, people: any[], outs: any[]) => void) | null = null;
   /** Guided drills requested on the consent screen (or ?drills=1). */
   drills = typeof location !== 'undefined' && new URLSearchParams(location.search).has('drills');
+  /** Which drills: the full script, or the grab-only drill (?drills=grab, or "Grab drill" on the consent screen; ?grapple=1 only). */
+  drillSet: 'all' | 'grab' = typeof location !== 'undefined' && GRAPPLE && new URLSearchParams(location.search).get('drills') === 'grab' ? 'grab' : 'all';
   setLabel(label: string | null, rep: number) {
     this.label = label;
     this.rep = rep;
@@ -57,13 +60,17 @@ class Research {
         </ul>
         <label style="display:flex;gap:8px;align-items:center;margin:12px 0"><input type="checkbox" id="rc-ok" /> I agree to record this session as described.</label>
         <label style="display:flex;gap:8px;align-items:center;margin:4px 0 12px"><input type="checkbox" id="rc-video" checked /> Also save the camera video on this device</label>
-        <div class="row"><button class="btn primary" id="rc-start" disabled>Start recording</button><button class="btn" id="rc-drills" disabled>Guided drills (about 3 minutes)</button><button class="btn ghost" id="rc-no">No thanks (play normally)</button></div>
+        <div class="row"><button class="btn primary" id="rc-start" disabled>Start recording</button><button class="btn" id="rc-drills" disabled>Guided drills (about 3 minutes)</button>${GRAPPLE ? '<button class="btn" id="rc-grab" disabled>Grab drill (8 grabs)</button>' : ''}<button class="btn ghost" id="rc-no">No thanks (play normally)</button></div>
       </div>`;
       document.body.appendChild(el);
       const ok = el.querySelector<HTMLInputElement>('#rc-ok')!;
       const start = el.querySelector<HTMLButtonElement>('#rc-start')!;
       const drillsBtn = el.querySelector<HTMLButtonElement>('#rc-drills')!;
-      ok.onchange = () => (start.disabled = drillsBtn.disabled = !ok.checked);
+      const grabBtn = el.querySelector<HTMLButtonElement>('#rc-grab');
+      ok.onchange = () => {
+        start.disabled = drillsBtn.disabled = !ok.checked;
+        if (grabBtn) grabBtn.disabled = !ok.checked;
+      };
       const go = (drills: boolean) => {
         if (!ok.checked) return;
         this.saveVideo = el.querySelector<HTMLInputElement>('#rc-video')!.checked;
@@ -74,7 +81,15 @@ class Research {
         resolve(true);
       };
       start.onclick = () => go(false);
-      drillsBtn.onclick = () => go(true);
+      drillsBtn.onclick = () => {
+        this.drillSet = 'all';
+        go(true);
+      };
+      if (grabBtn)
+        grabBtn.onclick = () => {
+          this.drillSet = 'grab';
+          go(true);
+        };
       el.querySelector<HTMLButtonElement>('#rc-no')!.onclick = () => {
         el.remove();
         this.enabled = false;

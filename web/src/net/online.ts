@@ -318,6 +318,7 @@ async function onMatchStart(mode: string) {
   if (isFighter) {
     const ok = await ensureCamera(1);
     if (!ok) return;
+    getPose()?.setGrapple(false); // online rooms have no grappling
   }
   const s = new OnlineSession(conn, isFighter ? [conn.slot] : [], mode === 'brawl' ? 'brawl' : 'duel');
   conn.session = s;

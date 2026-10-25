@@ -4,6 +4,7 @@
 // standing still (bug A), movement in each direction. Results per section, a summary, then the files save.
 import type { PoseInput } from './input/players';
 import { research } from './research';
+import { GRAPPLE } from './flags';
 
 type Rep = { label: string; text: string; expect: { kind: string; hand?: 'L' | 'R' } | { dir: 'fwd' | 'back' | 'left' | 'right' } };
 type Section = { name: string; note: string; still?: number; reps?: Rep[] };
@@ -16,8 +17,18 @@ const shuffle = <T,>(a: T[]) => {
   return a;
 };
 const times = (n: number, r: Rep) => Array.from({ length: n }, () => r);
+const GRAB_REP: Rep = { label: 'grab', text: 'GRAB: REACH BOTH ARMS, PULL IN', expect: { kind: 'grab' } };
+
+/**
+ * Grab-only drill (REVIEW.md 6:35 AM; grappling beta only): 8 grab reps labeled 'grab', for measuring grab recall and
+ * grabs misread as strikes on a new session. ?research=1&grapple=1&drills=grab, or "Grab drill" on the consent screen.
+ */
+export function grabDrill(): Section {
+  return { name: 'Grab drill (beta)', note: 'Reach both arms toward the camera, then pull them in to your chest. Back to your guard between reps.', reps: times(8, GRAB_REP) };
+}
 
 export function drillScript(): Section[] {
+  if (GRAPPLE && research.drillSet === 'grab') return [grabDrill()];
   return [
     { name: 'Stand still', note: 'Guard up, feet planted. Ground truth for "no movement".', still: 20 },
     {
@@ -30,13 +41,13 @@ export function drillScript(): Section[] {
         ...times(3, { label: 'uppercut_big', text: 'THROW AN UPPERCUT', expect: { kind: 'uppercut' } }),
       ]),
     },
-    ...(new URLSearchParams(location.search).has('grapple')
+    ...(GRAPPLE
       ? [
           {
             name: 'Grab and Shoulder Throw (beta)',
             note: 'Grab: reach both arms forward, then pull them in to your chest. Throw: reach, then twist and bend forward.',
             reps: shuffle([
-              ...times(4, { label: 'grab', text: 'GRAB: REACH BOTH ARMS, PULL IN', expect: { kind: 'grab' } }),
+              ...times(4, GRAB_REP),
               ...times(4, { label: 'throw', text: 'SHOULDER THROW: REACH, TWIST, BEND', expect: { kind: 'throw' } }),
             ]),
           } as Section,
@@ -170,7 +181,7 @@ export async function runDrills(pose: PoseInput, onDone: () => void) {
       continue;
     }
     const cm = Math.round(drift * 100);
-    const line = sec.still ? `stood still 20 s · movement input ${cm} cm` : sec.name.startsWith('Big') ? `${asked} asked · ${hit} detected · ${extra} extra · you drifted ${cm} cm` : `${asked} asked · ${hit} detected`;
+    const line = sec.still ? `stood still 20 s · movement input ${cm} cm` : sec.name.startsWith('Big') ? `${asked} asked · ${hit} detected · ${extra} extra · you drifted ${cm} cm` : sec.name.startsWith('Grab drill') ? `${asked} asked · ${hit} detected · ${extra} extra` : `${asked} asked · ${hit} detected`;
     $('drill-res').textContent = line;
     summary.push({ section: sec.name, asked, hit, extra, drift: cm });
     results[sec.name] = { asked, hit, extra };

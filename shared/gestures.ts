@@ -173,6 +173,21 @@ export const GRAPPLE_CFG = {
   blastHold: 0.3, // s
   blastHoldExt: 0.75, // a held palm push measures ~0.85-0.9 on palmpush_02; the guard sits ~0.65-0.75
   blastHoldFwd: 0.7, // wrists in front of their shoulders by this fraction of arm length (held push ~0.8, guard ~0.6)
+  // ---- Grapple-only strike rules (GestureRecognizer.grappleEnabled; REVIEW.md 6:35 / 6:40 AM). With grappling off none
+  // of these run, so the default recognizer's output is unchanged. Tuned on drill session ea6e2541 (grab reps 1, 3, 4, 8);
+  // 2dd3adbd held out.
+  // A strike whose arm and the other arm rose into a reach within this of each other (GrappleDetector reach sync) while
+  // both arms are still out is one arm of a two-arm reach (a grab's reach, or its hold after the pull), not a strike.
+  // A one-two's punches rise 0.2-0.3 s apart (pullSyncReach), so they are not affected.
+  gSyncReach: 0.12,
+  // ... and the other arm's elbow is at least this open (a jab's rear hand drifting forward stays bent, ~100 deg on
+  // jab_01; holdElbowMin).
+  gSyncElbowMin: 105,
+  // ... and the torso turned less than this within the strike window (GESTURE_CFG.hookTurnDeg; a grab is square).
+  gSyncMaxTurnDeg: 35, // (50 dropped a real big hook, ea6e2541 hook_L_big rep 14)
+  // s after a grab: the follow-through (arms going back out to hold the opponent, re-squaring) is not a strike. The sim
+  // ignores strikes during the 0.3 s grab startup and smothers jabs in the clinch anyway.
+  gPostGrab: 0.6,
 };
 
 export interface GrappleFeatures {
@@ -236,6 +251,16 @@ export class GrappleDetector {
   /** The two arms formed a reach at or after time t0 and are both still out. */
   reachSince(t0: number): boolean {
     return !!this.reach && this.reach.t >= t0 && this.reach.out;
+  }
+
+  /** Like reachSince, and the two arms rose within maxSync of each other (grapple-only strike rule). */
+  syncReachSince(t0: number, maxSync: number): boolean {
+    return this.reachSince(t0) && this.reach!.sync <= maxSync;
+  }
+
+  /** Time of the last grab this detector emitted (-9 before any). */
+  get lastGrabAt(): number {
+    return this.lastGrab;
   }
 
   /** Extension arm h must pass to count as reaching (given its recent low). */
@@ -445,6 +470,12 @@ export class GestureRecognizer {
   debugLog: string[] | null = null;
   /** Grab / shoulder-throw detection (additive: runs last and only appends actions). */
   grapple = new GrappleDetector();
+  /**
+   * Grappling is on for this player (the app sets it with SimConfig.grapple, ?grapple=1). It enables the grapple-only
+   * strike rules (GRAPPLE_CFG.g*) that keep a grab's two-arm reach and follow-through from firing strikes. Off (default):
+   * none of those rules run and the output is exactly what it was without them.
+   */
+  grappleEnabled = false;
 
   /** Start (or restart) the 3-second guard calibration. */
   beginCalibration() {
@@ -726,6 +757,7 @@ export class GestureRecognizer {
     const yawG = Math.atan2(-(lS[2] - rS[2]), lS[0] - rS[0]);
     const grappleActs = this.grapple.update({ t, extL: hL.ext, extR: hR.ext, gap: len(sub(lW, rW)), sw: SW, yaw: yawG, shH: MS[1] - midHipG[1], torso: len(sub(MS, midHipG)), yL: lW[1] - MS[1], yR: rW[1] - MS[1], isw: imgSW });
     const nBefore = out.actions.length;
+    let grappleDropped = false; // a strike was dropped by a grapple-only rule this frame (movement treats it as detected)
     const held: (Action & { t: number })[] = []; // strikes taken out of the stream this frame (they keep the hand refractory)
     const palmShape = () => wristsGap < this.cfg.palmMaxGap && ry(lW) < noseY - 0.05 && ry(rW) < noseY - 0.05;
     // Both arms are out together, straight, in a reach that formed at or after t0: a two-arm move, not a jab.
@@ -737,6 +769,24 @@ export class GestureRecognizer {
       this.lastStrike.L = this.lastStrike.R = t;
       if (!defensiveEnd && palmShape() && !this.blastPending) this.blastPending = { a: { kind: 'palm', hand: 'B', speed: a.speed, t }, since: t };
     };
+    // Grapple-only rules (grappleEnabled): a single-hand strike that is really part of a grab. Returns why, or null.
+    const grappleDrop = (a: Action & { t: number }): string | null => {
+      if (!this.grappleEnabled || !(a.kind === 'jab' || a.kind === 'uppercut' || a.kind === 'hook') || (a.hand !== 'L' && a.hand !== 'R')) return null;
+      // The grab's follow-through: both arms go back out to hold the opponent (drill session ea6e2541 grab 4, 2dd3adbd
+      // grabs 6 and 7 fired a jab 0.2-0.3 s after the grab).
+      if (t - this.grapple.lastGrabAt < gc.gPostGrab) return 'grab follow-through';
+      // Both arms rose into a reach together and are still out: one arm of a two-arm reach (ea6e2541 grab 1: hook R;
+      // grab 3: jab L, jab R).
+      // A grab is square to the opponent; a big hook turns the torso 70-120 deg and swings the other arm out with it
+      // (2dd3adbd hook reps read as a synchronous reach), so a turning strike is never taken for a reach.
+      const o = a.hand === 'L' ? 'R' : 'L';
+      if (this.grapple.syncReachSince(t - gc.reachSync, gc.gSyncReach) && info(o).elbow >= gc.gSyncElbowMin) {
+        const turn = this.strikeTurnDeg(a.hand);
+        if (turn < gc.gSyncMaxTurnDeg) return 'two-arm reach';
+        if (this.debugLog) this.debugLog.push(`${t.toFixed(2)} ${a.kind}${a.hand} kept (grapple): two-arm reach but torso turned ${turn.toFixed(0)} deg`);
+      }
+      return null;
+    };
     // A single-hand strike is about to fire. A jab is one arm: if its arm is out at reach length while the other arm is
     // past jabHoldProgress of a reach and still extending, hold it (resolved below); if both arms are already out
     // together in a fresh reach, it is part of that reach.
@@ -745,6 +795,15 @@ export class GestureRecognizer {
       if ((a.kind === 'jab' || a.kind === 'uppercut' || a.kind === 'hook') && this.bothRising()) return twoArm(a, 'both arms rising together');
       // A grab's pull-in sweeps both wrists toward the midline, which reads as a hook (session ea6e2541 grab 1).
       if ((a.kind === 'jab' || a.kind === 'uppercut' || a.kind === 'hook') && this.grapple.grabLikeActive(t)) return twoArm(a, 'grab in progress');
+      const gWhy = grappleDrop(a);
+      if (gWhy) {
+        // Like twoArm, but never starts an energy blast (the hands are on the opponent, not pushing).
+        if (this.debugLog) this.debugLog.push(`${t.toFixed(2)} ${a.kind}${a.hand} dropped (grapple): ${gWhy}`);
+        this.lastStrike.L = this.lastStrike.R = t;
+        this.lastStrikeKind[a.hand] = a.kind;
+        grappleDropped = true;
+        return;
+      }
       if (a.kind === 'jab' && (a.hand === 'L' || a.hand === 'R')) {
         const o = a.hand === 'L' ? 'R' : 'L';
         if (bothOut(t - gc.reachSync)) return twoArm(a, 'both arms out in a reach');
@@ -785,9 +844,16 @@ export class GestureRecognizer {
         twoArm(jh.a, 'held jab became a reach');
       } else if (t - jh.t >= gc.reachSync || info(jh.hand).ext < gc.holdReachExt || (info(o).extRate <= 0 && info(o).ext < this.grapple.reachTarget(o, info(o).ext))) {
         // Window over, the jab arm came back, or the other arm stopped short: it was a one-arm jab.
-        if (this.debugLog) this.debugLog.push(`${t.toFixed(2)} held jab${jh.hand} fired`);
         this.jabHold = null;
-        out.actions.push(jh.a);
+        const gWhy = grappleDrop(jh.a);
+        if (gWhy) {
+          if (this.debugLog) this.debugLog.push(`${t.toFixed(2)} held jab${jh.hand} dropped (grapple): ${gWhy}`);
+          this.lastStrike.L = this.lastStrike.R = t;
+          grappleDropped = true;
+        } else {
+          if (this.debugLog) this.debugLog.push(`${t.toFixed(2)} held jab${jh.hand} fired`);
+          out.actions.push(jh.a);
+        }
       }
     }
     if (suppressAll) {
@@ -946,11 +1012,14 @@ export class GestureRecognizer {
     const torsoImgDbg = Math.hypot((frame.image[11][0] + frame.image[12][0]) / 2 - (frame.image[23][0] + frame.image[24][0]) / 2, (frame.image[11][1] + frame.image[12][1]) / 2 - (frame.image[23][1] + frame.image[24][1]) / 2);
     // Strikes: the wind-up and twist start before a strike is detected (at its peak). Gate from the strike's onset
     // (a hand starts moving fast) until 0.35 s after it, and hold movement at its value from just before the onset.
-    const armActive = out.actions.length > 0 || handInfo.some((h) => h.speed > this.cfg.armBusySpeed);
+    const armActive = out.actions.length > 0 || grappleDropped || handInfo.some((h) => h.speed > this.cfg.armBusySpeed);
     const wasQuiet = t < this.moveQuietUntil;
     if (armActive) this.moveQuietUntil = Math.max(this.moveQuietUntil, t + this.cfg.moveQuietAfterStrike);
     // After a detected strike the body recovers (leans back, re-squares): longer quiet window.
     if (out.actions.length > 0) this.moveQuietUntil = Math.max(this.moveQuietUntil, t + this.cfg.moveQuietAfterDetect);
+    // A strike dropped by a grapple-only rule was still a big arm motion: its recovery is not movement either (grappling
+    // on only; grappleDropped is never set with it off).
+    if (grappleDropped) this.moveQuietUntil = Math.max(this.moveQuietUntil, t + this.cfg.moveQuietAfterDetect);
     if (armActive && !wasQuiet) {
       const before = this.moveHist.find((h) => h.t >= t - this.cfg.moveHoldLookback) ?? this.moveHist[this.moveHist.length - 1];
       this.heldMove = before ? [before.m[0], before.m[1]] : [0, 0];
@@ -1007,6 +1076,22 @@ export class GestureRecognizer {
 
     out.debug = { yaw, lean, ratio, stepFwd, leanFwd, leanZ: leanZ - (this.calib.leanZ ?? 0), size: this.sizeS, spot: this.sizeBase ?? 0, quiet: t < this.moveQuietUntil ? 1 : 0, fwdRaw: fwd, strafeRaw: strafe, torso: torsoImgDbg, lExt: handInfo[0].ext, rExt: handInfo[1].ext, lEl: handInfo[0].elbow, rEl: handInfo[1].elbow, lSp: handInfo[0].speed, rSp: handInfo[1].speed };
     return out;
+  }
+
+  /** Torso turn (deg) within hand h's strike window, as the big-swing arbiter measures it. */
+  private strikeTurnDeg(h: 'L' | 'R') {
+    const F = this.feat[h];
+    if (!F.length) return 0;
+    const tEnd = F[F.length - 1].t;
+    let yaw0: number | null = null, lo = Infinity, hi = -Infinity;
+    for (const f of F) {
+      if (tEnd - f.t > this.cfg.riseWindow + 0.05) continue;
+      if (yaw0 == null) yaw0 = f.yaw;
+      const d = wrapRad(f.yaw - yaw0);
+      lo = Math.min(lo, d);
+      hi = Math.max(hi, d);
+    }
+    return ((hi - lo) * 180) / Math.PI;
   }
 
   /** Both wrists rose by a similar, large amount within the strike window (a two-arm move). */

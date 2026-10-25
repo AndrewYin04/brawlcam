@@ -3,6 +3,7 @@
 // Reported for jabs that match a ground-truth jab label (±0.3 s, clips/groundtruth.json) and for every jab on every clip.
 // Usage: npx tsx tests/tools/jab-latency.ts            (current shared/gestures.ts)
 //        GESTURES_MODULE=../../shared/_gestures_before.ts npx tsx tests/tools/jab-latency.ts   (compare another copy)
+//        npx tsx tests/tools/jab-latency.ts --grapple   (GestureRecognizer.grappleEnabled, the game with ?grapple=1)
 import fs from 'fs';
 import path from 'path';
 import type { LM } from '../../shared/gestures';
@@ -15,10 +16,11 @@ const gt: { clips: { name: string; events: { t?: number; kind: string; uncertain
 
 export interface JabLat { clip: string; hand: string; t: number; emit: number; peak: number; lat: number; labeled: boolean }
 
-export function latencies(file: string): JabLat[] {
+export function latencies(file: string, grapple = process.argv.includes('--grapple')): JabLat[] {
   const name = path.basename(file, '.json');
   const data = JSON.parse(fs.readFileSync(file, 'utf8')) as { frames: { t: number; people: { image: LM[]; world: LM[] }[] }[] };
   const rec = new GestureRecognizer();
+  if (grapple) (rec as { grappleEnabled?: boolean }).grappleEnabled = true;
   const sw: number[] = [];
   const arm: number[] = [];
   const isw: number[] = [];

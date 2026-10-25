@@ -22,6 +22,8 @@ export class PoseInput {
   skeleton: CanvasRenderingContext2D | null = null;
   ready = false;
   private t0 = performance.now();
+  /** Grappling is on for the current match (GestureRecognizer.grappleEnabled for every player). */
+  grapple = false;
 
   constructor(public players: number) {
     this.assigner = new PeopleAssigner<PosePerson>(players);
@@ -35,9 +37,16 @@ export class PoseInput {
     const mode = new URLSearchParams(location.search).get('move');
     if (mode === 'point') for (const r of this.recognizers) r.cfg.moveMode = 'point';
     this.recognizers.length = n;
+    for (const r of this.recognizers) r.grappleEnabled = this.grapple;
     this.latest = this.recognizers.map(() => ({ present: false, actions: [], blocking: false, xshield: false, move: [0, 0], turn: 0, legs: false, joints: null }));
     this.pendingActions = this.recognizers.map(() => []);
     if (this.ready) this.tracker.setNumPoses(n);
+  }
+
+  /** Grappling on or off for the match being started (the sim's SimConfig.grapple). */
+  setGrapple(on: boolean) {
+    this.grapple = on;
+    for (const r of this.recognizers) r.grappleEnabled = on;
   }
 
   async init(forceCpu: boolean) {
