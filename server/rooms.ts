@@ -4,6 +4,7 @@ import type { WebSocket } from 'ws';
 import { Sim, type Mode, type SimEvent, type ActionKind, type Hand } from '../shared/sim';
 import { Bot } from '../shared/bot';
 import { eloUpdate } from '../shared/elo';
+import { summarize } from '../shared/commentary';
 
 export const MAX_PEOPLE = 8;
 const RECONNECT_GRACE_MS = 10_000;
@@ -16,6 +17,7 @@ const CODE_LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; // no I/O to avoid confusion
 export type RoomMode = 'duel' | 'brawl' | 'wso';
 
 export interface Hooks {
+  commentary?: (summary: string, voice: boolean) => Promise<{ text: string; audio: string | null; source: string } | null>;
   onMatchOver?: (room: Room, info: MatchSummary) => Promise<Record<string, number> | void>;
   onEvents?: (room: Room, events: SimEvent[]) => void;
 }
@@ -68,6 +70,10 @@ export class Room {
   private matchOverHandled = false;
   private nextMatchTimer: NodeJS.Timeout | null = null;
   lastActivity = Date.now();
+  private commentBuf: SimEvent[] = [];
+  private lastComment = 0;
+  private commentCount = 0;
+  private commentInflight = false;
 
   constructor(code: string, private hooks: Hooks) {
     this.code = code;
@@ -263,7 +269,9 @@ export class Room {
         }
       }
       this.hooks.onEvents?.(this, events);
+      for (const e of events) if (e.type !== 'whiff' && e.type !== 'super_denied' && e.type !== 'respawn') this.commentBuf.push(e);
     }
+    this.maybeComment();
     this.snapCounter += SNAP_HZ / TICK_HZ;
     if (this.snapCounter >= 1) {
       this.snapCounter -= 1;
@@ -273,6 +281,28 @@ export class Room {
       this.matchOverHandled = true;
       void this.handleMatchOver();
     }
+  }
+
+  /** One shared commentary line for the whole room every ~3.5 s (saves API quota, everyone hears the same call). */
+  private maybeComment() {
+    const sim = this.sim;
+    if (!sim || !this.hooks.commentary || this.commentInflight || !this.commentBuf.length) return;
+    const now = Date.now();
+    if (now - this.lastComment < 3500) return;
+    if (sim.phase !== 'fight' && !this.commentBuf.some((e) => e.type === 'ko' || e.type === 'match_over')) return;
+    this.lastComment = now;
+    const summary = summarize(this.commentBuf, sim.snapshot(false));
+    this.commentBuf = [];
+    this.commentInflight = true;
+    // Spoken audio on every other line keeps TTS within the free-tier budget; clients use the browser voice otherwise.
+    const voice = this.commentCount++ % 2 === 0;
+    this.hooks
+      .commentary(summary, voice)
+      .then((c) => {
+        if (c) this.broadcast({ type: 'commentary', text: c.text, audio: c.audio, source: c.source });
+      })
+      .catch(() => {})
+      .finally(() => (this.commentInflight = false));
   }
 
   private async handleMatchOver() {

@@ -154,7 +154,7 @@ export async function getPlayer(id: string) {
 }
 
 // ---- motion data (opt-in, anonymized: session id only, no player id, no video) ----
-export async function insertPoseSamples(sessionId: string, samples: { t: number; label: string; landmarks: number[][] }[]) {
+export async function insertPoseSamples(sessionId: string, samples: { t: number; label: string; landmarks: number[][][] }[]) {
   if (!samples.length) return true;
   const vals: unknown[] = [];
   const ph = samples.map((s, i) => {

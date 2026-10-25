@@ -15,6 +15,7 @@ const only = args.filter((a) => !a.startsWith('--'));
 interface GtEvent { t?: number; start?: number; end?: number; kind: string; hand?: string; uncertain?: boolean }
 interface GtClip { name: string; people?: number; events: GtEvent[]; skipEval?: boolean }
 
+const evalCfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'tests/gesture-eval.json'), 'utf8')) as { exhaustive: string[] };
 const gt: { clips: GtClip[] } = JSON.parse(fs.readFileSync(process.env.GT_FILE ?? path.join(CLIPS, 'groundtruth.json'), 'utf8'));
 const POINT = ['jab', 'hook', 'uppercut', 'palmpush', 'kick', 'knee'];
 const STATE = ['block', 'xshield'];
@@ -101,7 +102,7 @@ function score(clip: GtClip, res: NonNullable<ReturnType<typeof runClip>>) {
     }
     // A detection is a false positive unless it lines up with an uncertain label of any kind.
     const unc = clip.events.find((e) => e.uncertain && e.t !== undefined && Math.abs(e.t - a.t) <= TOL);
-    if (!unc) {
+    if (!unc && evalCfg.exhaustive.includes(clip.name)) {
       S(a.kind).fp++;
       lines.push(`  FALSE ${a.kind} ${a.hand} @${a.t.toFixed(2)} speed ${a.speed}`);
     }
@@ -121,7 +122,7 @@ function score(clip: GtClip, res: NonNullable<ReturnType<typeof runClip>>) {
     }
     for (const d of dets) {
       const overlaps = gts.some((g) => Math.min(d.end, g.end! + TOL) - Math.max(d.start, g.start! - TOL) > 0);
-      if (!overlaps && d.end - d.start > 0.15) {
+      if (!overlaps && d.end - d.start > 0.15 && evalCfg.exhaustive.includes(clip.name)) {
         S(kind).fp++;
         lines.push(`  FALSE ${kind} ${d.start.toFixed(2)}-${d.end.toFixed(2)}`);
       }

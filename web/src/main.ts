@@ -4,8 +4,10 @@ import { MatchView } from './game/view';
 import { preloadModel, FighterAvatar } from './game/avatar';
 import { LocalSession, FIGHTER_COLORS, type Session } from './game/session';
 import { PoseInput } from './input/players';
+import { MotionRecorder } from './input/motion';
 import { startCamera, CameraFailure } from './input/camera';
 import * as sfx from './game/audio';
+import { Commentator, setMuted, isMuted, commentaryLog } from './game/commentary';
 import type { SimEvent } from '../../shared/sim';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -32,6 +34,7 @@ export const hooks = {
   matchOver: null as unknown,
   cheers: 0,
   rivalry: null as unknown,
+  forge: null as unknown,
   /** Recent distinct snapshots with local arrival time (epoch ms), for sync assertions in tests. */
   snapLog: [] as { t: number; at: number; round: number; timer: number; phase: string; hp: number[] }[],
 };
@@ -52,6 +55,9 @@ let calibrating = false;
 let resultsShown = false;
 let loopStarted = false;
 let resultsTimer = 0;
+const commentator = new Commentator();
+const motion = new MotionRecorder();
+commentator.enabled = !params.has('nocomment');
 
 export function show(screen: Screen) {
   hooks.screen = screen;
@@ -174,6 +180,8 @@ export async function startMode(mode: string) {
   if (mode === 'forge') return (await import('./pages/forge')).showForge();
   if (mode === 'store') return (await import('./pages/store')).showStore();
   if (mode === 'leaderboard') return (await import('./pages/leaderboard')).showLeaderboard();
+  if (mode === 'motion') return (await import('./pages/motion')).showMotion();
+  if (mode === 'consent') return (await import('./pages/consent')).showConsent(() => backToMenu());
   const demo = mode === 'demo';
   const players = mode === 'local2p' ? 2 : 1;
   if (!demo) {
@@ -212,6 +220,9 @@ export function beginSession(s: Session, camera: 'behind' | 'side' | 'wide', mod
   hooks.events = [];
   hooks.localActions = [];
   session = s;
+  commentator.reset();
+  motion.flush();
+  motion.newSession();
   view = new MatchView(arena, {
     localIds: s.localIds,
     localJoints: (id) => {
@@ -392,6 +403,7 @@ function startLoop() {
           const g = pose!.latest[i];
           const acts = pose!.takeActions(i);
           for (const a of acts) hooks.localActions.push({ t: performance.now(), kind: a.kind, hand: a.hand, player: i });
+          if (i === 0) motion.observe(pose!, acts.map((a) => a.kind));
           session!.input(i, g, acts);
         });
         hooks.lastGesture = pose.latest.map((g) => ({ present: g.present, blocking: g.blocking, xshield: g.xshield, move: g.move, legs: g.legs }));
@@ -401,6 +413,10 @@ function startLoop() {
         view.setSnapshot(r.snap);
         view.handleEvents(r.events);
         logEvents(r.events);
+        if (session.kind === 'local' && hooks.mode !== 'idle') {
+          commentator.push(r.events);
+          commentator.tick(r.snap);
+        }
         hooks.snapshot = r.snap;
         const lastLog = hooks.snapLog[hooks.snapLog.length - 1];
         if (!lastLog || lastLog.t !== r.snap.t) {
@@ -454,6 +470,10 @@ $('cam-retry').onclick = () => {
 };
 $('cam-demo').onclick = () => startMode('demo');
 $('btn-quit').onclick = () => backToMenu();
+setMuted(isMuted());
+$('btn-mute').onclick = () => setMuted(!isMuted());
+(hooks as any).commentary = commentaryLog;
+(hooks as any).motion = motion;
 $('res-rematch').onclick = () => {
   if (!session) return startMode(lastMode);
   resultsShown = false;

@@ -3,6 +3,10 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+import { Agent, fetch as ufetch } from 'undici';
+
+// Meta's API hides every model from this VM's IPv6 range (verified 2026-10-24), so pin outbound calls to IPv4.
+const ipv4 = new Agent({ connect: { family: 4 } });
 
 const META_BASE = 'https://api.meta.ai/v1';
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
@@ -78,7 +82,7 @@ async function fetchJson(url: string, init: RequestInit, timeoutMs: number): Pro
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), timeoutMs);
   try {
-    const r = await fetch(url, { ...init, signal: ac.signal });
+    const r = await ufetch(url, { ...(init as any), signal: ac.signal, dispatcher: ipv4 });
     const text = await r.text();
     let json: any = null;
     try {
@@ -90,6 +94,36 @@ async function fetchJson(url: string, init: RequestInit, timeoutMs: number): Pro
   } finally {
     clearTimeout(timer);
   }
+}
+
+// Muse Spark 1.3 intermittently returned 404 model_not_found on 2026-10-24 ~9:15 PM while 1.2 kept working,
+// so text calls fall back to 1.2 (both Standard mode; Contributor mode would let Meta train on our content).
+const META_TEXT_MODELS = ['muse-spark-1.3', 'muse-spark-1.2'];
+export const metaModelUsed: Record<string, number> = {};
+
+async function metaChat(body: Record<string, unknown>, timeoutMs: number): Promise<{ status: number; json: any; model: string }> {
+  const key = process.env.META_API_KEY!;
+  let last: { status: number; json: any; model: string } = { status: 0, json: null, model: '' };
+  const deadline = Date.now() + timeoutMs;
+  for (const model of META_TEXT_MODELS) {
+    const left = deadline - Date.now();
+    if (left < 800) break;
+    const { status, json } = await fetchJson(
+      `${META_BASE}/chat/completions`,
+      { method: 'POST', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' }, body: JSON.stringify({ ...body, model }) },
+      left,
+    );
+    const u = json?.usage;
+    if (u) addMetaSpend((u.prompt_tokens ?? 0) * META_IN + (u.completion_tokens ?? 0) * META_OUT);
+    last = { status, json, model };
+    if (status === 200 && json?.choices?.[0]?.message?.content) {
+      metaModelUsed[model] = (metaModelUsed[model] ?? 0) + 1;
+      return last;
+    }
+    aiState.lastMetaError = `${model} ${status} ${json?.error?.code ?? ''} ${json?.choices?.[0]?.finish_reason ?? ''}`.slice(0, 200);
+    if (status === 401 || status === 429) break;
+  }
+  return last;
 }
 
 // ---------------- Gemini commentary ----------------
@@ -210,27 +244,19 @@ export async function forge(prompt: string, opts: { withImage?: boolean; timeout
   const key = process.env.META_API_KEY;
   if (!key || aiState.metaCapped) return { ...fallbackFor(clean), source: 'fallback', message: key ? 'Forge is resting; here is a house fighter.' : undefined };
   try {
-    const { status, json } = await fetchJson(
-      `${META_BASE}/chat/completions`,
+    const { status, json } = await metaChat(
       {
-        method: 'POST',
-        headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
-        body: JSON.stringify({
-          model: 'muse-spark-1.3',
-          reasoning_effort: 'minimal',
-          max_tokens: 1000,
-          response_format: { type: 'json_object' },
-          messages: [
-            { role: 'system', content: FORGE_SYSTEM },
-            { role: 'user', content: clean },
-          ],
-        }),
+        reasoning_effort: 'minimal',
+        max_tokens: 1000,
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: FORGE_SYSTEM },
+          { role: 'user', content: clean },
+        ],
       },
       Math.min(opts.timeoutMs ?? 8000, 8000),
     );
-    const u = json?.usage;
-    if (u) addMetaSpend((u.prompt_tokens ?? 0) * META_IN + (u.completion_tokens ?? 0) * META_OUT);
-    if (status !== 200) throw new Error(`meta chat ${status}: ${json?.error?.message ?? JSON.stringify(json).slice(0, 120)}`);
+    if (status !== 200) throw new Error(`meta text ${status}: ${json?.error?.message ?? JSON.stringify(json).slice(0, 120)}`);
     const msg = json?.choices?.[0]?.message;
     if (msg?.refusal) return { ...fallbackFor(clean), source: 'fallback', refused: true, message: "Let's forge a different fighter. Try something heroic!" };
     const parsed = JSON.parse(String(msg?.content ?? '{}').replace(/^```json|```$/g, ''));
@@ -275,28 +301,35 @@ export function forgeImagePath(id: string): string | null {
 async function metaImage(prompt: string, timeoutMs: number): Promise<string | null> {
   const key = process.env.META_API_KEY;
   if (!key || aiState.metaCapped) return null;
-  try {
-    const { status, json } = await fetchJson(
-      `${META_BASE}/images/generations`,
-      {
-        method: 'POST',
-        headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
-        // reasoning_strength "low" = single pass (~10 s instead of ~17 s), measured 2026-10-24.
-        body: JSON.stringify({ model: 'muse-image-1.0', prompt: prompt.slice(0, 900), n: 1, size: '768x1024', output_format: 'jpeg', reasoning_strength: 'low' }),
-      },
-      timeoutMs,
-    );
-    if (status === 200) addMetaSpend(META_IMAGE);
-    const b64 = json?.data?.[0]?.b64_json;
-    if (status !== 200 || !b64) {
-      aiState.lastMetaError = `image ${status} ${json?.error?.message ?? ''}`.slice(0, 200);
+  const deadline = Date.now() + timeoutMs;
+  // Muse Image intermittently answered 404 model_not_found on 2026-10-24 and succeeded on the next try: retry within budget.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const left = deadline - Date.now();
+    if (left < 4000) break;
+    try {
+      const { status, json } = await fetchJson(
+        `${META_BASE}/images/generations`,
+        {
+          method: 'POST',
+          headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
+          // reasoning_strength "low" = single pass (~10 s instead of ~17 s), measured 2026-10-24.
+          body: JSON.stringify({ model: 'muse-image-1.0', prompt: prompt.slice(0, 900), n: 1, size: '768x1024', output_format: 'jpeg', reasoning_strength: 'low' }),
+        },
+        left,
+      );
+      const b64 = json?.data?.[0]?.b64_json;
+      if (status === 200 && b64) {
+        addMetaSpend(META_IMAGE);
+        return b64;
+      }
+      aiState.lastMetaError = `image ${status} ${json?.error?.message ?? ''} (attempt ${attempt + 1})`.slice(0, 200);
+      if (status !== 404 && status < 500) return null;
+    } catch (e) {
+      aiState.lastMetaError = String(e).slice(0, 200);
       return null;
     }
-    return b64;
-  } catch (e) {
-    aiState.lastMetaError = String(e).slice(0, 200);
-    return null;
   }
+  return null;
 }
 
 function fallbackFor(prompt: string) {
@@ -318,25 +351,17 @@ export async function rivalryCard(input: { matchId: string; a: string; b: string
   let source = 'fallback';
   if (key && !aiState.metaCapped) {
     try {
-      const { status, json } = await fetchJson(
-        `${META_BASE}/chat/completions`,
+      const { status, json } = await metaChat(
         {
-          method: 'POST',
-          headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
-          body: JSON.stringify({
-            model: 'muse-spark-1.3',
-            reasoning_effort: 'minimal',
-            max_tokens: 600,
-            messages: [
-              { role: 'system', content: 'Write ONE playful trash-talk line (max 16 words) summarizing a friendly webcam boxing match between two friends, ending with a rematch challenge. No quotes.' },
-              { role: 'user', content: `${input.a} vs ${input.b}. Score ${input.scoreA}-${input.scoreB}. Winner: ${input.winner ?? 'draw'}. Highlights: ${input.highlights.slice(0, 400)}` },
-            ],
-          }),
+          reasoning_effort: 'minimal',
+          max_tokens: 600,
+          messages: [
+            { role: 'system', content: 'Write ONE playful trash-talk line (max 16 words) summarizing a friendly webcam boxing match between two friends, ending with a rematch challenge. No quotes.' },
+            { role: 'user', content: `${input.a} vs ${input.b}. Score ${input.scoreA}-${input.scoreB}. Winner: ${input.winner ?? 'draw'}. Highlights: ${input.highlights.slice(0, 400)}` },
+          ],
         },
         8000,
       );
-      const u = json?.usage;
-      if (u) addMetaSpend((u.prompt_tokens ?? 0) * META_IN + (u.completion_tokens ?? 0) * META_OUT);
       const t = json?.choices?.[0]?.message?.content;
       if (status === 200 && t) {
         summary = cleanLine(String(t));

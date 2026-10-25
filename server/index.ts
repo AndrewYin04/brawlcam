@@ -1,5 +1,12 @@
 // Throw Hands server: WebSocket relay (authoritative rooms) + API proxy (Gemini, Meta, Tiger Data).
 import http from 'http';
+import dns from 'dns';
+import net from 'net';
+
+// Meta's API returns an empty model list to this VM's IPv6 range (verified 2026-10-24: IPv4 works, IPv6 gets 404
+// model_not_found). Prefer IPv4 for all outbound calls.
+dns.setDefaultResultOrder('ipv4first');
+net.setDefaultAutoSelectFamily(false);
 import fs from 'fs';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { RoomManager, type Room, type MatchSummary } from './rooms';
@@ -13,6 +20,11 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 void db.initDb().then((ok) => console.log('[db]', ok ? 'connected' : 'unavailable: ' + db.dbState.error));
 
 const rooms = new RoomManager({
+  async commentary(summary, voice) {
+    const line = await ai.commentaryLine(summary);
+    const audio = voice && line.source !== 'template' ? await ai.speak(line.text) : null;
+    return { text: line.text, source: line.source, audio: audio ? `data:${audio.mime};base64,${audio.b64}` : null };
+  },
   async onMatchOver(room: Room, m: MatchSummary) {
     const humans = m.fighters.filter((f) => !f.bot && f.clientId && UUID.test(f.clientId));
     // One row per fighter so the leaderboard can compute damage per minute.
@@ -95,7 +107,7 @@ const server = http.createServer(async (req, res) => {
   const p = url.pathname;
   try {
     if (p === '/api/health') {
-      return send(res, 200, { ok: true, startedAt, rooms: rooms.rooms.size, db: { ok: db.dbState.ok, error: db.dbState.ok ? '' : db.dbState.error.slice(0, 120) }, ai: { metaSpendUsd: +ai.aiState.metaSpendUsd.toFixed(4), metaCapped: ai.aiState.metaCapped, geminiCalls: ai.aiState.geminiCalls, gemini429: ai.aiState.gemini429, tts429: ai.aiState.tts429 } });
+      return send(res, 200, { ok: true, startedAt, rooms: rooms.rooms.size, db: { ok: db.dbState.ok, error: db.dbState.ok ? '' : db.dbState.error.slice(0, 120) }, ai: { metaSpendUsd: +ai.aiState.metaSpendUsd.toFixed(4), metaCapped: ai.aiState.metaCapped, geminiCalls: ai.aiState.geminiCalls, gemini429: ai.aiState.gemini429, tts429: ai.aiState.tts429, lastMetaError: ai.aiState.lastMetaError, lastGeminiError: ai.aiState.lastGeminiError } });
     }
     if (p === '/api/room' && req.method === 'POST') {
       const r = rooms.create();
@@ -156,8 +168,9 @@ const server = http.createServer(async (req, res) => {
       const allowed = new Set(['jab', 'hook', 'uppercut', 'block', 'xshield', 'palm', 'kick', 'dodge', 'guard']);
       const samples = (Array.isArray(b.samples) ? b.samples : [])
         .slice(0, 200)
-        .filter((s: any) => allowed.has(s?.label) && Array.isArray(s?.landmarks) && s.landmarks.length <= 33)
-        .map((s: any) => ({ t: Number(s.t) || Date.now(), label: s.label, landmarks: s.landmarks.map((v: any) => (Array.isArray(v) ? v.slice(0, 4).map((x: any) => +Number(x).toFixed(4)) : [])) }));
+        // Each sample is one labeled sequence: up to 30 frames of 33 landmarks [x, y, z, visibility].
+        .filter((s: any) => allowed.has(s?.label) && Array.isArray(s?.landmarks) && s.landmarks.length > 0 && s.landmarks.length <= 30 && s.landmarks.every((fr: any) => Array.isArray(fr) && fr.length <= 33))
+        .map((s: any) => ({ t: Math.min(Date.now(), Number(s.t) || Date.now()), label: s.label, landmarks: s.landmarks.map((fr: any[]) => fr.map((v: any) => (Array.isArray(v) ? v.slice(0, 4).map((x: any) => +(Number(x) || 0).toFixed(4)) : []))) }));
       const ok = await db.insertPoseSamples(b.sessionId, samples);
       return send(res, ok ? 200 : 503, { stored: ok ? samples.length : 0 });
     }

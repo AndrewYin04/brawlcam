@@ -5,6 +5,7 @@ import type { Snapshot, SimEvent, Mode } from '../../../shared/sim';
 import { packJoints } from '../../../shared/joints';
 import type { GestureOutput } from '../../../shared/gestures';
 import { escapeHtml, safeColor } from '../game/view';
+import { playLine } from '../game/commentary';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -136,6 +137,9 @@ class Conn {
       case 'match_over':
         this.matchOver = m;
         hooks.matchOver = m;
+        break;
+      case 'commentary':
+        playLine(m.text, m.audio ?? null, m.source);
         break;
       case 'cheer':
         showCheer(m.emoji, m.nickname);

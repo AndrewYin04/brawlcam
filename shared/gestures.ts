@@ -47,11 +47,18 @@ export const GESTURE_CFG = {
   handRefractory: 0.32, // s between strikes of the same hand
   palmPairWindow: 0.12, // s for both hands to extend together
   palmMaxGap: 1.2, // wrists within this many shoulder widths
-  // block
-  blockHold: 0.1,
+  // block: both wrists at/above the shoulder line, close together, elbows below wrists
+  blockHold: 0.15,
   blockRelease: 0.18,
-  blockAboveNose: -0.06, // wrist y at least nose y + this (m)
-  blockMaxFromMid: 0.75, // |wrist.x - mid.x| < this * shoulderW
+  blockMinY: -0.04, // m relative to the shoulder line (guard sits around -0.1)
+  blockMaxGap: 0.2, // m between wrists (guard is ~0.27)
+  blockMinExt: 0.6, // both arms held out (fraction of arm length) for the extended block
+  // X shield: wrists touching above the face with elbows spread (or truly crossed)
+  xMaxGap: 0.13,
+  xAboveNose: 0.08,
+  xElbowSpread: 0.1,
+  xElbowMinY: -0.02, // m: X elbows are raised to about shoulder height (block elbows stay below)
+  bilateralSpeed: 1.3, // m/s: other hand moving this fast => possible two-handed move
   // X shield
   xHold: 0.18,
   xRelease: 0.2,
@@ -127,6 +134,7 @@ export class GestureRecognizer {
   private calibFrames: { sw: number; arm: number; isw: number; cx: number }[] = [];
   private calibStart = -1;
   private standingAnkleY: [number, number] | null = null;
+  private legsBusyUntil = -9;
 
   /** Start (or restart) the 3-second guard calibration. */
   beginCalibration() {
@@ -288,37 +296,90 @@ export class GestureRecognizer {
     }
     const lW = P[J.lWr];
     const rW = P[J.rWr];
+    const lE = P[J.lEl];
+    const rE = P[J.rEl];
     const wristsGap = len(sub(lW, rW)) / SW;
-    for (const c of byHand.values()) {
-      this.lastStrike[c.hand] = c.t;
-      const a: Action = { kind: c.kind, hand: c.hand, speed: c.speed };
-      if (c.kind === 'jab') {
-        // Possible palm push: both hands extend together with wrists close.
-        if (this.pending && this.pending.hand !== c.hand && t - this.pending.t <= this.cfg.palmPairWindow && wristsGap < this.cfg.palmMaxGap) {
-          out.actions.push({ kind: 'palm', hand: 'B', speed: Math.max(c.speed, this.pending.a.speed), t });
-          this.pending = null;
-          continue;
-        }
-        const other = handInfo.find((h) => h.h !== c.hand)!;
-        if (wristsGap < this.cfg.palmMaxGap && other.extRate > this.cfg.extRate * 0.4) {
-          this.pending = { hand: c.hand, a, t };
-          continue;
-        }
-      }
-      out.actions.push({ ...a, t });
-    }
-    this.flushPending(t, out, false);
+    const dxW = Math.abs(lW[0] - rW[0]);
+    const ry = (v: V3) => v[1] - MS[1];
+    const noseY = ry(nose);
+    // ---- block and X shield poses (measured on labeled clips, see TESTING.md) ----
+    // Pose tracking cannot resolve tightly crossed wrists, so an X reads as "wrists touching, high, elbows spread".
+    const imgCrossed = frame.image[15][0] < frame.image[16][0] - 0.01 && frame.image[15][1] < frame.image[23][1] && frame.image[16][1] < frame.image[24][1];
+    const worldCrossed = lW[0] < rW[0] - 0.03 && lE[0] > rE[0] + 0.05;
+    const elbowsUp = ry(lE) > this.cfg.xElbowMinY && ry(rE) > this.cfg.xElbowMinY;
+    // Chest-level X: wrists visibly crossed below the face. (At face height, stacked wrists in a block can look crossed.)
+    const chestX = (imgCrossed || worldCrossed) && ry(lW) > -0.3 && ry(rW) > -0.3 && ry(lW) < noseY - 0.05 && ry(rW) < noseY - 0.05;
+    const trulyCrossed = chestX || ((imgCrossed || worldCrossed) && elbowsUp);
+    // High X: wrists together above the face with the elbows raised and spread.
+    const highTight = dxW < this.cfg.xMaxGap && elbowsUp && ry(lW) > noseY + this.cfg.xAboveNose && ry(rW) > noseY + this.cfg.xAboveNose && lE[0] - rE[0] > dxW + this.cfg.xElbowSpread;
+    const xPose = trulyCrossed || highTight;
+    const [hL, hR] = handInfo;
+    // Extended block: both forearms held out in front of the face.
+    const blockExtended = dxW < this.cfg.blockMaxGap && ry(lW) > this.cfg.blockMinY && ry(rW) > this.cfg.blockMinY && hL.ext > this.cfg.blockMinExt && hR.ext > this.cfg.blockMinExt;
+    // Tight block: both fists pulled up to eye level, elbows down.
+    const blockTight = dxW < this.cfg.blockMaxGap + 0.05 && ry(lW) > noseY - 0.02 && ry(rW) > noseY - 0.02 && lE[1] < lW[1] && rE[1] < rW[1];
+    const blockPose = !xPose && (blockExtended || blockTight);
+    // Two-handed motions that end at face height are defenses forming, not strikes.
+    const defensiveEnd = xPose || (blockPose && ry(lW) > noseY - 0.05 && ry(rW) > noseY - 0.05) || blockExtended;
 
-    // ---- block and X shield ----
-    const crossed = lW[0] < rW[0] - 0.02 && P[J.lEl][0] > P[J.rEl][0] && lW[1] > MS[1] - 0.3 && rW[1] > MS[1] - 0.3;
-    const handsSlow = handInfo.every((h) => h.speed < 2.2);
-    const blockPose =
-      !crossed &&
-      handsSlow &&
-      handInfo.every((h) => h.W[1] > nose[1] + this.cfg.blockAboveNose && Math.abs(h.W[0] - MS[0]) < this.cfg.blockMaxFromMid * SW && h.E[1] < h.W[1]);
-    [this.blocking, this.blockOnAt, this.blockOffAt] = hysteresis(blockPose, this.blocking, t, this.blockOnAt, this.blockOffAt, this.cfg.blockHold, this.cfg.blockRelease);
+    // ---- strike emission with suppression rules ----
+    // Legs busy (kick or knee in progress): arm swings are balance, not strikes.
+    let legsBusy = false;
+    if (out.legs && past) {
+      const dt = Math.max(1e-3, t - past.t);
+      const midHipNow = mid(P[J.lHip], P[J.rHip]);
+      for (const [kneeI, ankI] of [[J.lKnee, J.lAnk], [J.rKnee, J.rAnk]] as const) {
+        const kneeV = (P[kneeI][1] - past.p[kneeI][1]) / dt;
+        const ankV = len(sub(P[ankI], past.p[ankI])) / dt;
+        if (P[kneeI][1] > midHipNow[1] - 0.3 || kneeV > 0.9 || ankV > 1.6) legsBusy = true;
+      }
+    }
+    if (legsBusy) this.legsBusyUntil = t + 0.25;
+    const suppressAll = this.blocking || this.xshield || t < this.legsBusyUntil;
+    const otherSpeed = (h: 'L' | 'R') => handInfo.find((x) => x.h !== h)!.speed;
+    const decideBilateral = (a: (typeof candidates)[number], b: { hand: 'L' | 'R'; a: Action; t: number } | (typeof candidates)[number]) => {
+      const bAction: Action = 'a' in b ? b.a : { kind: b.kind, hand: b.hand, speed: b.speed };
+      if (defensiveEnd) return; // raising both arms into a block or X
+      if (a.kind === 'jab' && bAction.kind === 'jab' && wristsGap < this.cfg.palmMaxGap && ry(lW) < noseY - 0.05 && ry(rW) < noseY - 0.05) {
+        out.actions.push({ kind: 'palm', hand: 'B', speed: Math.max(a.speed, bAction.speed), t });
+        return;
+      }
+      // Two different strikes at once: keep the stronger one.
+      const keep = a.speed >= bAction.speed ? { kind: a.kind, hand: a.hand as Hand, speed: a.speed } : bAction;
+      out.actions.push({ ...keep, t });
+    };
+    const cands = [...byHand.values()];
+    if (suppressAll) {
+      for (const c of cands) this.lastStrike[c.hand] = c.t;
+      this.pending = null;
+    } else if (cands.length === 2) {
+      for (const c of cands) this.lastStrike[c.hand] = c.t;
+      this.pending = null;
+      decideBilateral(cands[0], cands[1]);
+    } else if (cands.length === 1) {
+      const c = cands[0];
+      this.lastStrike[c.hand] = c.t;
+      if (this.pending && this.pending.hand !== c.hand && t - this.pending.t <= this.cfg.palmPairWindow) {
+        const p = this.pending;
+        this.pending = null;
+        decideBilateral(c, p);
+      } else if (otherSpeed(c.hand) > this.cfg.bilateralSpeed || defensiveEnd) {
+        // The other hand is moving too: wait briefly to see if this is a two-handed move.
+        this.pending = { hand: c.hand, a: { kind: c.kind, hand: c.hand, speed: c.speed }, t };
+      } else {
+        out.actions.push({ kind: c.kind, hand: c.hand, speed: c.speed, t: c.t });
+      }
+    }
+    if (this.pending && t - this.pending.t > this.cfg.palmPairWindow) {
+      // Window passed with no partner: emit unless the arms ended in a defensive pose.
+      if (!defensiveEnd && !this.blocking && !this.xshield) out.actions.push({ ...this.pending.a, t: this.pending.t });
+      this.pending = null;
+    }
+
+    const handsSlow = handInfo.every((h) => h.speed < 2.5);
+    [this.blocking, this.blockOnAt, this.blockOffAt] = hysteresis(blockPose && handsSlow, this.blocking, t, this.blockOnAt, this.blockOffAt, this.cfg.blockHold, this.cfg.blockRelease);
     const wasX = this.xshield;
-    [this.xshield, this.xOnAt, this.xOffAt] = hysteresis(crossed && handsSlow, this.xshield, t, this.xOnAt, this.xOffAt, this.cfg.xHold, this.cfg.xRelease);
+    [this.xshield, this.xOnAt, this.xOffAt] = hysteresis(xPose && handsSlow, this.xshield, t, this.xOnAt, this.xOffAt, this.cfg.xHold, this.cfg.xRelease);
     if (this.xshield && !wasX) out.actions.push({ kind: 'xshield', hand: 'B', speed: 0, t });
     out.blocking = this.blocking;
     out.xshield = this.xshield;
