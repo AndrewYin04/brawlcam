@@ -18,6 +18,11 @@ interface Track {
 export class PeopleAssigner<P extends PosePerson = PosePerson> {
   tracks: (Track | null)[];
   swaps = 0;
+  /**
+   * True while the only identity was guessed from one person seen alone (the other slot never filled): the first
+   * frame with both people re-decides both slots by side, so the left person is player 1 whoever was found first.
+   */
+  private provisional = false;
   constructor(public slots: number) {
     this.tracks = Array.from({ length: slots }, () => null);
   }
@@ -42,11 +47,28 @@ export class PeopleAssigner<P extends PosePerson = PosePerson> {
     const cand = people.slice(0, this.slots);
     const fresh = this.tracks.every((tr) => !tr || t - tr.lastSeen > 2.5);
     let order: number[]; // order[i] = slot for cand[i]
-    if (fresh) {
-      // Initial assignment by side: mirrored-left (raw right, larger x) is slot 0.
+    const bySide = () => {
+      // Mirrored-left (raw right, larger x) is slot 0.
       const sorted = cand.map((p, i) => ({ i, x: cx(p) })).sort((a, b) => b.x - a.x);
-      order = new Array(cand.length);
-      sorted.forEach((s, k) => (order[s.i] = k));
+      const o: number[] = new Array(cand.length);
+      sorted.forEach((s, k) => (o[s.i] = k));
+      return o;
+    };
+    if (fresh) {
+      this.tracks = this.tracks.map(() => null);
+      if (cand.length === 1) {
+        // One person found first (the other has not stepped in yet, or is detected a frame later): their side of the
+        // picture decides the slot, so a lone person on the right does not take player 1.
+        order = [cx(cand[0]) >= 0.5 ? 0 : 1];
+        this.provisional = true;
+      } else {
+        order = bySide();
+        this.provisional = false;
+      }
+    } else if (this.provisional && cand.length === 2 && this.tracks.some((tr) => !tr)) {
+      // Both people visible for the first time: decide both slots by side (SPEC: the left person is fighter 1).
+      order = bySide();
+      this.provisional = false;
     } else {
       // Pick the assignment with the lowest cost (position + body signature).
       const cost = (p: PosePerson, slot: number) => {
@@ -81,6 +103,7 @@ export class PeopleAssigner<P extends PosePerson = PosePerson> {
 
   reset() {
     this.tracks = this.tracks.map(() => null);
+    this.provisional = false;
   }
 }
 
