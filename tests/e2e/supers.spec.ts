@@ -47,7 +47,11 @@ test('Iron Wall with a full meter blocks all damage for 2.5 s; cooldown respecte
   await b.close();
 });
 
-test('energy blast travels as a projectile and can be blocked', async () => {
+// Since the guard meter (Oct 25 1:50 AM) a scripted blocker is guard-broken several times a minute, and a blast
+// crosses the gap in ~0.25 s, about the block's own latency: whether a blast meets a raised guard is timing luck.
+// This test checks through the real UI that the blast fires, travels and lands; blocked-blast damage and guard drain
+// are asserted deterministically in tests/unit/guard-meter.ts ("blocked blast deals 10%", "blast (50) breaks a 40 guard").
+test('energy blast travels as a projectile and lands (blocked damage: unit guard-meter)', async () => {
   test.setTimeout(120_000);
   // The bot starts with a full meter and fires supers; the player holds a block (block_01 frozen at 3.6 s, mid-block).
   const b = await chromium.launch({ args: GL_ARGS });
@@ -65,7 +69,7 @@ test('energy blast travels as a projectile and can be blocked', async () => {
       await page.waitForTimeout(1500);
     }
   })();
-  await page.waitForFunction(() => (window as any).__brawl.events.some((e: any) => e.type === 'hit' && e.kind === 'blast' && e.blocked), null, { timeout: 90_000, polling: 250 }).finally(() => (stop = true));
+  await page.waitForFunction(() => (window as any).__brawl.events.some((e: any) => e.type === 'hit' && e.kind === 'blast'), null, { timeout: 90_000, polling: 250 }).finally(() => (stop = true));
   await cycle;
   const h = await hooks(page);
   const blasts = h.events.filter((e: any) => e.type === 'hit' && e.kind === 'blast');
@@ -80,7 +84,6 @@ test('energy blast travels as a projectile and can be blocked', async () => {
   expect(blasts.length).toBeGreaterThan(0);
   // Blocked blasts deal 10% (2 HP), unblocked deal 20.
   for (const e of blasts) expect(e.damage).toBe(e.blocked ? 2 : 20);
-  expect(blasts.some((e: any) => e.blocked)).toBe(true);
   await b.close();
 });
 
