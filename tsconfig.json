@@ -11,5 +11,5 @@
     "resolveJsonModule": true,
     "isolatedModules": true
   },
-  "include": ["web/src", "server", "shared", "tests", "playwright.config.ts"]
+  "include": ["web/src", "server", "shared", "tests", "video", "playwright.config.ts"]
 }

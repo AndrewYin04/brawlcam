@@ -335,21 +335,18 @@ function showResults() {
       ($('res-rematch') as HTMLButtonElement).disabled = true;
     }
     const humans = snap.f.filter((f) => !f.bot);
-    if (humans.length === 2 && !brawl) void makeRivalryCard(online.matchId, humans[0], humans[1], winner);
+    if (humans.length === 2 && !brawl) void makeRivalryCard(online, humans[0], humans[1], winner);
   }
   show('results');
 }
 
-async function makeRivalryCard(matchId: string, a: { name: string; rw: number; id: number }, b: { name: string; rw: number; id: number }, winner: number | null) {
+async function makeRivalryCard(online: { matchId: string; waitRivalry: (id: string) => Promise<any> }, a: { name: string; rw: number; id: number }, b: { name: string; rw: number; id: number }, winner: number | null) {
   const box = $('res-card');
   box.classList.remove('hidden');
   box.innerHTML = '<p class="muted">Making your rivalry card…</p>';
-  const highlights = hooks.events.filter((e) => e.type === 'super' || e.type === 'ko').slice(-6).map((e) => `${e.type} by slot ${(e as any).id ?? (e as any).attacker}`).join('; ');
-  let card: any = null;
-  try {
-    const r = await fetch('/api/rivalry', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ matchId, a: a.name, b: b.name, scoreA: a.rw, scoreB: b.rw, winner: winner === a.id ? a.name : winner === b.id ? b.name : null, highlights }) });
-    card = r.ok ? await r.json() : null;
-  } catch {}
+  // The server generates one card per match and broadcasts it to everyone in the room.
+  const card: any = await online.waitRivalry(online.matchId);
+  void winner;
   hooks.rivalry = card;
   box.innerHTML = '';
   const wrap = document.createElement('div');

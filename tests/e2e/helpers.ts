@@ -8,7 +8,7 @@ export const CLIPS = path.join(ROOT, 'clips');
 export const FIXTURES = path.join(ROOT, 'tests/fixtures');
 export const BASE_URL = process.env.BASE_URL ?? 'https://144-202-71-213.sslip.io';
 /** Query string every game page in tests uses: CPU pose delegate (SwiftShader has no real GPU) and capsule fighters. */
-export const TQ = 'cpu&lowgfx&nocomment';
+export const TQ = 'cpu&lowgfx&nocomment&aifixture';
 
 /** Launch a Chromium whose fake webcam plays the given clip (absolute path or name in clips/). */
 export async function launchWithClip(clip?: string, extraArgs: string[] = [], opts: { fakeUi?: boolean } = {}): Promise<Browser> {

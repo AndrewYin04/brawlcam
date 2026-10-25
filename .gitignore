@@ -13,3 +13,5 @@ web/public/mediapipe/
 web/public/models/*.task
 .vite/
 web/public/pitch/
+video/out/
+video/frames/

@@ -2,11 +2,17 @@ import { test, expect, type Page } from '@playwright/test';
 import { launchWithClip, BASE_URL } from './helpers';
 
 // Fighter A's clip drives browser 1, fighter B's clip drives browser 2; they play a full best-of-3 online.
-const Q = '&cpu&lowgfx&skipcal';
+const Q = '&cpu&lowgfx&skipcal&nocomment&aifixture';
 
-async function open(clip: string, path: string) {
+async function open(clip: string, path: string, share: 'webshare' | 'clipboard' = 'webshare') {
   const b = await launchWithClip(clip);
-  const ctx = await b.newContext({ permissions: ['camera'], viewport: { width: 960, height: 540 } });
+  const ctx = await b.newContext({ permissions: share === 'clipboard' ? ['camera', 'clipboard-read', 'clipboard-write'] : ['camera'], viewport: { width: 960, height: 540 } });
+  // Web Share where supported (stubbed to record calls); otherwise remove it to test the copy-link fallback.
+  await ctx.addInitScript((mode) => {
+    (window as any).__shared = [];
+    if (mode === 'webshare') (navigator as any).share = async (d: any) => { (window as any).__shared.push(d); };
+    else (navigator as any).share = undefined;
+  }, share);
   const page = await ctx.newPage();
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
@@ -28,7 +34,7 @@ test('fighter A vs fighter B: full online best-of-3', async () => {
   expect(room).toMatch(/^[A-Z]{4}$/);
   await expect(A.page.locator('#lobby-code')).toHaveText(room);
 
-  const B = await open('shadow_fighterB', `/?room=${room}` + Q);
+  const B = await open('shadow_fighterB', `/?room=${room}` + Q, 'clipboard');
   await B.page.waitForFunction(() => (window as any).__brawl?.online?.room, null, { timeout: 60_000 });
   await expect(A.page.locator('#lobby-roster li')).toHaveCount(2);
   await A.page.click('#lobby-start');
@@ -71,5 +77,18 @@ test('fighter A vs fighter B: full online best-of-3', async () => {
   expect(a.actions + b.actions).toBeGreaterThan(0); // real gestures from the clips
   if (a.over.winner != null) expect(Object.keys(a.over.elo_delta).length).toBe(2);
   await A.page.waitForSelector('#screen-results.active', { timeout: 10_000 });
+  // Rivalry card (generated once on the server per match, broadcast to both): shown on both result screens.
+  for (const P of [A, B]) await expect(P.page.locator('#res-card')).toContainText('Rematch', { timeout: 20_000 });
+  await expect(A.page.locator('#res-share')).toBeVisible();
+  await A.page.click('#res-share');
+  await A.page.waitForFunction(() => (window as any).__shared.length === 1, null, { timeout: 5000 });
+  const shared = await A.page.evaluate(() => (window as any).__shared[0]);
+  expect(shared.text).toMatch(/\d-\d/);
+  // Copy-link fallback when Web Share is unavailable.
+  await B.page.waitForSelector('#screen-results.active', { timeout: 10_000 });
+  await B.page.click('#res-share');
+  await expect(B.page.locator('#toast')).toContainText('copied', { timeout: 5000 });
+  const clip = await B.page.evaluate(() => navigator.clipboard.readText());
+  expect(clip).toContain('http');
   await A.b.close(); await B.b.close();
 });

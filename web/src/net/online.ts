@@ -46,6 +46,8 @@ class Conn {
   private closedByUs = false;
   private reconnectUntil = 0;
   rtt = 0;
+  rivalry: any = null;
+  rivalryFor = '';
   snapAt = 0;
   /** Test knob: ?netlag=N adds N ms of round-trip latency (N/2 each way) to everything on this client. */
   lag = Number(new URLSearchParams(location.search).get('netlag') ?? 0) / 2;
@@ -57,7 +59,8 @@ class Conn {
       this.ws = ws;
       this.closedByUs = false;
       let settled = false;
-      ws.onopen = () => ws.send(JSON.stringify({ ...first, clientId: clientId(), nickname: nickname(), color: myColor(), card: forgeCardName() }));
+      const aiFixtures = new URLSearchParams(location.search).has('aifixture');
+      ws.onopen = () => ws.send(JSON.stringify({ ...first, clientId: clientId(), nickname: nickname(), color: myColor(), card: forgeCardName(), ...(aiFixtures ? { aiFixtures: true } : {}) }));
       ws.onmessage = (ev) => {
         if (this.lag) {
           setTimeout(() => handleMsg(ev), this.lag);
@@ -159,6 +162,12 @@ class Conn {
       case 'match_over':
         this.matchOver = m;
         hooks.matchOver = m;
+        break;
+      case 'rivalry':
+        this.rivalry = m.card;
+        this.rivalryFor = m.matchId;
+        hooks.rivalry = m.card;
+        window.dispatchEvent(new CustomEvent('throwhands:rivalry', { detail: m }));
         break;
       case 'commentary':
         playLine(m.text, m.audio ?? null, m.source);
@@ -395,6 +404,23 @@ export class OnlineSession implements Session {
   }
   get snapAt() {
     return this.c.snapAt;
+  }
+  /** Resolves with the server-generated rivalry card for the given match (or null after 30 s). */
+  waitRivalry(matchId: string): Promise<any> {
+    if (this.c.rivalryFor === matchId) return Promise.resolve(this.c.rivalry);
+    return new Promise((resolve) => {
+      const t = setTimeout(() => {
+        window.removeEventListener('throwhands:rivalry', on as any);
+        resolve(null);
+      }, 30_000);
+      const on = (ev: CustomEvent) => {
+        if (ev.detail.matchId !== matchId) return;
+        clearTimeout(t);
+        window.removeEventListener('throwhands:rivalry', on as any);
+        resolve(ev.detail.card);
+      };
+      window.addEventListener('throwhands:rivalry', on as any);
+    });
   }
 }
 

@@ -17,7 +17,8 @@ const CODE_LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; // no I/O to avoid confusion
 export type RoomMode = 'duel' | 'brawl' | 'wso';
 
 export interface Hooks {
-  commentary?: (summary: string, voice: boolean) => Promise<{ text: string; audio: string | null; source: string } | null>;
+  rivalry?: (input: { matchId: string; a: string; b: string; scoreA: number; scoreB: number; winner: string | null; highlights: string }, room: Room) => Promise<unknown>;
+  commentary?: (summary: string, voice: boolean, room: Room) => Promise<{ text: string; audio: string | null; source: string } | null>;
   onMatchOver?: (room: Room, info: MatchSummary) => Promise<Record<string, number> | void>;
   onEvents?: (room: Room, events: SimEvent[]) => void;
 }
@@ -70,7 +71,10 @@ export class Room {
   private matchOverHandled = false;
   private nextMatchTimer: NodeJS.Timeout | null = null;
   lastActivity = Date.now();
+  /** Test rooms (?aifixture): recorded AI responses instead of live Meta/Gemini calls (spec 10 test budget). */
+  aiFixtures = false;
   private commentBuf: SimEvent[] = [];
+  matchHighlights: string[] = [];
   private lastComment = 0;
   private commentCount = 0;
   private commentInflight = false;
@@ -233,6 +237,7 @@ export class Room {
     this.matchId = crypto.randomUUID();
     this.matchStartedAt = new Date();
     this.matchOverHandled = false;
+    this.matchHighlights = [];
     sim.start();
     this.broadcastRoster();
     this.broadcast({ type: 'match_start', mode: this.mode, matchId: this.matchId, fighters: sim.fighters.map((f) => ({ slot: f.id, name: f.name, color: f.color, bot: f.bot, card: f.card })) });
@@ -278,6 +283,11 @@ export class Room {
       }
       this.hooks.onEvents?.(this, events);
       for (const e of events) if (e.type !== 'whiff' && e.type !== 'super_denied' && e.type !== 'respawn') this.commentBuf.push(e);
+      for (const e of events) {
+        const nm = (id: number | null) => sim.get(id ?? -1)?.name ?? 'someone';
+        if (e.type === 'super') this.matchHighlights.push(`${nm(e.id)} super ${e.kind}`);
+        if (e.type === 'ko') this.matchHighlights.push(`${nm(e.attacker)} KO'd ${nm(e.target)} with ${e.kind}`);
+      }
     }
     this.maybeComment();
     this.snapCounter += SNAP_HZ / TICK_HZ;
@@ -305,7 +315,7 @@ export class Room {
     // Spoken audio on every other line keeps TTS within the free-tier budget; clients use the browser voice otherwise.
     const voice = this.commentCount++ % 2 === 0;
     this.hooks
-      .commentary(summary, voice)
+      .commentary(summary, voice, this)
       .then((c) => {
         if (c) this.broadcast({ type: 'commentary', text: c.text, audio: c.audio, source: c.source });
       })
@@ -349,6 +359,17 @@ export class Room {
       eloDelta = { [a.slot]: d.deltaA, [b.slot]: d.deltaB };
     }
     this.broadcast({ type: 'match_over', winner: winnerSlot, elo_delta: eloDelta, matchId: this.matchId, sessionWins: this.sessionWinsBySlot() });
+    // Rivalry card for two-human matches: generated once on the server and broadcast to the whole room.
+    const humanF = sim.fighters.filter((f) => !f.bot);
+    if (this.hooks.rivalry && humanF.length === 2 && sim.cfg.mode === 'duel') {
+      const [fa, fb] = humanF;
+      const matchId = this.matchId;
+      const highlights = this.matchHighlights.slice(-6).join('; ');
+      this.hooks
+        .rivalry({ matchId, a: fa.name, b: fb.name, scoreA: fa.roundWins, scoreB: fb.roundWins, winner: winnerSlot === fa.id ? fa.name : winnerSlot === fb.id ? fb.name : null, highlights }, this)
+        .then((card) => this.broadcast({ type: 'rivalry', matchId, card }))
+        .catch(() => this.broadcast({ type: 'rivalry', matchId, card: null }));
+    }
     if (this.mode === 'wso') {
       // Loser goes to the back of the queue; winner stays on. Next match in 6 s.
       const loser = this.fighters.find((f) => f && f !== winnerClient);

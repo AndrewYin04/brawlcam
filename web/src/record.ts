@@ -24,6 +24,8 @@ interface SceneCfg {
   meter?: number;
   roundSeconds?: number;
   hud?: boolean;
+  /** Which local player the camera follows (default 0). */
+  follow?: number;
 }
 
 let view: MatchView | null = null;
@@ -65,8 +67,10 @@ export async function initRecord() {
       });
       replays = await Promise.all(cfg.players.map((p) => (p.landmarks ? loadReplay(p.landmarks, p.offset ?? 0) : Promise.resolve(null))));
       const ids = session.localIds;
+      const follow = cfg.follow ?? 0;
+      const viewIds = [ids[follow], ...ids.filter((_, k) => k !== follow)].filter((x) => x != null);
       view = new MatchView(arenaRef(), {
-        localIds: ids,
+        localIds: viewIds,
         localJoints: (id) => {
           const i = ids.indexOf(id);
           const o = overrides.get(i);

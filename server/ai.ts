@@ -342,8 +342,19 @@ function fallbackFor(prompt: string) {
 const RIVALRY_DIR = path.join(DATA_DIR, 'rivalry');
 fs.mkdirSync(RIVALRY_DIR, { recursive: true });
 
-export async function rivalryCard(input: { matchId: string; a: string; b: string; scoreA: number; scoreB: number; winner: string | null; highlights: string }) {
+const rivalryInflight = new Map<string, Promise<any>>();
+
+/** One card per match: concurrent requests for the same match share one generation (and one Meta call). */
+export function rivalryCard(input: { matchId: string; a: string; b: string; scoreA: number; scoreB: number; winner: string | null; highlights: string }) {
   const id = crypto.createHash('sha256').update(input.matchId).digest('hex').slice(0, 24);
+  const cur = rivalryInflight.get(id);
+  if (cur) return cur;
+  const p = rivalryCardInner(input, id).finally(() => setTimeout(() => rivalryInflight.delete(id), 60_000));
+  rivalryInflight.set(id, p);
+  return p;
+}
+
+async function rivalryCardInner(input: { matchId: string; a: string; b: string; scoreA: number; scoreB: number; winner: string | null; highlights: string }, id: string) {
   const jsonFile = path.join(RIVALRY_DIR, id + '.json');
   if (fs.existsSync(jsonFile)) return JSON.parse(fs.readFileSync(jsonFile, 'utf8'));
   let summary = `${input.winner ?? 'Nobody'} wins ${Math.max(input.scoreA, input.scoreB)}-${Math.min(input.scoreA, input.scoreB)}. Rematch?`;
@@ -381,6 +392,11 @@ export async function rivalryCard(input: { matchId: string; a: string; b: string
   const out = { id, summary, image, source, a: input.a, b: input.b, scoreA: input.scoreA, scoreB: input.scoreB, winner: input.winner };
   fs.writeFileSync(jsonFile, JSON.stringify(out));
   return out;
+}
+
+/** Recorded rivalry card for automated tests (no Meta call). */
+export function fixtureRivalry(input: { matchId: string; a: string; b: string; scoreA: number; scoreB: number; winner: string | null }) {
+  return { id: 'fixture', summary: `${input.winner ?? 'Nobody'} takes it ${Math.max(input.scoreA, input.scoreB)}-${Math.min(input.scoreA, input.scoreB)}. Rematch tomorrow?`, image: null, source: 'fixture', a: input.a, b: input.b, scoreA: input.scoreA, scoreB: input.scoreB, winner: input.winner };
 }
 
 export function rivalryPath(id: string, ext: 'jpg' | 'json'): string | null {

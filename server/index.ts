@@ -20,7 +20,9 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 void db.initDb().then((ok) => console.log('[db]', ok ? 'connected' : 'unavailable: ' + db.dbState.error));
 
 const rooms = new RoomManager({
-  async commentary(summary, voice) {
+  rivalry: (input, room) => (room.aiFixtures ? Promise.resolve(ai.fixtureRivalry(input)) : ai.rivalryCard(input)),
+  async commentary(summary, voice, room) {
+    if (room.aiFixtures) return { text: 'Fixture commentary: what a punch!', source: 'fixture', audio: null };
     const line = await ai.commentaryLine(summary);
     const audio = voice && line.source !== 'template' ? await ai.speak(line.text) : null;
     return { text: line.text, source: line.source, audio: audio ? `data:${audio.mime};base64,${audio.b64}` : null };
@@ -149,12 +151,6 @@ const server = http.createServer(async (req, res) => {
       const audio = body.voice && line.source !== 'template' ? await ai.speak(line.text) : null;
       return send(res, 200, { text: line.text, source: line.source, audio: audio ? `data:${audio.mime};base64,${audio.b64}` : null });
     }
-    if (p === '/api/rivalry' && req.method === 'POST') {
-      if (!rateOk(req, 'rivalry', 6)) return send(res, 429, { error: 'slow down' });
-      const b = await readBody(req);
-      const card = await ai.rivalryCard({ matchId: String(b.matchId ?? '').slice(0, 64), a: String(b.a ?? 'P1').slice(0, 24), b: String(b.b ?? 'P2').slice(0, 24), scoreA: Number(b.scoreA) || 0, scoreB: Number(b.scoreB) || 0, winner: b.winner ? String(b.winner).slice(0, 24) : null, highlights: String(b.highlights ?? '') });
-      return send(res, 200, card);
-    }
     if (p.startsWith('/api/rivalry/image/')) return sendFile(res, ai.rivalryPath(p.split('/')[4] ?? '', 'jpg'), 'image/jpeg');
     if (p.startsWith('/api/rivalry/')) {
       const f = ai.rivalryPath(p.split('/')[3] ?? '', 'json');
@@ -212,6 +208,7 @@ wss.on('connection', (ws: WebSocket) => {
     if (msg?.type === 'ping') return ws.send(JSON.stringify({ type: 'pong', t: msg.t }));
     if (msg?.type === 'join' || msg?.type === 'create') {
       const r = msg.type === 'create' ? rooms.create() : rooms.get(String(msg.room ?? ''));
+      if (r && msg.type === 'create' && msg.aiFixtures === true) r.aiFixtures = true;
       if (!r) return ws.send(JSON.stringify({ type: 'error', code: 'room_not_found', message: 'No room with that code. Check the code and try again.' }));
       const res = r.join(ws, msg);
       if ('error' in res) {
