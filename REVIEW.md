@@ -145,3 +145,53 @@ This refines items 4 and 6 of the 1:12 AM decision. The camera stays 3D, behind 
 
   Re-run the full suite and the section 11 review loop.
 - **Video v2:** show a ring-out off the floating stage. It is the strongest Smash-like moment.
+
+## 2026-10-25 1:35 AM CDT: the user's real-webcam test of build 4e7b98e (overrides the 1:15 AM floating-stage section)
+
+**First, update STATUS.md.** It still says 12:05 AM. The user and planner want your updates before sending more direction. Post:
+- what changed since 12:05 AM
+- round 2 review-loop scores
+- what you are working on now
+- the exact movement controls and their thresholds
+
+Then work on the items below, and update STATUS.md after each one.
+
+The user played with a real webcam. Pose tracking "kinda works". Problems, in the user's words and with the planner's spec:
+
+### 1. "idk how to move forward and backward"
+- Find out why with real-webcam-like input. Check the current step-toward/away threshold (shoulder width) and whether the duel assist hides the effect.
+- **Teach movement in the game.** Calibration gets a 15-second movement tutorial with a live on-screen arrow and fill bar for each direction: "step toward the camera to advance", "step back to retreat", "lean to strafe". It advances when each direction has been detected once. During matches, a small HUD indicator shows the movement input currently detected (arrows light up).
+- **Make forward/back easier to trigger:** also accept a torso lean toward or away from the camera, measured against the calibrated shoulder width and nose position, with a dead zone so punches don't trigger movement. Keep stepping working.
+- Test it with clips of people stepping and leaning (add some if needed). Report the detection rate in STATUS.md.
+- Explain movement in one bigger line on the menu, not small print.
+
+### 2. Arena: "too small", and KO by falling off "is not a good idea". Use a UFC octagon with a cage
+- **Replace the floating sky stage and all ring-outs** (1v1 and Brawl) with a **UFC-style octagon**:
+  - eight-sided canvas mat with a center logo
+  - chain-link cage walls about 1.8 m high (30 cm above the fighters' heads), padded posts at the corners
+  - arena lighting from above, a dark arena with crowd silhouettes and stadium lights beyond the cage
+- **Size:** UFC's large octagon is about 30 ft (9.1 m) across. Use about 9 m for Brawl and about 7 to 9 m for 1v1, scaled to human-sized fighters about 1.8 m tall. Keep the camera close enough that fighters stay large (spec 11.2 item 8).
+- **Knockback:** no falling off. Fighters slam into the cage wall and bounce off it, with a cage-shake effect and a heavier hit spark. Knockback distance still grows with damage taken.
+- **KO rules:**
+  - 1v1: back to HP-only KOs (HP bars, best of 3)
+  - Brawl: each fighter has an HP bar; reaching 0 is a KO with a 3 s respawn; most KOs in 2 minutes wins
+  - remove the knockback-% ring-out rules everywhere
+- Remove the teeter animation and the edge warning. Update the tests: drop the ring-out tests, and add cage-bounce and Brawl-HP tests. Update TESTING.md.
+
+### 3. "these new characters dont actually hit each other... shaped more like a human, with longer limbs, human proportion limbs"
+- **Proportions:** the KayKit Adventurers are chibi, with a big head and short arms, so punches end short of the opponent. Switch to human-proportioned, rigged, openly licensed characters (verify each license and credit it in the README and the site footer):
+  - head about 1/7 to 1/8 of body height
+  - arm reach about equal to height
+  - athletic builds, like Smash's human fighters (Ryu, Captain Falcon), not chibi
+- Keep toon shading, outlines, bright colors, and distinct silhouettes. Keep the locomotion state machine and pose layering from 4e7b98e, retargeted to the new skeleton.
+- **Visible contact:** when a strike registers, the attacker's fist or foot must reach the target.
+  - Hold fighting range at about one arm's length.
+  - Add a short lunge, or IK the fist toward the target's head or torso, so contact happens on the hit frame.
+  - Put the spark at the contact point; the target's flinch starts there.
+- **New review-loop measurement:** fist-to-target distance on each hit frame, with a target under 10 cm. Add it to the section 11 metrics and the checklist ("strikes visibly connect").
+
+### 4. Credits
+The site footer still credits "Seed-san model by VirtualCast, Inc." Update the footer and README to match the models actually used.
+
+### Order
+1, 3, 2, then 4. Movement and contact affect every match. Run the section 11 loop after each, keep `?classic` until the new build passes, feature freeze 7:30 AM.
