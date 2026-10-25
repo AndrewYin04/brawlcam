@@ -18,20 +18,22 @@ npx tsx tests/tools/eval-gestures.ts            # 30 fps
 STRIDE=2 npx tsx tests/tools/eval-gestures.ts   # 15 fps (typical phone / headless rate)
 ```
 
-Last run: Sat Oct 24, 9:22 PM CDT.
+Last run: Sun Oct 25, 12:50 AM CDT.
 
 | Move | 30 fps precision | 30 fps recall | 15 fps precision | 15 fps recall | Target (85% R / 90% P) |
 |---|---|---|---|---|---|
-| Jab | 86% (6/7) | 43% (6/14) | 63% (5/8) | 36% (5/14) | Not met overall. On the clear front-facing jab clip (`jab_01`): 6/6 recall, 0 false positives at 30, 15, and 10 fps. Misses are in pro shadowboxing clips (`shadow_fighterF` throws sideways, so jabs read as hooks; `shadow_fighterG`). |
-| Hook | 100% (1/1) | 33% (1/3) | 100% | 33% | Not met (3 labels only) |
-| Uppercut | 0/2 | no confident labels | | | Ground truth for uppercut is all marked uncertain by the labeler |
-| Block | 50% (3/6) | 75% (3/4) | 50% | 75% | Not met |
+| Jab | 86% (6/7) | 43% (6/14) | 63% (5/8) | 36% (5/14) | Not met overall. On the clear front-facing jab clip (`jab_01`): 6/6, 0 false positives at 30, 15, and 10 fps. Misses are in pro shadowboxing clips (`shadow_fighterF` throws sideways; `shadow_fighterG`'s deep bouncing stance trips the kick-in-progress suppression). |
+| Hook | 100% (3/3) | 100% (3/3) | 100% (2/2) | 67% (2/3) | Met at 30 fps (3 labels only) |
+| Uppercut | 0/3 | no confident labels | | | All uppercut labels are marked uncertain by the labeler; real-webcam check requested |
+| Block | 50% (3/6) | 75% (3/4) | 50% | 75% | Not met (false blocks during X-shield transitions) |
 | X shield | 100% (4/4) | 80% (4/5) | 100% | 80% | Precision met; recall 80% |
 | Palm push | no confident labels | | | | Both palm-push clips are labeled uncertain |
-| Kick | 63% (5/8) | 83% (5/6) | 63% | 83% | Not met |
+| Kick | 71% (5/7) | 83% (5/6) | 71% | 83% | Not met (`kick_02`: fires at the chamber and the retraction, 0.4 s from the labeled peak) |
 | Knee | 100% (2/2) | 100% (2/2) | 100% | 100% | Met |
 
 What changed to get here (each verified on these clips before and after):
+- Hooks: the elbow also opens during a hook, so a jab candidate whose wrist swept far toward the midline is a hook; and a discarded candidate no longer starts the full 0.32 s refractory (it hid the real hook peak). Hook recall 1/3 -> 3/3.
+- Kicks: one kick at a time (shared cooldown); arm swings right after a kick are not strikes.
 - Jabs aimed at the camera barely change arm length in monocular 3D (depth is compressed). Detecting elbow-angle peaks instead of arm extension took `jab_01` recall from 4/5 to 6/6, and from 20% to 100% at 15 fps.
 - Strikes are detected as peaks (rise within 350 ms, then fall), so detection works the same at 10-30 fps.
 - Raising both arms into a block or X used to fire two jabs: two-handed motions that end at face height are now treated as defense; ending at chest height they are a palm push.

@@ -12,7 +12,8 @@ export default defineConfig({
   timeout: 120_000,
   expect: { timeout: 30_000 },
   fullyParallel: false,
-  workers: Number(process.env.PW_WORKERS ?? 2),
+  // 1 worker by default: the 8-browser specs need the whole 7 GB test machine.
+  workers: Number(process.env.PW_WORKERS ?? 1),
   reporter: [['list'], ['json', { outputFile: 'test-results/results.json' }]],
   use: {
     baseURL: process.env.BASE_URL ?? 'https://144-202-71-213.sslip.io',

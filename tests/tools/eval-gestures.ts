@@ -152,4 +152,5 @@ for (const [k, s] of Object.entries(stats)) {
   summary[k] = { ...s, precision: +p.toFixed(3), recall: +r.toFixed(3) };
   console.log(`${k.padEnd(10)} ${String(s.tp).padStart(3)} ${String(s.fp).padStart(3)} ${String(s.fn).padStart(3)}  ${isNaN(p) ? '  -  ' : (p * 100).toFixed(0).padStart(5) + '%'}     ${isNaN(r) ? '  -' : (r * 100).toFixed(0).padStart(4) + '%'}`);
 }
+fs.mkdirSync(path.join(ROOT, 'test-results'), { recursive: true });
 fs.writeFileSync(path.join(ROOT, 'test-results', 'gesture-eval.json'), JSON.stringify({ at: new Date().toISOString(), summary }, null, 1));

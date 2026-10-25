@@ -83,7 +83,8 @@ test('winner stays on: 8 browsers, rotates through 4+ matches, spectators cheer,
   const leaverSlot = hs[fIdx].online.slot;
   const watcher = all[0];
   await all[fIdx].b.close();
-  await watcher.page.waitForFunction((s) => { const mo = (window as any).__brawl.matchOver; return mo && mo.winner !== s; }, leaverSlot, { timeout: 30_000 });
+  // Up to 30 s keepalive + 10 s reconnect grace before the server treats the leaver as gone.
+  await watcher.page.waitForFunction((s) => { const mo = (window as any).__brawl.matchOver; return mo && mo.winner !== s; }, leaverSlot, { timeout: 60_000 });
   await watcher.page.waitForFunction((s) => { const f = (window as any).__brawl.snapshot?.f; return f && f.length === 2 && !f.some((x: any) => x.id === s) && (window as any).__brawl.snapshot.phase !== 'match_over'; }, leaverSlot, { timeout: 40_000 });
   for (const p of all.filter((_, i) => i !== fIdx)) expect(realErrors(p.consoleErrors)).toEqual([]);
 });
