@@ -70,6 +70,12 @@ async function migrate() {
     `CREATE INDEX IF NOT EXISTS match_events_actor_time ON match_events (actor, time DESC)`,
     `CREATE TABLE IF NOT EXISTS pose_samples (time timestamptz NOT NULL, session_id uuid NOT NULL, label text NOT NULL, landmarks jsonb NOT NULL)`,
     `SELECT create_hypertable('pose_samples', by_range('time'), if_not_exists => TRUE)`,
+    // Research recording (?research=1, explicit consent per session): landmark/action/marker stream, never video.
+    // lm = 33 world + 33 image landmarks, [x, y, z, visibility] each (264 reals).
+    `CREATE TABLE IF NOT EXISTS research_frames (time timestamptz NOT NULL, session_id uuid NOT NULL, tag text NOT NULL DEFAULT 'research', lm real[] NOT NULL, actions text[], move real[], marker text)`,
+    `SELECT create_hypertable('research_frames', by_range('time', INTERVAL '1 day'), if_not_exists => TRUE)`,
+    `ALTER TABLE research_frames SET (timescaledb.compress, timescaledb.compress_segmentby = 'session_id', timescaledb.compress_orderby = 'time')`,
+    `SELECT add_compression_policy('research_frames', compress_after => INTERVAL '1 hour', if_not_exists => TRUE)`,
     // Continuous aggregates. materialized_only = false enables real-time aggregation (off by default since 2.13).
     `CREATE MATERIALIZED VIEW IF NOT EXISTS leaderboard_daily WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
        SELECT time_bucket('1 day', time) AS day, actor,
@@ -166,6 +172,21 @@ export async function insertPoseSamples(sessionId: string, samples: { t: number;
     return `($${o + 1},$${o + 2},$${o + 3},$${o + 4})`;
   });
   return !!(await q(`INSERT INTO pose_samples (time, session_id, label, landmarks) VALUES ${ph.join(',')}`, vals));
+}
+
+export async function insertResearchFrames(sessionId: string, frames: { t: number; lm: number[]; acts: string[]; mv: number[]; mk: string | null }[]) {
+  if (!frames.length) return true;
+  const vals: unknown[] = [];
+  const ph = frames.map((f, i) => {
+    vals.push(new Date(f.t), sessionId, f.lm, f.acts, f.mv, f.mk);
+    const o = i * 6;
+    return `($${o + 1},$${o + 2},$${o + 3},$${o + 4},$${o + 5},$${o + 6})`;
+  });
+  return !!(await q(`INSERT INTO research_frames (time, session_id, lm, actions, move, marker) VALUES ${ph.join(',')}`, vals));
+}
+
+export async function researchStats() {
+  return q(`SELECT count(*)::int AS frames, count(DISTINCT session_id)::int AS sessions, count(marker)::int AS markers FROM research_frames`);
 }
 
 export async function motionStats() {

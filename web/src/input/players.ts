@@ -17,6 +17,8 @@ export class PoseInput {
   lastFrame: PoseFrame | null = null;
   lastPeople: (PosePerson | null)[] = [];
   onUpdate: (() => void) | null = null;
+  /** Every pose frame with the assigned people and recognizer outputs (research recording). */
+  onRaw: ((t: number, people: (PosePerson | null)[], outs: GestureOutput[]) => void) | null = null;
   skeleton: CanvasRenderingContext2D | null = null;
   ready = false;
   private t0 = performance.now();
@@ -60,6 +62,7 @@ export class PoseInput {
       this.latest[i] = out;
       this.pendingActions[i].push(...out.actions);
     }
+    this.onRaw?.(t, people, this.latest);
     this.drawSkeleton(people);
     this.onUpdate?.();
   }

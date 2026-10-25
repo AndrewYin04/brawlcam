@@ -7,6 +7,7 @@ import { LocalSession, FIGHTER_COLORS, type Session } from './game/session';
 import { PoseInput } from './input/players';
 import { MotionRecorder } from './input/motion';
 import { startCamera, CameraFailure } from './input/camera';
+import { research } from './research';
 import * as sfx from './game/audio';
 import { Commentator, setMuted, isMuted, commentaryLog } from './game/commentary';
 import type { SimEvent } from '../../shared/sim';
@@ -151,6 +152,8 @@ async function boot() {
   });
   show('menu');
   startLoop();
+  // Research recording: explicit consent every session before anything is recorded.
+  if (research.enabled) (hooks as any).researchConsent = await research.consent();
   const auto = params.get('mode');
   const room = params.get('room');
   if (room) import('./net/online').then((m) => m.joinRoom(room.toUpperCase()));
@@ -195,6 +198,7 @@ async function ensureCamera(players: number): Promise<boolean> {
     }
     pose.tracker.onError = (m) => ((hooks as any).poseError = m);
     pose.start(video);
+    if (research.active) research.start(video, pose);
   } else if (pose.players !== players) pose.setPlayers(players);
   return true;
 }
@@ -593,6 +597,7 @@ function logEvents(events: SimEvent[]) {
   if (hooks.mode === 'idle') return;
   const t = performance.now();
   for (const e of events) {
+    research.event(e);
     hooks.events.push({ t, ...e });
     if (hooks.events.length > 5000) hooks.events.splice(0, 1000);
   }

@@ -204,3 +204,9 @@ body.heroes #banner { top: 12%; font-size: clamp(30px, 7vw, 76px); }
 #move-ind i.on { color: #33b5ff; transform: scale(1.3); }
 .tut-guard { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0; }
 .tut-guard.hidden { display: none; }
+
+/* Research recording */
+.research-consent { pointer-events: auto; z-index: 50; display: flex; align-items: center; justify-content: center; background: rgba(5, 6, 12, 0.92); }
+#research-bar { position: fixed; top: 8px; left: 50%; transform: translateX(-50%); z-index: 40; background: rgba(20, 8, 12, 0.85); border: 1px solid #ff3d6e; border-radius: 999px; padding: 6px 12px; font-size: 13px; display: flex; gap: 8px; align-items: center; white-space: nowrap; }
+#research-bar .rec-dot { width: 10px; height: 10px; border-radius: 50%; background: #ff2a3a; animation: pulse 1s infinite; }
+#research-last { color: var(--gold, #ffc53d); min-width: 90px; }

@@ -170,6 +170,29 @@ const server = http.createServer(async (req, res) => {
       const ok = await db.insertPoseSamples(b.sessionId, samples);
       return send(res, ok ? 200 : 503, { stored: ok ? samples.length : 0 });
     }
+    if (p === '/api/research' && req.method === 'POST') {
+      // Research recording: only after the player's explicit consent (sent with every batch). Landmarks only, no video.
+      if (!rateOk(req, 'research', 60)) return send(res, 429, { error: 'slow down' });
+      const b = await readBody(req, 1024 * 1024);
+      if (b.consent !== true || !UUID.test(String(b.sessionId ?? ''))) return send(res, 400, { error: 'consent and sessionId required' });
+      const num = (x: unknown) => +(Number(x) || 0).toFixed(4);
+      const frames = (Array.isArray(b.frames) ? b.frames : [])
+        .slice(0, 150)
+        .filter((f: any) => Array.isArray(f?.lm) && f.lm.length === 264)
+        .map((f: any) => ({
+          t: Math.min(Date.now(), Number(f.t) || Date.now()),
+          lm: f.lm.map(num),
+          acts: (Array.isArray(f.acts) ? f.acts : []).slice(0, 8).map((a: unknown) => String(a).slice(0, 32)),
+          mv: (Array.isArray(f.mv) ? f.mv : [0, 0]).slice(0, 2).map(num),
+          mk: f.mk == null ? null : String(f.mk).slice(0, 32),
+        }));
+      const ok = await db.insertResearchFrames(b.sessionId, frames);
+      return send(res, ok ? 200 : 503, { stored: ok ? frames.length : 0 });
+    }
+    if (p === '/api/research/stats') {
+      const rows = await db.researchStats();
+      return rows ? send(res, 200, rows[0]) : send(res, 503, { error: 'db_unavailable' });
+    }
     if (p === '/api/motion/stats') {
       const rows = await db.motionStats();
       return rows ? send(res, 200, { labels: rows }) : send(res, 503, { error: 'db_unavailable' });
