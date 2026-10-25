@@ -221,3 +221,5 @@ body.heroes #banner { top: 12%; font-size: clamp(30px, 7vw, 76px); }
 .bars .side { min-width: 0; flex: 1 1 0; }
 .bars .side .name { max-width: 100%; padding: 0 2px; }
 #hint { max-width: min(560px, 80vw); white-space: normal; text-align: center; }
+.research-toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 60; background: #12301f; border: 1px solid var(--good); color: #fff; padding: 10px 16px; border-radius: 12px; font-size: 14px; }
+#research-bar .btn.primary { font-size: 15px; padding: 8px 16px; }

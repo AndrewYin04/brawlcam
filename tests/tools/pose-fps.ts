@@ -10,7 +10,7 @@ for (const v of variants) {
   await p.goto(`${BASE}/?mode=practice&skipcal&nocomment&aifixture&notut${v}${process.env.EXTRA ?? ''}`);
   await p.waitForFunction(() => (window as any).__brawl?.snapshot?.phase === 'fight', null, { timeout: 120000 });
   const samples: any[] = [];
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < (Number(process.env.SECS) || 8); i++) {
     await p.waitForTimeout(1000);
     samples.push(await p.evaluate(() => { const h = (window as any).__brawl; return { pose: h.poseFps, render: h.renderFps, inferMs: h.inferMs, renderMs: h.renderMs, quality: h.quality }; }));
   }

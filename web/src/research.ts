@@ -24,6 +24,8 @@ class Research {
   private startedAt = 0;
   private sendTimer = 0;
   stats = { frames: 0, sent: 0, markers: 0, sendErrors: 0 };
+  private checkpointTimer = 0;
+  private part = 0;
 
   /** Full-screen consent, every session. Resolves true only after the box is ticked and Start is pressed. */
   consent(): Promise<boolean> {
@@ -66,9 +68,10 @@ class Research {
     this.startedAt = Date.now();
     const stream = video.srcObject as MediaStream | null;
     if (stream && typeof MediaRecorder !== 'undefined') {
-      const type = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4'].find((t) => MediaRecorder.isTypeSupported(t));
+      // H.264 first: it is usually hardware-encoded (measured: pose 14.4 fps with H.264 vs 12.4 with VP9 while recording).
+      const type = ['video/webm;codecs=h264', 'video/mp4;codecs=avc1', 'video/webm;codecs=vp8', 'video/webm;codecs=vp9', 'video/webm', 'video/mp4'].find((t) => MediaRecorder.isTypeSupported(t));
       try {
-        this.recorder = new MediaRecorder(stream, type ? { mimeType: type, videoBitsPerSecond: 1_500_000 } : undefined);
+        this.recorder = new MediaRecorder(stream, type ? { mimeType: type, videoBitsPerSecond: 1_000_000 } : undefined);
         this.recorder.ondataavailable = (e) => e.data.size && this.chunks.push(e.data);
         this.recorder.start(1000);
       } catch (e) {
@@ -105,6 +108,9 @@ class Research {
     };
     addEventListener('keydown', this.onKey);
     this.sendTimer = window.setInterval(() => void this.flush(), 2000);
+    // Never lose a session: save when the page is closed, and checkpoint the files every 2 minutes.
+    addEventListener('pagehide', () => void this.finish());
+    this.checkpointTimer = window.setInterval(() => void this.checkpoint(), 120_000);
     this.showBar();
   }
 
@@ -144,20 +150,23 @@ class Research {
   private showBar() {
     const bar = document.createElement('div');
     bar.id = 'research-bar';
-    bar.innerHTML = `<span class="rec-dot"></span> REC research · Space = missed move · F = false move · 1–9 = I did move N · <span id="research-last"></span> <button class="btn small" id="research-stop">Stop &amp; save files</button>`;
+    bar.innerHTML = `<span class="rec-dot"></span> REC research · Space = missed move · F = false move · 1–9 = I did move N · <span id="research-last"></span> <button class="btn primary" id="research-stop">Stop &amp; save files</button>`;
     document.body.appendChild(bar);
     bar.querySelector<HTMLButtonElement>('#research-stop')!.onclick = () => void this.finish();
   }
 
-  /** Stop recording and download the video and the JSONL log. */
-  async finish() {
+  /** Save what we have so far (video so far + log so far) without stopping: a crash loses at most 2 minutes. */
+  private async checkpoint() {
     if (!this.active) return;
-    this.active = false;
-    clearInterval(this.sendTimer);
-    removeEventListener('keydown', this.onKey);
-    await this.flush();
+    this.part++;
+    this.recorder?.requestData();
+    await new Promise((r) => setTimeout(r, 300));
+    this.save(`-part${this.part}`);
+  }
+
+  private save(suffix = '') {
     const stamp = new Date(this.startedAt || Date.now()).toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    const save = (blob: Blob, name: string) => {
+    const dl = (blob: Blob, name: string) => {
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = name;
@@ -165,18 +174,40 @@ class Research {
       a.click();
       setTimeout(() => (URL.revokeObjectURL(a.href), a.remove()), 5000);
     };
+    const header = JSON.stringify({ throwhands_research: 1, sessionId: this.sessionId, startedAt: new Date(this.startedAt).toISOString(), moves: MOVES, landmarks: 'MediaPipe Pose 33: world [x,y,z,visibility] metres hip-centred; image [x,y,z,visibility] normalised' });
+    const base = `throwhands-research-${stamp}${suffix}`;
+    dl(new Blob([header + '\n' + this.lines.join('\n') + '\n'], { type: 'application/x-ndjson' }), `${base}.jsonl`);
+    const ext = (this.chunks[0]?.type ?? '').includes('mp4') ? 'mp4' : 'webm';
+    if (this.chunks.length) dl(new Blob(this.chunks, { type: this.chunks[0].type || 'video/webm' }), `${base}.${ext}`);
+    toastSaved(`${base}.${ext} and .jsonl`);
+  }
+
+  /** Stop recording and download the video and the JSONL log (also called on Quit, leaving the match, page close). */
+  async finish() {
+    if (!this.active) return;
+    this.active = false;
+    clearInterval(this.sendTimer);
+    clearInterval(this.checkpointTimer);
+    removeEventListener('keydown', this.onKey);
+    await this.flush();
     if (this.recorder && this.recorder.state !== 'inactive') {
       await new Promise<void>((res) => {
         this.recorder!.onstop = () => res();
         this.recorder!.stop();
       });
     }
-    const header = JSON.stringify({ throwhands_research: 1, sessionId: this.sessionId, startedAt: new Date(this.startedAt).toISOString(), moves: MOVES, landmarks: 'MediaPipe Pose 33: world [x,y,z,visibility] metres hip-centred; image [x,y,z,visibility] normalised' });
-    save(new Blob([header + '\n' + this.lines.join('\n') + '\n'], { type: 'application/x-ndjson' }), `throwhands-research-${stamp}.jsonl`);
-    if (this.chunks.length) save(new Blob(this.chunks, { type: this.chunks[0].type || 'video/webm' }), `throwhands-research-${stamp}.webm`);
+    this.save();
     document.getElementById('research-bar')?.remove();
     (window as any).__brawl && ((window as any).__brawl.research = { ...this.stats, saved: true });
   }
+}
+
+function toastSaved(names: string) {
+  const t = document.createElement('div');
+  t.className = 'research-toast';
+  t.textContent = `Saved to your Downloads folder: ${names}`;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 6000);
 }
 
 export const research = new Research();

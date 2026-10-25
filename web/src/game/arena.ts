@@ -157,9 +157,11 @@ export class Arena {
   }
 
   renderMs = 0;
+  /** Quality step-down: bloom off frees GPU time for pose detection on weak/shared GPUs. */
+  bloom = true;
   render() {
     const t0 = performance.now();
-    if (this.composer) this.composer.render();
+    if (this.composer && this.bloom) this.composer.render();
     else this.renderer.render(this.scene, this.camera);
     this.renderMs = this.renderMs * 0.9 + (performance.now() - t0) * 0.1;
   }

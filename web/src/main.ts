@@ -526,9 +526,33 @@ function startLoop() {
   let last = performance.now();
   const frames: number[] = [];
   // Tests on a CPU-only server can cap the render rate so pose detection gets the CPU.
-  const renderCap = Number(params.get('renderfps') ?? 0);
+  const forcedCap = Number(params.get('renderfps') ?? 0);
   let lastRender = 0;
+  // Automatic quality step-down (measured on an integrated GPU: rendering at 60 fps starved pose detection to
+  // 7 fps; capping rendering at 30 fps gave 18, at 20 fps gave 20). Level 0: uncapped; 1: 30 fps; 2: 24 fps, no bloom.
+  const forcedQ = params.get('quality');
+  let quality = forcedQ != null ? Math.max(0, Math.min(2, Number(forcedQ))) : 0;
+  let lowSince = 0;
+  const caps = [0, 30, 24];
+  const applyQuality = () => {
+    arena.bloom = quality < 2;
+    (hooks as any).quality = quality;
+  };
+  applyQuality();
   const loop = (now: number) => {
+    const renderCap = forcedCap || caps[quality];
+    if (forcedQ == null && pose && pose.tracker.fps > 0 && session && !calibrating) {
+      const target = quality === 0 ? 18 : 15;
+      if (pose.tracker.fps < target) {
+        lowSince = lowSince || now;
+        if (now - lowSince > 3000 && quality < 2) {
+          quality++;
+          lowSince = 0;
+          applyQuality();
+          console.log('[quality] pose', pose.tracker.fps, 'fps -> level', quality);
+        }
+      } else lowSince = 0;
+    }
     if (renderCap && now - lastRender < 1000 / renderCap - 2) {
       requestAnimationFrame(loop);
       return;
@@ -627,6 +651,7 @@ document.addEventListener('click', (e) => {
 });
 
 export function backToMenu() {
+  if (research.active) void research.finish(); // leaving the match (Quit, Menu) ends the research session: save the files
   teardown();
   import('./net/online').then((m) => m.leaveRoom()).catch(() => {});
   $('calib').classList.add('hidden');
