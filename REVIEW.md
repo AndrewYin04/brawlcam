@@ -699,3 +699,36 @@ Before and after: a 30 s clip of the same scene, plus the metrics, in STATUS.md.
 
 ### 5:48 AM: the user's camera A/B: `?cam=free` "was doing well"
 In `view.ts`, `?cam=free` skips the whole block at line 495 (`CAM_MODE !== 'free'`): the cage clamp, the swing-to-fit, `camVisBias` (visibility swing), and the strike-triggered swing. The user saw the twitch in the default mode and not in `free`, so **the cause is inside that block** (items 1 and 2 of the 5:35 AM note, plus the per-wall clamp), not yaw noise or the post-smoothing pushes. Fix that block first. A valid option: make the default behave like `free` (no strike swing, no visibility swing), and keep only a slow, hysteresis-gated swing for the "pinned on the far fence" case, with cage parts fading instead of the camera moving. Show before and after with the metrics.
+
+## 2026-10-25 6:00 AM CDT: drill session 3 on build 994fc39: big gains; grab still 0/4 (root causes in the data)
+Session file `throwhands-research-2026-10-25T10-51-07.jsonl`; the user is copying the `.webm` and `.jsonl` to `~/hacktx26/research/`. **13.7 fps** (s1 15.4, s2 16.2). Planner's per-drill comparison (reps detected; mean fwd and strafe input):
+
+| Drill | s1 | s2 | **s3** |
+|---|---|---|---|
+| still | fwd +0.28 | 0.00 | **0.00** ✓ |
+| hook_L_big | 1/4 | 1/4 | **4/4** ✓ |
+| hook_R_big | 2/4 | 0/4 | **3/4** ✓ |
+| uppercut_big | 1/3 | 0/3 | **3/3** ✓ |
+| step_back | 0/3 (+0.40) | 1/3 (+0.25) | **3/3 (−0.22)** ✓ |
+| straight_big | 0/4 | 3/4 | **1/4 ✗ (regression)** |
+| lean_back | 0/3 (+0.66) | 2/3 (+0.05) | **1/3 (+0.12) ✗, still forward** |
+| lean_left / lean_right | fwd +0.37 / +0.50 | +0.33 / +0.28 | **−0.16 / −0.20** (sideways lean now moves you back) |
+| step_fwd | strafe +0.06 | −0.26 | **+0.20** (cross-talk) |
+| grab / throw | n/a | 0/4, 0/4 | **0/4, 0/4 ✗** |
+
+### Grab root causes (per rep; extension = wrist-to-shoulder distance over arm length, from world landmarks)
+| Rep | max ext L/R | both arms above 0.75 together? | after the reach: min ext L/R, wrist gap (shoulder widths) | what fired |
+|---|---|---|---|---|
+| grab 1 | 0.79 / 0.85 | yes, 0.10 s | 0.39 / 0.38, gap 0.72 | **jab R, hook R** |
+| grab 3 | 0.76 / 0.80 | **never at the same time** | n/a | uppercut R, jab L ×2, jab R |
+| grab 4 | 0.74 / 0.71 | **never** | n/a | jab L |
+| grab 8 | 0.74 / 0.69 | **never** | n/a | nothing |
+
+Throw reps 2 and 5 never reach both arms above 0.75; reps 6 and 7 do, then fire uppercut, hook, and jab.
+
+1. **The reach threshold is too high for a real reach toward the camera.** Forward reaches are foreshortened, and MediaPipe's depth (z) underestimates forward extension, so 3 of 4 grabs never get both arms past 0.75 at once (they peak around 0.70 to 0.80, one arm at a time). Tune `reachExt` and `reachSync` on this session (about 0.6 to 0.65, a sync window of about 0.35 s?). Consider adding image-space cues: both wrists moving toward the image center and up to chest height, and wrist size growing as they approach the camera.
+2. **When the reach does register (grab 1), a hook and a jab fire anyway.** The new whole-motion hook classifier keys on the wrist sweeping toward the midline, and **a grab's pull-in does exactly that with both hands**. While a two-arm reach is in progress, or both wrists are converging, suppress hook classification, the same way the jab hold works.
+3. **The drill's hidden stand-in opponent takes the user's strikes during drills:** cage events, a KO, `round_end`, and `match_over` all fire mid-drill. In drill mode, either don't run the match at all, or make the stand-in invulnerable, never knocked back, and always within grab range in front of the player. Otherwise a KO'd or slammed stand-in can make grabs miss on range in the sim.
+4. Also: the straight regression (3/4 to 1/4); lean_back still produces forward input; lean left and right produce backward input; and step_fwd leaks strafe.
+
+**Order:** grab items 1 to 3 (the user tested grappling three times and it never worked), then the straight regression, then the lean axes. Grappling stays behind `?grapple=1` and out of the video unless drill grabs reach at least 3/4. Freeze 7:30 AM: if grab isn't at 3/4 or better by then, leave it flagged and say so in STATUS.md.
