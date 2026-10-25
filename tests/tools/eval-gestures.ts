@@ -47,7 +47,9 @@ export function runClip(name: string) {
   const actions: { t: number; kind: string; hand: string; speed: number }[] = [];
   const states: Record<string, { start: number; end: number }[]> = { block: [], xshield: [] };
   const on: Record<string, number> = {};
-  for (const f of data.frames) {
+  const stride = Number(process.env.STRIDE ?? 1);
+  for (const [fi, f] of data.frames.entries()) {
+    if (fi % stride) continue;
     const p = f.people[0];
     const out = rec.update(p ? { t: f.t, world: p.world, image: p.image } : null, f.t);
     for (const a of out.actions) if (a.kind !== 'xshield') actions.push({ t: a.t, kind: mapKind(a.kind), hand: a.hand, speed: +a.speed.toFixed(2) });

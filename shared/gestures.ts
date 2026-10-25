@@ -27,7 +27,7 @@ export const GESTURE_CFG = {
   // jab / straight
   extRate: 1.5, // arm extension (fraction of arm length) per second
   extMin: 0.6, // extension reached to count
-  elbowOpenMin: 110, // deg, elbow angle reached
+  elbowOpenMin: 105, // deg, elbow angle reached
   jabMinSpeed: 1.2, // m/s wrist speed relative to shoulders
   // hook
   hookVel: 1.7, // m/s lateral wrist velocity toward the midline
@@ -35,6 +35,14 @@ export const GESTURE_CFG = {
   // uppercut
   upVel: 1.7, // m/s upward wrist velocity
   upStartBelow: 0.12, // wrist must start this far below shoulder line (m)
+  // peak detection
+  riseWindow: 0.35, // s, a strike must rise within this window
+  jabElbowRise: 28, // deg the elbow opens during a jab
+  jabExtRise: 0.05, // minimum extension rise (fraction of arm length)
+  upElbowMax: 115, // uppercuts keep the elbow bent
+  upRise: 0.17, // m wrist rise relative to shoulders
+  hookRise: 0.17, // m lateral sweep toward the midline
+  strikeMinSpeed: 1.0, // m/s
   // shared
   handRefractory: 0.32, // s between strikes of the same hand
   palmPairWindow: 0.12, // s for both hands to extend together
@@ -102,6 +110,7 @@ export class GestureRecognizer {
   calib: Calibration = { ...DEFAULT_CALIB };
   calibrated = false;
   private hist: Hist[] = [];
+  private feat: Record<'L' | 'R', { t: number; ext: number; elbow: number; y: number; u: number; speed: number }[]> = { L: [], R: [] };
   private renderFilter = new VecFilter(15 * 3, 1.2, 0.6);
   private gestFilter = new VecFilter(15 * 3, 6, 0.8);
   private lastStrike: Record<string, number> = { L: -9, R: -9, kickL: -9, kickR: -9 };
@@ -133,6 +142,7 @@ export class GestureRecognizer {
 
   reset() {
     this.hist = [];
+    this.feat = { L: [], R: [] };
     this.renderFilter.reset();
     this.gestFilter.reset();
     this.pending = null;
@@ -227,26 +237,49 @@ export class GestureRecognizer {
       return { h, S, E, W, elbow, ext, v, speed, extRate, stroke, startY };
     });
 
-    const candidates: { hand: 'L' | 'R'; kind: ActionKind; score: number; speed: number }[] = [];
+    // Peak-based strike detection: robust to frame rate (works the same at 10, 15, or 30 fps).
+    const candidates: { hand: 'L' | 'R'; kind: ActionKind; score: number; speed: number; t: number }[] = [];
     for (const hi of handInfo) {
-      if (t - this.lastStrike[hi.h] < this.cfg.handRefractory) continue;
       const side = hi.h === 'L' ? 1 : -1; // +X is the person's left
-      const relX = hi.W[0] - MS[0];
-      // Uppercut: fast upward drive from below the shoulder line.
-      if (hi.v[1] > this.cfg.upVel && hi.startY < -this.cfg.upStartBelow && hi.elbow < 150 && hi.stroke[1] > 0.1) {
-        candidates.push({ hand: hi.h, kind: 'uppercut', score: hi.v[1] / this.cfg.upVel, speed: hi.speed });
+      const F = this.feat[hi.h];
+      F.push({ t, ext: hi.ext, elbow: hi.elbow, y: hi.W[1] - MS[1], u: -side * (hi.W[0] - MS[0]), speed: hi.speed });
+      while (F.length && t - F[0].t > 0.6) F.shift();
+      const n = F.length;
+      if (n < 3) continue;
+      const k = n - 2;
+      const pk = F[k];
+      if (pk.t - this.lastStrike[hi.h] < this.cfg.handRefractory) continue;
+      const peakOf = (key: 'ext' | 'y' | 'u' | 'elbow') => {
+        if (!(pk[key] >= F[k - 1][key] && pk[key] > F[n - 1][key])) return null;
+        let minV = pk[key];
+        let minT = pk.t;
+        for (let i = k - 1; i >= 0 && pk.t - F[i].t <= this.cfg.riseWindow; i--) {
+          if (F[i][key] < minV) {
+            minV = F[i][key];
+            minT = F[i].t;
+          }
+        }
+        const dt = pk.t - minT;
+        if (dt <= 0) return null;
+        const peakSpeed = Math.max(...F.slice(0, n).filter((f) => f.t >= minT && f.t <= F[n - 1].t).map((f) => f.speed));
+        return { rise: pk[key] - minV, dt, start: F.find((f) => f.t === minT)!, peakSpeed };
+      };
+      // Jab/straight: the elbow opens quickly (robust even when the punch points at the camera).
+      const jab = peakOf('elbow');
+      if (jab && jab.rise >= this.cfg.jabElbowRise && pk.elbow >= this.cfg.elbowOpenMin && pk.ext - jab.start.ext >= this.cfg.jabExtRise) {
+        candidates.push({ hand: hi.h, kind: 'jab', score: jab.rise / this.cfg.jabElbowRise, speed: Math.max(jab.peakSpeed, ((pk.ext - jab.start.ext) * this.calib.armLen) / jab.dt), t: pk.t });
       }
-      // Hook: fast lateral swing toward (or across) the midline at about shoulder height.
-      const towardMid = -side * hi.v[0];
-      if (towardMid > this.cfg.hookVel && hi.elbow < this.cfg.hookElbowMax && hi.W[1] > MS[1] - 0.3 && Math.abs(hi.stroke[0]) > 0.08 && -side * hi.stroke[0] > 0) {
-        candidates.push({ hand: hi.h, kind: 'hook', score: towardMid / this.cfg.hookVel, speed: hi.speed });
+      const up = peakOf('y');
+      if (up && up.rise >= this.cfg.upRise && up.start.y < -this.cfg.upStartBelow && pk.elbow < this.cfg.upElbowMax) {
+        candidates.push({ hand: hi.h, kind: 'uppercut', score: (up.rise / this.cfg.upRise) * 1.1, speed: Math.max(up.peakSpeed, up.rise / up.dt), t: pk.t });
       }
-      // Jab / straight: the arm extends quickly.
-      if (hi.extRate > this.cfg.extRate && hi.ext > this.cfg.extMin && hi.elbow > this.cfg.elbowOpenMin && hi.speed > this.cfg.jabMinSpeed) {
-        candidates.push({ hand: hi.h, kind: 'jab', score: hi.extRate / this.cfg.extRate, speed: hi.speed });
+      const hook = peakOf('u');
+      if (hook && hook.rise >= this.cfg.hookRise && pk.elbow < this.cfg.hookElbowMax && pk.y > -0.3) {
+        candidates.push({ hand: hi.h, kind: 'hook', score: hook.rise / this.cfg.hookRise, speed: Math.max(hook.peakSpeed, hook.rise / hook.dt), t: pk.t });
       }
-      void relX;
     }
+    // Ignore slow, gestural movements.
+    for (let i = candidates.length - 1; i >= 0; i--) if (candidates[i].speed < this.cfg.strikeMinSpeed) candidates.splice(i, 1);
     // Strongest candidate per hand.
     const byHand = new Map<string, (typeof candidates)[number]>();
     for (const c of candidates) {
@@ -257,7 +290,7 @@ export class GestureRecognizer {
     const rW = P[J.rWr];
     const wristsGap = len(sub(lW, rW)) / SW;
     for (const c of byHand.values()) {
-      this.lastStrike[c.hand] = t;
+      this.lastStrike[c.hand] = c.t;
       const a: Action = { kind: c.kind, hand: c.hand, speed: c.speed };
       if (c.kind === 'jab') {
         // Possible palm push: both hands extend together with wrists close.

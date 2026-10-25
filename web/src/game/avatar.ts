@@ -87,7 +87,53 @@ export class FighterAvatar {
     this.ready = this.load();
   }
 
+  // Capsule stand-in used for CPU-rendered automated tests (?lowgfx): same joints, cheap to draw.
+  private proxy: { group: THREE.Group; bones: { a: number; b: number; m: THREE.Mesh }[]; head: THREE.Mesh; gl: THREE.Mesh; gr: THREE.Mesh } | null = null;
+
+  private buildProxy() {
+    const group = new THREE.Group();
+    const suit = new THREE.MeshLambertMaterial({ color: this.style.color });
+    const geo = new THREE.CylinderGeometry(0.05, 0.05, 1, 6);
+    const pairs: [number, number][] = [[J.lSh, J.rSh], [J.lSh, J.lEl], [J.lEl, J.lWr], [J.rSh, J.rEl], [J.rEl, J.rWr], [J.lHip, J.rHip], [J.lSh, J.lHip], [J.rSh, J.rHip], [J.lHip, J.lKnee], [J.lKnee, J.lAnk], [J.rHip, J.rKnee], [J.rKnee, J.rAnk]];
+    const bones = pairs.map(([a, b]) => {
+      const m = new THREE.Mesh(geo, suit);
+      group.add(m);
+      return { a, b, m };
+    });
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 6), suit);
+    this.gloveMat = new THREE.MeshStandardMaterial({ color: this.style.color, emissive: new THREE.Color(this.style.color), emissiveIntensity: 0.6 });
+    const gl = new THREE.Mesh(new THREE.SphereGeometry(0.075, 8, 6), this.gloveMat);
+    const gr = new THREE.Mesh(new THREE.SphereGeometry(0.075, 8, 6), this.gloveMat);
+    group.add(head, gl, gr);
+    group.position.y = 0.95;
+    this.body.add(group);
+    this.gloves = [gl, gr];
+    this.proxy = { group, bones, head, gl, gr };
+  }
+
+  private setProxyJoints(j: Joints) {
+    const px = this.proxy!;
+    const P = j.p.map(v3);
+    const up = new THREE.Vector3(0, 1, 0);
+    for (const b of px.bones) {
+      const A = P[b.a];
+      const B = P[b.b];
+      const d = B.clone().sub(A);
+      const l = d.length() || 0.001;
+      b.m.position.copy(A).add(B).multiplyScalar(0.5);
+      b.m.scale.set(1, l, 1);
+      b.m.quaternion.setFromUnitVectors(up, d.normalize());
+    }
+    px.head.position.copy(P[J.nose]).add(new THREE.Vector3(0, 0.05, -0.05));
+    px.gl.position.copy(P[J.lWr]);
+    px.gr.position.copy(P[J.rWr]);
+  }
+
   private async load() {
+    if (FighterAvatar.lowGfx) {
+      this.buildProxy();
+      return;
+    }
     const buf = await preloadModel();
     const loader = new GLTFLoader();
     loader.register((p) => new VRMLoaderPlugin(p));
@@ -114,6 +160,10 @@ export class FighterAvatar {
 
   applyStyle(style: FighterStyle) {
     this.style = style;
+    if (this.proxy) {
+      this.proxy.bones[0].m.material && (this.proxy.bones[0].m.material as THREE.MeshLambertMaterial).color.set(style.color);
+      return;
+    }
     if (!this.vrm) return;
     const suit = new THREE.Color(style.color);
     const glow = new THREE.Color(style.aura ?? style.color);
@@ -191,6 +241,7 @@ export class FighterAvatar {
 
   /** Apply avatar-space joints to the normalized humanoid bones. */
   setJoints(j: Joints) {
+    if (this.proxy) return this.setProxyJoints(j);
     if (!this.vrm) return;
     const p = j.p.map(v3);
     const hum = this.vrm.humanoid;
@@ -292,6 +343,13 @@ export class FighterAvatar {
   }
 
   update(dt: number, time: number, opts: { shield: number; meterFull: boolean; airborne: number; alive: boolean }) {
+    if (this.proxy) {
+      this.body.position.y = opts.airborne;
+      this.root.visible = opts.alive;
+      this.glowBoost = Math.max(0, this.glowBoost - dt * 3);
+      this.gloveMat.emissiveIntensity = 0.6 + this.glowBoost * 3;
+      return;
+    }
     if (!this.vrm) return;
     this.vrm.update(dt);
     this.flinch = Math.max(0, this.flinch - dt * 4);
@@ -325,6 +383,7 @@ export class FighterAvatar {
 
   dispose() {
     if (this.vrm) VRMUtils.deepDispose(this.vrm.scene);
+    this.proxy = null;
     this.root.removeFromParent();
   }
 }
