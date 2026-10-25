@@ -1,4 +1,4 @@
-# Brawlcam (working name)
+# Throw Hands
 
 A browser fighting game where your body is the controller. Your webcam tracks your pose, a 3D superhero fighter copies your movements, and your real punches, blocks, and special-move gestures fight a bot, a friend next to you, or a friend on another device.
 
