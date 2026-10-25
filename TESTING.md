@@ -119,6 +119,16 @@ Paths not yet run are listed in `STATUS.md` until they have a row here.
 | Research recording mode | `npx playwright test research` | consent required (Start disabled until ticked); 2 files downloaded (1.2 MB webm, 283 KB jsonl with 33 world + 33 image points per frame); markers `did:jab`, `missed`, `false_fire` recorded; 131 landmark frames + 3 markers stored server-side; declining records and sends nothing |
 | Opt-in continuous pose streams | `npx playwright test streams` | consent on: 182 frames in 12 s (15.2 fps), 7 batches, stored in `pose_streams`; consent off: 0 requests |
 | Stream storage per player-hour | `npx tsx tests/tools/stream-storage-bench.ts` (throwaway hypertable, 54,000 real frames, dropped after) | real[] arrays: 34.6 → 20.4 MB per player-hour (1.7x); one smallint column per coordinate (shipped): 19.7 → 5.9 MB (3.4x), about 102 player-hours under the 600 MB guard |
+| Big punch must not move you (bug A, the user's report) | `npx tsx tests/unit/punch-no-move.ts` (real clips of people punching in place) | before: up to 61 cm of input-driven movement around a strike; after: 4.2 cm worst (target < 5) |
+| Pose rate vs renderer (integrated Intel GPU, like the user's laptop) | `npx tsx tests/tools/pose-fps.ts` (VARIANTS=...) | pose alone 17 fps; game idle 16 (60 fps render) / 17.4 (cap 30) / 19.5 (cap 24, no bloom); under another GPU load 7.4 uncapped vs 18 capped at 30. Shipped: automatic step-down when pose < 18 / 15 fps |
+| Research recording cost | browser check (codec forced) | pose 12.4 fps with VP9 recording, 14.4 with H.264 (now preferred) |
+| Announcer audible | `npx playwright test commentary` (production) | 9 calls in 26 s matching events; AudioContext running, voice bus 0.9, 9 played; 0 browser speechSynthesis calls |
+| Stock calls say only their line | `npx tsx tests/tools/check-calls.ts` (ElevenLabs speech-to-text) | 48/48 clean (0 extra words) |
+| Live Gemini TTS lines | `npx tsx tests/tools/check-live-tts.ts` | not measurable today: both Gemini TTS models answer 429 (free-tier quota). Live lines are captions; spoken commentary is the verified stock calls |
+| Research mode auto-save | `npx playwright test research` (production) | consent, 2 files, labels/markers, 137 frames to Tiger; saves on Quit/Menu/page close, checkpoints every 2 min |
+| Guided drills | `npx playwright test drills` (production, clips drive the prompts) | 3 sections; big punches 10/15 detected; movement 24/24; files saved |
+| Grappling (flagged ?grapple=1) | `tests/unit/grapple-gestures.ts`, `grapple-sim.ts`, `tests/tools/grapple-scan.ts` | 0 grab/throw false triggers on all 37 clips; synthetic grab 4/4, throw 4/4; triangle rules, escapes, throw damage; existing detection unchanged (eval-gestures identical) |
+| Camera (round 7 fixes) | `ROUND=<r> npx tsx video/review-capture.ts` | cage in line of sight ~0% in every scene; opponent visible 84-93% (cage_far 72%); no side flips in normal play |
 
 ## Bugs found by these tests (reproduced first, fixed, re-run)
 
