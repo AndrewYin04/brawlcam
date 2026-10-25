@@ -7,10 +7,14 @@ import { apothem } from './stage';
 import { Announcer } from './announcer';
 
 /** New Smash-style heroes by default; the original VRM renderer stays behind ?classic (and capsules behind ?lowgfx). */
-/** 1v1 camera: 'behind' (default) or 'inside' (clamped inside the cage), for the user to compare. */
+/**
+ * 1v1 camera. 'free' is the default (REVIEW.md 7:16 AM, the user: the behind mode's cage swing and visibility swing
+ * read as shaky): behind your fighter, no swing; cage parts still fade, and the clearance, KO and slow-motion shots
+ * still apply. ?cam=behind (swing to stay inside the cage) and ?cam=inside stay selectable.
+ */
 export const CAM_MODE: 'behind' | 'inside' | 'free' = (() => {
   const c = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('cam') : null;
-  return c === 'inside' ? 'inside' : c === 'free' ? 'free' : 'behind';
+  return c === 'inside' ? 'inside' : c === 'behind' ? 'behind' : 'free';
 })();
 export const USE_HEROES = typeof location !== 'undefined' && !new URLSearchParams(location.search).has('classic') && !FighterAvatar.lowGfx;
 import { VFX, SPRITE_SPARKS } from './vfx';
