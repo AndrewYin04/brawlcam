@@ -393,6 +393,8 @@ export class Sim {
     this.faceTarget(f, false, dt);
 
     const stunned = this.t < f.stunUntil;
+    // Holding the X with a full meter fires the Shield, even right after being hit (it is a defensive move).
+    if (fighting && inp.present && inp.xshield && f.meter >= 100 && this.cdReady(f, 'shield')) this.trySuper(f, 'shield');
     f.blocking = fighting && inp.present && !stunned && (inp.blocking || (inp.xshield && f.meter < 100));
 
     const walkFromX = f.x;

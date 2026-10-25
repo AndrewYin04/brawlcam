@@ -432,6 +432,20 @@ export class FighterAvatar {
     void _v;
   }
 
+  /** Review probe: world positions of root and feet, and world rotations of chest and head (motion measurements). */
+  probe() {
+    const w = (o: THREE.Object3D | null | undefined) => (o ? o.getWorldPosition(new THREE.Vector3()).toArray() : null);
+    const q = (o: THREE.Object3D | null | undefined) => (o ? o.getWorldQuaternion(new THREE.Quaternion()).toArray() : null);
+    const h = this.vrm?.humanoid;
+    return {
+      root: w(this.root),
+      lFoot: w(h?.getRawBoneNode('leftFoot')),
+      rFoot: w(h?.getRawBoneNode('rightFoot')),
+      chest: q(h?.getRawBoneNode('chest')),
+      head: q(h?.getRawBoneNode('head')),
+    };
+  }
+
   /** World position of a glove (for VFX). */
   glovePos(side: 'L' | 'R', out = new THREE.Vector3()) {
     const g = this.gloves[side === 'L' ? 0 : 1];

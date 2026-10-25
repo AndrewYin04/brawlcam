@@ -32,6 +32,7 @@ let view: MatchView | null = null;
 let session: LocalSession | null = null;
 let replays: (Replay | null)[] = [];
 let t = 0;
+const forcedMove = new Map<number, [number, number]>();
 const overrides = new Map<number, { kind: string; until: number; start: number; hand: string }>();
 const lastOut: GestureOutput[] = [];
 
@@ -83,6 +84,7 @@ export async function initRecord() {
       document.getElementById('hud')!.classList.toggle('hidden', cfg.hud === false);
       session.start();
       t = 0;
+      forcedMove.clear();
       // Let the avatars load.
       await Promise.all([...view.slots.values()].map((s) => s.avatar.ready));
       return { ids };
@@ -98,6 +100,8 @@ export async function initRecord() {
           const fr = r.frames[idx];
           const p = fr.people[0];
           const out = r.rec.update(p ? { t: t, world: p.world, image: p.image } : null, t);
+          const fm = forcedMove.get(i);
+          if (fm) out.move = fm;
           lastOut[i] = out;
           session.input(i, out, out.actions);
         });
@@ -124,6 +128,23 @@ export async function initRecord() {
       const id = session.localIds[i];
       session.sim.pushAction(id, { kind, hand, speed: 6 });
       overrides.set(i, { kind: kind === 'palm' ? 'blast' : kind === 'uppercut' ? 'super_uppercut' : kind, hand, start: t, until: t + (kind === 'uppercut' ? 1.2 : 0.6) });
+    },
+    /** Force a player's movement input [strafe, forward] (null to release). */
+    setMove(i: number, m: [number, number] | null) {
+      if (m) forcedMove.set(i, m);
+      else forcedMove.delete(i);
+    },
+    /** Make any fighter (e.g. the bot) perform a move. */
+    moveId(id: number, kind: Action['kind'], hand: 'L' | 'R' | 'B' = 'R', meter = false) {
+      if (!session) return;
+      const f = session.sim.get(id);
+      if (f && meter) f.meter = 100;
+      session.sim.pushAction(id, { kind, hand, speed: 6 });
+    },
+    /** Motion probe for every fighter. */
+    probe() {
+      if (!view) return [];
+      return [...view.slots.entries()].map(([id, s]) => ({ id, ...(s.avatar as any).probe() }));
     },
     setMeter(i: number, v: number) {
       const f = session?.sim.get(session.localIds[i]);
