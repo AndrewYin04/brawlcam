@@ -69,7 +69,7 @@ In the user's words: "the movements are super awkward. the people are drifting a
 **1. Real locomotion: the biggest problem.**
 - **Lower body and root motion** come from a locomotion state machine driven by the fighter's actual ground velocity: fighting-stance idle with a bounce, walk, run, step back, and turn. Crossfade between them by speed, and scale playback rate to ground speed so feet never slide. Fighters must never translate without their legs animating.
 - **Upper body** comes from the player's pose, layered additively on top of the clip: spine twist, chest, neck and head turn, shoulders, and arms. The torso and head then move like the player instead of staying rigid.
-- **Attacks** (jab, hook, uppercut, kick, block, shield, energy blast): when the gesture fires, blend in an authored attack clip, or exaggerate the pose with anticipation, follow-through, and hip rotation, so hits read as powerful.
+- **Attacks** (jab, hook, uppercut, kick, block, shield, energy blast): when the gesture fires, blend in an authored attack clip, or exaggerate the pose with anticipation, follow-through, and hip rotation, so each hit shows a wind-up, a full extension, and a recoil.
 - **Reactions:** hit flinch, knockback tumble, a landing and get-up, and a KO.
 
 **2. Characters:** stylized, chunky, readable heroes instead of the recolored anime VRM.
