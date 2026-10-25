@@ -1,43 +1,95 @@
 # Status (written by the implementation agent)
 
-Last update: Sun Oct 25, 1:50 AM CDT.
+Last update: Sun Oct 25, 2:45 AM CDT. Deployed build: `72bc4f4` on https://throwhands.tech.
 
-## Since 12:05 AM
-- **Pushing directly to `AndrewYin04/throwhands` main** (switched `gh` to the AndrewYin04 account; the fork/PR workaround is gone).
-- **https://throwhands.tech is live** (Let's Encrypt cert). `www.throwhands.tech` has a Caddy redirect block to the apex, but its certificate is blocked: one of the four authoritative nameservers (`tech-domains.mars.orderbox-dns.com`) still answers `127.0.0.1` for `www`, so Let's Encrypt validation fails about one time in four and Caddy keeps retrying. **Planner: please re-save the `www` A record (144.202.71.213) at the registrar so all four nameservers agree.**
-- **New renderer (build 4e7b98e, deployed)**: KayKit (CC0) toon characters with a locomotion state machine (idle/walk/run/strafe/back driven by real ground speed), live pose layered on chest/head/arms, authored punch/kick/hit/knockdown/get-up clips, tumble in the air, outlines. Floating sky stage, 1v1 ring-outs with damage-scaled knockback, hit-stop, sparks, flash, KO streak, bloom. `?classic` keeps the old VRM renderer.
-- **Bug fixed: shield while stunned** (holding X with a full meter now fires even during hit-stun; `tests/unit/shield-while-stunned.ts`).
-- **Bug fixed: leaderboard duplicate names**, reproduced first (`tests/unit/leaderboard-dup.ts` failed, now passes): players who share a nickname get a short tag (`Andrew #3f2a`).
-- Calibration "too close" guidance fixed (says step back when your head leaves the frame).
+## Since 1:50 AM (all deployed)
+1. **Movement you can find** (acd2f05, 5936250). Root cause of "idk how to move forward and backward", reproduced in `tests/unit/move-forward-back.ts`: the 1v1 duel assist overrode any forward/back signal under 0.2 and walked you back to range as soon as you stopped, and a 12 cm lean only produced 0.13. Fixed:
+   - **Lean** toward/away from the camera now advances/retreats (works at a laptop). A **rotation-corrected step** still works.
+   - **Step sideways to strafe** (2:00 AM item), combined with leaning. Edge warning ("Step back to the center") and clamp within 10% of the frame edge, plus a home marker in the camera preview.
+   - The assist never overrides or undoes your movement; it only walks you back in after 1.5 s without forward/back input.
+   - **Tutorial** after calibration: 4 direction tiles with live fill bars (15 s), then a defend stage for guard and Iron Wall (10 s). There is an in-match movement indicator and a bigger menu line.
+2. **Human-proportioned fighters + visible contact** (78659ed):
+   - Quaternius Universal Base Characters + Universal Animation Library, CC0 (license files in `web/public/characters/`). About 1.8 m tall, 7.5 heads, arm span about equal to height.
+   - Guard-up locomotion; the hips turn toward the travel direction.
+   - Two-bone IK lands the fist/foot on the target, with a step-in lunge. The impact plays on the contact frame at the fist, and the KO lands with the punch.
+   - Fighting range is now arm's length.
+   - Per-fighter looks so Brawl fighters are distinct: tank top / rash guard / fight pants, hair or headgear, light/dark skin, heavy/lean builds.
+3. **Guard redesign** (1:50 AM item):
+   - Guard meter: drains 20/s while held, extra per blocked hit, refills 25/s after 0.5 s with the arms down. Blocked hits do 10%.
+   - At 0 the guard breaks: glass shatter and sound, 2 s dizzy with stars. It restarts at 30.
+   - **Iron Wall** (X above the face, full meter): 2.5 s unbreakable gold bubble that counters the first attacker.
+   - Bots guard and sometimes get broken.
+   - Tests: `tests/unit/guard-meter.ts` (48 checks), `bot-guard.ts`, and an e2e guard break: blocked hits did 1 HP while the guard went 84 → 35 → 15, it broke, then a jab landed for 9.
+4. **UFC-style octagon** (1:35 AM item):
+   - 8 m across in 1v1, 9.8 m in Brawl.
+   - Chain-link cage 1.8 m high, padded posts, canvas mat with the logo, overhead light, crowd silhouettes, stadium lights.
+   - **No ring-outs**: knockback (still growing with damage taken) slams fighters into the cage and they bounce off, with a panel shake and a heavy spark.
+   - HP-only KOs in 1v1; Brawl KOs at 0 HP with a 3 s respawn.
+   - The teeter and edge warning are removed. The camera stays inside the cage.
+   - Tests: `tests/unit/octagon-cage.ts`. Knockback is 0.24 / 0.43 / 0.61 m at 0 / 60 / 120 damage taken; a cage slam bounces back 1.3 m; walking stops at the fence; HP KO ends the round; Brawl respawn after 3.07 s.
+5. **Research recording mode** (2:16 AM item 1), at `https://throwhands.tech/?research=1`:
+   - A consent screen every session; nothing starts until the box is ticked.
+   - Records the camera video locally only (MediaRecorder), plus a JSONL with one line per frame: 33 world + 33 image landmarks with visibility, actions with scores, move input, game events, markers.
+   - Marker keys: Space = missed, F = false fire, 1–9 = "I just did move N".
+   - The landmark stream (no video) goes to the Tiger hypertable `research_frames` (compression, `segmentby` session_id). Both files download on "Stop & save files".
+   - e2e on production: 2 files (1.2 MB webm, 283 KB jsonl), 131 frames and 3 markers stored server-side. Declining records nothing.
+   - Scoring tool: `npx tsx tests/tools/research-score.ts [--replay] file.jsonl`.
+6. **Credits**: the site footer and README now credit Quaternius (CC0). Seed-san is credited for `?classic` only.
 
-## Review loop (spec section 11), log in [REVIEW-SELF.md](REVIEW-SELF.md)
-| Item | R1 motion | R1 visual | R2 motion | R2 visual |
+## Review loop (spec section 11), details in [REVIEW-SELF.md](REVIEW-SELF.md)
+| Item | R2 motion | R2 visual | R3 motion | R3 visual |
 |---|---|---|---|---|
-| 1 Walk/run legs, no drift | 1 | 1 | 2 | 2 |
-| 2 Torso/head human | 1 | 2 | 1 | 2 |
-| 3 Attacks readable | 2 | 2 | 1 | 1 |
-| 4 Hit reactions / tumble | 1 | 2 | 1 | 3 |
-| 5 Glows only when active | 1 | 1 | 2 | 2 |
-| 6 Effects readable | 1 | 1 | 1 | 1 |
-| 7 Stage / lighting | 2 | 2 | 3 | 2 |
-| 8 Camera / framing | 2 | 3 | 2 | 2 |
-| 9 Silhouettes | 2 | 1 | 2 | 2 |
+| 1 Walk/run legs, no drift | 2 | 2 | 2 | 2 |
+| 2 Torso/head human | 1 | 2 | 3 | 3 |
+| 3 Attacks readable | 1 | 1 | 2 | 2 |
+| 4 Hit reactions / tumble | 1 | 3 | 2 | 3 |
+| 5 Glows only when active | 2 | 2 | 2 | 2 |
+| 6 Effects readable | 1 | 1 | 2 | 1 |
+| 7 Stage / lighting | 3 | 2 | 4 | 3 |
+| 8 Camera / framing | 2 | 2 | 1 | 1 |
+| 9 Silhouettes | 2 | 2 | 2 | 1 |
+| Strikes connect (new) | – | – | 2 | 1 |
 
-R1 = old VRM build, R2 = build 4e7b98e. Measured: walk drift went from 89/89 frames to 11/89; frozen torso/head frames went from up to 32 to 0; foot slide is still 3 to 6 cm (target under 1 cm). Round 2 highs: the chibi helmet hides the opponent and the punches from behind; knockdowns are a stiff plank that snaps upright; full-screen flashes and the KO pillar wash out the frame; block looks like idle; no visible energy-blast projectile; the KO scene never KOs. Several of these go away with the 1:35 AM direction (human proportions, octagon, no ring-out pillar).
+R3 = build f9b725c (first octagon build). Its highs were:
+- the camera clipping through the cage
+- a KO'd fighter standing and then T-posing
+- the Iron Wall never shown
+- bot strikes registering from 1.4 m away
+- white spark bursts
+- identical bald fighters
+- the Brawl board over the HUD
 
-## Working on now (1:35 AM direction, in its order)
-1. **Movement teaching** (in progress). Root cause of "idk how to move forward and backward": the 1v1 *duel assist* overrides forward/back whenever the step signal is weaker than 0.2, and pulls you back to 1.3 m as soon as you return to neutral, so stepping seems to do nothing. Fix: tutorial, HUD indicator, torso-lean forward/back, and no assist override while you are stepping.
-2. Human-proportioned characters (searching for openly licensed rigged humans now) + visible contact (fist reaches the target on the hit frame, measured).
-3. UFC octagon with a cage, cage bounce, HP-only KOs, Brawl HP + respawn.
-4. Credits in the footer and README.
+All of these are fixed in 72bc4f4, with the measured numbers below. Round 4 is being captured now.
 
-## Movement controls today (exact thresholds, `shared/gestures.ts` TUNING)
-- **Strafe:** lean your shoulders sideways relative to your hips. Dead zone 3.5 cm, full speed at 10 cm.
-- **Forward / back:** step toward or away from the camera. Measured as the change in your shoulder width in the image against calibration: dead zone 8%, full speed at 20% (about 25 cm and 60 cm of travel at 2 m from the camera).
-- Movement is ignored on frames where you strike or block.
-- **Duel assist** (1v1 only): when the forward/back signal is under 0.2, the game walks you back to 1.3 m from the opponent. This is what hid stepping.
-- Move speed 2.4 m/s (half while blocking). You stop at 0.85 m from the opponent.
-- `?move=point` prototype: hold one arm straight and still for 0.3 s to walk in that direction.
+**Fist-to-target distance on the contact frame** (target under 10 cm):
+
+| Scene | R3 mean / max | After the fixes |
+|---|---|---|
+| jab | 1.9 cm | same |
+| hook | 5.9 / 17.9 cm | same |
+| uppercut | 4.5 cm | same |
+| bot strikes (getting_hit) | 30 / 138 cm | 6.7 / 22 cm |
+| guard_break | 20.7 / 113 cm | 4.3 / 15 cm |
+| knockback | 60 cm | 9.4 cm |
+| brawl8 | – | 2.6 / 8 cm over 22 hits |
+
+The cause of the misses was the tumble pivoting at the feet, which swung the head 1 m+ away.
+
+**Still below target:** planted-foot slide is 3–10 cm per frame against a 1 cm target, worst during lunges and jogging.
+
+## Movement controls now (exact thresholds, `shared/gestures.ts`)
+- **Strafe** is the sum of two inputs:
+  - step sideways: hip center x in the image against the calibrated spot, in calibrated shoulder widths; dead zone 0.3, full speed 0.9
+  - lean shoulders over hips: dead zone 3.5 cm, full 10 cm
+- **Forward/back** is the larger of two inputs:
+  - lean the torso toward/away from the camera: shoulders vs hips against the calibrated stance; dead zone 5.5 cm, full 12 cm
+  - step: rotation-corrected shoulder width in the image; dead zone 10%, full 22%
+- Both are smoothed over 0.15 s and ignored while striking, blocking, and for 0.3 s after a strike.
+- **Detection:**
+  - Lean in 12 cm: full forward input, 0.41 m advanced.
+  - Real side-to-side footwork (shadow_fighterD): strafe in the stepped direction on 88% of frames, 0 wrong-direction frames.
+  - Standing in guard: 0% movement input.
+  - Mirroring checked: stepping to your own left moves your fighter screen-left.
 
 ## Deployed URL
 - **https://throwhands.tech** (also https://144-202-71-213.sslip.io). Practice: https://throwhands.tech/?mode=practice · Health: https://throwhands.tech/api/health · Pitch: https://throwhands.tech/pitch/
@@ -79,8 +131,10 @@ All game paths below were run end to end on the deployed server through the real
 None so far.
 
 ## Requests for planner
-1. Re-save the `www.throwhands.tech` A record at the registrar (one nameserver still answers 127.0.0.1), see above.
-2. (Done: write access and DNS for the apex.)
+1. **DNS, checked 2:17 AM:** for the apex `throwhands.tech`, nameservers `tech-domains.mars` and `tech-domains.mercury` answer **127.0.0.1**; venus and earth answer 144.202.71.213. `www` is correct on all four, and https://www.throwhands.tech now 301-redirects to the apex. Please contact the registrar about the apex record.
+2. **Real-webcam check of the new movement:** step left/right and lean left/right, lean toward/away. Does your fighter go the way you expect on screen? Then try the tutorial.
+3. **Research recordings:** play with `?research=1`, press the marker keys, and copy the downloaded `.webm` and `.jsonl` to the server. I will score them with `tests/tools/research-score.ts`.
+4. **License note:** quaternius.com/license.html now shows a newer "Quaternius Asset License" (2026-08-28) that restricts redistributing assets. The zips we downloaded today carry CC0 text (included in the repo), and that license's section 7 says changes are not retroactive.
 3. **Upload the demo video** as a GitHub release asset and to YouTube: https://144-202-71-213.sslip.io/media/throwhands-demo.mp4
 4. **Real webcam + real phone check** (spec 9.3: a path counts as done only when both agents' runs pass). On https://144-202-71-213.sslip.io:
    - Laptop Chrome: Practice vs Bot. Does the fighter mirror your arms and head? Do jabs, hooks, uppercuts register? Block (both forearms up in front of the face)? Shield (cross arms in an X above your head, with a full meter)? Report misses and false triggers in REVIEW.md.
