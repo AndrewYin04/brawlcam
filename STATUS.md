@@ -1,6 +1,34 @@
 # Status (written by the implementation agent)
 
-Last update: Sun Oct 25, 10:13 AM CDT. **Deployed build: `1adaff6`** on https://throwhands.tech (deployed 10:08 AM). **Working on now: `demo-video-v4` (REVIEW.md 10:05 AM), due 10:40.**
+Last update: Sun Oct 25, 10:29 AM CDT. **Deployed build: `1adaff6`** on https://throwhands.tech (deployed 10:08 AM). **Demo video: `demo-video-v4`** (published 10:27 AM).
+
+## 10:27 AM: demo-video-v4 published (REVIEW.md 10:05 AM: v3's stitching)
+- **Release:** https://github.com/AndrewYin04/throwhands/releases/tag/demo-video-v4 (`throwhands-demo-v4.mp4`, 2:35, 1080p30, −15.5 LUFS, −1.0 dBTP).
+  - Mirror: https://throwhands.tech/media/throwhands-demo-v4.mp4 (HTTP 200, same 198,662,290 bytes).
+  - **Fallbacks:** v3 and v2 are unchanged at their releases and mirrors. devpost.md now links v4.
+- **Your three v3 complaints, cause and fix:**
+  1. **Two voiceovers at ~0:50.**
+     - Cause: v3 inserted the moves section 0.6 s after the Iron Wall VO had started, so that line wasn't shifted and played under the new one.
+     - Fix: the audio now inserts at 49.99 s. That's after the guard VO ends (49.64) and before the Iron Wall VO.
+     - Result, from the VO/roast timeline (18 lines, 0 overlaps): guard 43.28–49.64 → moves 50.10–57.58 → Iron Wall 57.96–65.15 → cage 65.51–69.08.
+  2. **Choppy 0:58–1:06.**
+     - Cause: the insert split the Iron Wall shot.
+     - Fix: the moves section goes in at the guard-break → Iron Wall cut, and the Iron Wall shot now plays as one continuous 7.5 s shot.
+     - Its recording's camera swings overhead at 6.55 s, so the shot uses 0–6.48 s at 0.87× and has no swing.
+  3. **Frozen picture at 1:04.**
+     - Cause: v2's padded segments had a frozen tail on the guard-break shot (49.9–50.6) and a frozen last 2.5 s on the Iron Wall shot. v3 inherited both.
+     - Fix: the guard-break tail is cut and the Iron Wall shot is re-rendered from its recording.
+     - `freezedetect=n=-60dB:d=0.15` finds nothing between 10.7 s and 106 s. The remaining hits are intentional holds: the intro, short in-game pauses, the stats card, the store page, and the end card.
+- **Moves shots:** kick 2.6 s, grab and clinch with knees plus the webcam picture-in-picture 3.4 s, Shoulder Throw 2.7 s. The "GRAPPLING (BETA)" label moved below the HUD.
+- **Unchanged from v3:** the roast sections, the muted calls under the VO, the `cam=free` shots, the store, and your picture-in-picture.
+- **Section 11 reviewer (fresh context): PASS** on the first v4 build, with no high findings. I then fixed:
+  - its medium finding: a one-frame "FIGHT!" flash at the Iron Wall cut (the source now starts 2 frames in)
+  - two lows: the label overlapping the HUD, and the overhead camera swing
+- **Still open from that review** (low, all present in v3 too):
+  - two roast captions stacked at 1:24
+  - an early-styled caption and a one-frame stray wide shot at 1:28.6
+  - a one-frame flash in the in-game super-uppercut camera at 1:07
+- **Build:** `V4=1 V4_INS=7.966667 V4_VO_AT=50.1 npx tsx video/v2/assemble-v2.ts && npx tsx video/v2/make-v4.ts`, then a −0.6 dB audio trim for true peak.
 
 ## 10:08 AM: grappling stays opt-in (`?grapple=1`); the default-on trial is rolled back (REVIEW.md 7:45 AM)
 The rule was to turn grappling on by default only if all three conditions held. Condition 3 did not, so `1adaff6` puts it back behind `?grapple=1`. The video keeps "GRAPPLING (BETA)", and README and devpost already say beta.

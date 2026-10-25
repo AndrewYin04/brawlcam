@@ -120,7 +120,8 @@ export const V3_REPLACE: Record<number, { src: string; split?: string; ss: numbe
   20: { src: 'user_s2b_free2', ss: 8.6, start: 76.233333, d: 80.6 - 76.233333 },
   22: { src: 'online_p1_free', split: 'online_p2_free', ss: 12.0, start: 83.2, d: 88.133333 - 83.2 },
 };
-const V3 = !!process.env.V3;
+const V4 = !!process.env.V4; // demo-video-v4 (REVIEW.md 10:05 AM): insert at the guard-break/Iron Wall boundary, no VO overlap
+const V3 = !!process.env.V3 || V4;
 for (const [pi, p0] of placed.entries()) {
   const rep = V3 ? V3_REPLACE[pi] : undefined;
   const p = rep ? { ...p0, start: rep.start, d: rep.d, v: { ...(p0.v as any), src: rep.src, ss: rep.ss } } : p0;
@@ -195,17 +196,21 @@ if (!V3) ff(['-f', 'concat', '-safe', '0', '-i', list, '-c', 'copy', silent]);
 // ("moves"); every later audio event and caption shifts by its length. make-v3.ts splices the matching video in.
 let TOTAL_V3 = TOTAL;
 if (V3) {
-  const INSERT_AT = 50.59;
+  // v4: insert where the guard VO has ended (49.64) and before the Iron Wall VO (49.99), so that line moves after the
+  // moves line instead of playing under it; the moves line starts with the moves video (make-v4.ts cuts at 49.9 s).
+  const INSERT_AT = V4 ? 49.99 : 50.59;
   const voMoves = voFile('moves');
-  const INS = +(dur(voMoves) + 0.35).toFixed(3);
+  const INS = V4 ? Number(process.env.V4_INS) : +(dur(voMoves) + 0.35).toFixed(3);
+  const VO_AT = V4 ? Number(process.env.V4_VO_AT) : INSERT_AT + 0.1;
+  if (V4 && !(INS > 0 && VO_AT > 0 && VO_AT + dur(voMoves) + 0.25 <= INSERT_AT + INS)) throw new Error(`v4: the moves line (${VO_AT}+${dur(voMoves)}) must end before ${INSERT_AT + INS}`);
   for (const a of audio) if (a.at >= INSERT_AT) a.at += INS;
   for (const c of caps) if (c.start >= INSERT_AT) (c.start += INS), (c.end += INS);
-  audio.push({ file: voMoves, at: INSERT_AT + 0.1, vol: 1, kind: 'vo' });
+  audio.push({ file: voMoves, at: VO_AT, vol: 1, kind: 'vo' });
   const wf = path.join(V, 'vo', 'moves.words.json');
   const words: { text: string; start: number; end: number }[] = JSON.parse(fs.readFileSync(wf, 'utf8'));
   let chunk: typeof words = [];
   const flush = () => {
-    if (chunk.length) caps.push({ start: INSERT_AT + 0.1 + chunk[0].start, end: INSERT_AT + 0.1 + chunk[chunk.length - 1].end + 0.25, text: chunk.map((w) => w.text).join(' '), style: 'vo' });
+    if (chunk.length) caps.push({ start: VO_AT + chunk[0].start, end: VO_AT + chunk[chunk.length - 1].end + 0.25, text: chunk.map((w) => w.text).join(' '), style: 'vo' });
     chunk = [];
   };
   for (const w of words) {
@@ -215,7 +220,7 @@ if (V3) {
   flush();
   caps.sort((a, b) => a.start - b.start);
   TOTAL_V3 = TOTAL + INS;
-  fs.writeFileSync(path.join(OUT, 'v3-plan.json'), JSON.stringify({ insertAtPlan: INSERT_AT, ins: INS }));
+  fs.writeFileSync(path.join(OUT, V4 ? 'v4-plan.json' : 'v3-plan.json'), JSON.stringify({ insertAtPlan: INSERT_AT, ins: INS, voAt: VO_AT, voDur: dur(voMoves) }));
 }
 
 // Captions (ASS): VO in white, Gemini roasts in gold.
@@ -253,8 +258,8 @@ ff([...aIn, '-filter_complex', af, '-map', '[aout]', '-t', TOTAL_V3.toFixed(2), 
 
 if (V3) {
   // v3: make-v3.ts builds the video from the published v2 and the re-recorded shots, and muxes this audio.
-  fs.copyFileSync(mixed, path.join(OUT, 'audio-v3.m4a'));
-  fs.copyFileSync(assFile, path.join(OUT, 'captions-v3.ass'));
+  fs.copyFileSync(mixed, path.join(OUT, V4 ? 'audio-v4.m4a' : 'audio-v3.m4a'));
+  fs.copyFileSync(assFile, path.join(OUT, V4 ? 'captions-v4.ass' : 'captions-v3.ass'));
   console.log('v3 audio and captions written');
   process.exit(0);
 }

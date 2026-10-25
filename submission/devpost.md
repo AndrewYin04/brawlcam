@@ -4,7 +4,7 @@
 
 Play it: https://throwhands.tech (backup: https://144-202-71-213.sslip.io)
 
-Demo video (2:35): https://github.com/AndrewYin04/throwhands/releases/tag/demo-video-v3 (also at https://throwhands.tech/media/throwhands-demo-v3.mp4)
+Demo video (2:35): https://github.com/AndrewYin04/throwhands/releases/tag/demo-video-v4 (also at https://throwhands.tech/media/throwhands-demo-v4.mp4)
 
 ## Inspiration
 
