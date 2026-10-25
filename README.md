@@ -17,7 +17,7 @@ Built at HackTX 2026 (October 24 to 25, 2026). **Built with Claude Code** (AI co
 - **Super moves**: uppercut (fist driven up), Iron Wall (forearms crossed in an X above the face, elbows up: 2.5 s unbreakable guard that counters the first hit), energy blast (both palms pushed forward), when your meter is full.
 - **Fighter Forge**: describe a fighter; Meta's Muse Spark writes the name, story, and moves, Muse Image paints the card, and your suit takes the card's colors.
 - **Live commentator**: Gemini calls the fight every few seconds, spoken with Gemini TTS.
-- **Rivalry card** after online matches, **Elo leaderboard** (Tiger Data), **store** (mock purchases, "Demo: no charge"), and an opt-in **motion data** program with an explicit consent screen.
+- **Rivalry card** after online matches, **Elo leaderboard** (Tiger Data), **store** (mock purchases, "Demo: no charge"), and an opt-in **motion data** program with an explicit consent screen (labeled move sequences plus continuous 15 fps body-point streams, capped at 10 minutes per match; coordinates only, never video; stored in compressed Tiger hypertables). A separate **research mode** (`?research=1`, consent every session) records the camera to a local file only and sends labeled landmarks for gesture tuning.
 
 No video ever leaves your device: pose tracking runs in your browser. Online play sends only joint positions and game actions.
 

@@ -29,6 +29,7 @@ export const hooks = {
   events: [] as { t: number; type: string; [k: string]: unknown }[],
   localActions: [] as { t: number; kind: string; hand: string; player: number }[],
   calibrated: false,
+  motionStream: () => ({ sent: motion.streamSent }),
   tutorial: null as any,
   snapshot: null as unknown,
   errors: [] as string[],
@@ -267,7 +268,7 @@ export function beginSession(s: Session, camera: 'behind' | 'side' | 'wide', mod
   session = s;
   commentator.reset();
   motion.flush();
-  motion.newSession();
+  motion.newSession(mode);
   view = new MatchView(arena, {
     localIds: s.localIds,
     localJoints: (id) => {

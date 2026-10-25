@@ -70,7 +70,7 @@ More fighters and arenas, then three revenue lines:
 
 1. **Cosmetics.** Skins, auras, and AI-generated fighters from Fighter Forge at $2 to $10 each, plus a $5/month season pass. Fitness Boxing has sold 3M+ units on Switch, and no browser webcam fighter has real traction yet.
 2. **Ranked play.** Elo matchmaking and seasons drive retention and season-pass sales.
-3. **Motion-data licensing.** Humanoid-robotics labs need human motion data. Players can opt in to share anonymized pose sequences of strikes, blocks, and dodges, labeled by the game. Only landmark coordinates are shared, never video, and never a player identifier. Off by default.
+3. **Motion-data licensing.** Humanoid-robotics labs need human motion data. Players can opt in to share anonymized pose sequences of strikes, blocks, and dodges, labeled by the game, plus continuous body-point coordinates during play (15 times a second, up to 10 minutes per match). Only landmark coordinates are shared, never video, and never a player identifier. Off by default. The streams go into a compressed Tiger Data hypertable.
 
 ## Built with
 

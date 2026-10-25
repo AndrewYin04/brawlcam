@@ -189,6 +189,28 @@ const server = http.createServer(async (req, res) => {
       const ok = await db.insertResearchFrames(b.sessionId, frames);
       return send(res, ok ? 200 : 503, { stored: ok ? frames.length : 0 });
     }
+    if (p === '/api/pose-stream' && req.method === 'POST') {
+      // Opt-in continuous pose stream (motion-data consent). Anonymous session id, landmarks only, no video.
+      if (!rateOk(req, 'stream', 45)) return send(res, 429, { error: 'slow down' });
+      const b = await readBody(req, 512 * 1024);
+      if (b.consent !== true || !UUID.test(String(b.sessionId ?? ''))) return send(res, 400, { error: 'consent and sessionId required' });
+      if ((await db.databaseBytes()) > db.STREAM_DB_LIMIT) {
+        console.warn('[stream] database over 600 MB: stream inserts paused');
+        return send(res, 507, { error: 'storage_full', stored: 0 });
+      }
+      const label = ['practice', 'local2p', 'online', 'brawl', 'demo'].includes(b.label) ? b.label : 'other';
+      const t0 = Math.min(Date.now(), Number(b.t0) || Date.now());
+      const rows = (Array.isArray(b.frames) ? b.frames : [])
+        .slice(0, 45)
+        .filter((f: any) => Array.isArray(f) && f.length === 133)
+        .map((f: any[]) => ({ t: t0 + Math.max(0, Math.min(10_000, Number(f[0]) || 0)), lm: f.slice(1).map((x) => +(Number(x) || 0).toFixed(3)) }));
+      const ok = await db.insertPoseStream(b.sessionId, label, rows);
+      return send(res, ok ? 200 : 503, { stored: ok ? rows.length : 0 });
+    }
+    if (p === '/api/pose-stream/stats') {
+      const st = await db.streamStats();
+      return st ? send(res, 200, st) : send(res, 503, { error: 'db_unavailable' });
+    }
     if (p === '/api/research/stats') {
       const rows = await db.researchStats();
       return rows ? send(res, 200, rows[0]) : send(res, 503, { error: 'db_unavailable' });

@@ -22,7 +22,7 @@ export function showConsent(done: () => void) {
   page.innerHTML = `
     <h2>Share your moves to help robots learn? (optional)</h2>
     <div class="card" style="text-align:left;line-height:1.55">
-      <p><b>What we would collect:</b> the 3D positions of 33 body points (like wrists, elbows, shoulders) during the moves you make in a match, labeled with the move the game detected (jab, hook, block…).</p>
+      <p><b>What we would collect:</b> the 3D positions of 33 body points (like wrists, elbows, shoulders): short sequences around each move the game detects (jab, hook, block…), plus <b>continuous body-point coordinates during play</b> (15 times a second, up to 10 minutes per match).</p>
       <p><b>What we never collect:</b> video, photos, your face, your name, your nickname, or any player ID. Each match gets a random session number that is not linked to you.</p>
       <p><b>Why:</b> robotics labs need examples of real human motion to teach humanoid robots. This may be licensed to them in the future.</p>
       <p><b>Your choice:</b> this is off unless you tick the box. You can turn it off at any time in the Store, and nothing is sent while it is off.</p>

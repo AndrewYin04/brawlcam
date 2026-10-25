@@ -76,6 +76,15 @@ async function migrate() {
     `SELECT create_hypertable('research_frames', by_range('time', INTERVAL '1 day'), if_not_exists => TRUE)`,
     `ALTER TABLE research_frames SET (timescaledb.compress, timescaledb.compress_segmentby = 'session_id', timescaledb.compress_orderby = 'time')`,
     `SELECT add_compression_policy('research_frames', compress_after => INTERVAL '1 hour', if_not_exists => TRUE)`,
+    // Opt-in continuous pose streams (motion-data consent): world landmarks at 15 fps, 132 reals per frame. No video.
+    `CREATE TABLE IF NOT EXISTS pose_streams (time timestamptz NOT NULL, session_id uuid NOT NULL, label text NOT NULL, lm real[] NOT NULL)`,
+    `SELECT create_hypertable('pose_streams', by_range('time', INTERVAL '1 day'), if_not_exists => TRUE)`,
+    `ALTER TABLE pose_streams SET (timescaledb.compress, timescaledb.compress_segmentby = 'session_id', timescaledb.compress_orderby = 'time')`,
+    `SELECT add_compression_policy('pose_streams', compress_after => INTERVAL '1 hour', if_not_exists => TRUE)`,
+    `CREATE MATERIALIZED VIEW IF NOT EXISTS pose_stream_minutes WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
+       SELECT time_bucket('1 day', time) AS day, label, count(*) AS frames, count(DISTINCT session_id) AS sessions
+       FROM pose_streams GROUP BY day, label WITH NO DATA`,
+    `SELECT add_continuous_aggregate_policy('pose_stream_minutes', start_offset => INTERVAL '30 days', end_offset => INTERVAL '1 hour', schedule_interval => INTERVAL '15 minutes', if_not_exists => TRUE)`,
     // Continuous aggregates. materialized_only = false enables real-time aggregation (off by default since 2.13).
     `CREATE MATERIALIZED VIEW IF NOT EXISTS leaderboard_daily WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
        SELECT time_bucket('1 day', time) AS day, actor,
@@ -183,6 +192,35 @@ export async function insertResearchFrames(sessionId: string, frames: { t: numbe
     return `($${o + 1},$${o + 2},$${o + 3},$${o + 4},$${o + 5},$${o + 6})`;
   });
   return !!(await q(`INSERT INTO research_frames (time, session_id, lm, actions, move, marker) VALUES ${ph.join(',')}`, vals));
+}
+
+// Storage guard: stop accepting stream inserts above 600 MB (free tier headroom); size is cached for a minute.
+let dbSize = { bytes: 0, at: 0 };
+export async function databaseBytes() {
+  if (Date.now() - dbSize.at > 60_000) {
+    const r = await q(`SELECT pg_database_size(current_database())::bigint AS b`);
+    if (r) dbSize = { bytes: Number(r[0].b), at: Date.now() };
+  }
+  return dbSize.bytes;
+}
+export const STREAM_DB_LIMIT = 600 * 1024 * 1024;
+
+export async function insertPoseStream(sessionId: string, label: string, rows: { t: number; lm: number[] }[]) {
+  if (!rows.length) return true;
+  const vals: unknown[] = [];
+  const ph = rows.map((r, i) => {
+    vals.push(new Date(r.t), sessionId, label, r.lm);
+    const o = i * 4;
+    return `($${o + 1},$${o + 2},$${o + 3},$${o + 4})`;
+  });
+  return !!(await q(`INSERT INTO pose_streams (time, session_id, label, lm) VALUES ${ph.join(',')}`, vals));
+}
+
+export async function streamStats() {
+  const a = await q(`SELECT label, sum(frames)::bigint AS frames, sum(sessions)::int AS sessions FROM pose_stream_minutes GROUP BY label ORDER BY frames DESC`);
+  const c = await q(`SELECT coalesce(sum(before_compression_total_bytes),0)::bigint AS before, coalesce(sum(after_compression_total_bytes),0)::bigint AS after FROM hypertable_compression_stats('pose_streams')`);
+  const t = await q(`SELECT hypertable_size('pose_streams')::bigint AS bytes, (SELECT count(*) FROM pose_streams)::bigint AS frames`);
+  return a && t ? { labels: a.map((r: any) => ({ label: r.label, frames: Number(r.frames), minutes: +(Number(r.frames) / 15 / 60).toFixed(1), sessions: r.sessions })), totalFrames: Number(t[0].frames), bytes: Number(t[0].bytes), compressedBefore: Number(c?.[0]?.before ?? 0), compressedAfter: Number(c?.[0]?.after ?? 0) } : null;
 }
 
 export async function researchStats() {

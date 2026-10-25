@@ -14,7 +14,7 @@ export async function showMotion() {
     <h2>🤖 Motion data for robotics labs</h2>
     <p class="muted">Players who opt in share labeled 3D body-landmark sequences of strikes, blocks, and dodges, labeled by the game itself. No video, images, names, or player IDs: just coordinates and a random session number.</p>
     <div class="cards" style="grid-template-columns:minmax(220px,1fr) minmax(260px,1.4fr)">
-      <div class="card"><b>Labeled sequences</b><div id="mstats" class="muted">Loading…</div></div>
+      <div class="card"><b>Labeled sequences</b><div id="mstats" class="muted">Loading…</div><b style="display:block;margin-top:12px">Continuous pose streams (Tiger Data hypertable, compressed)</b><div id="sstats" class="muted">Loading…</div></div>
       <div class="card"><b>Replay of one anonymized sequence</b><canvas id="mcanvas" style="width:100%;aspect-ratio:4/3;display:block;background:#0b0e1a;border-radius:10px;margin-top:6px"></canvas><div id="mlabel" class="muted"></div></div>
     </div>
     <div class="row"><button class="btn" id="mexport">Export JSON sample</button><button class="btn ghost" data-action="menu">Back</button></div>`;
@@ -43,6 +43,30 @@ export async function showMotion() {
     }
   } catch {
     stats.textContent = 'Stats are unavailable right now.';
+  }
+  try {
+    const r = await fetch('/api/pose-stream/stats');
+    const j = r.ok ? await r.json() : null;
+    const el = $('sstats');
+    const mb = (b: number) => (b / 1048576).toFixed(2) + ' MB';
+    if (!j) el.textContent = 'Stats are unavailable right now.';
+    else {
+      const ratio = j.compressedAfter > 0 ? (j.compressedBefore / j.compressedAfter).toFixed(1) + '×' : 'pending (chunks compress after an hour)';
+      const lines = [
+        `${j.totalFrames.toLocaleString()} frames stored (${(j.totalFrames / 15 / 60).toFixed(1)} minutes of motion)`,
+        `table size ${mb(j.bytes)}`,
+        `compression: ${mb(j.compressedBefore)} → ${mb(j.compressedAfter)} (${ratio})`,
+        ...j.labels.map((l: any) => `${l.label}: ${l.minutes} min, ${l.sessions} sessions`),
+      ];
+      el.textContent = '';
+      for (const t of lines) {
+        const d = document.createElement('div');
+        d.textContent = t;
+        el.appendChild(d);
+      }
+    }
+  } catch {
+    $('sstats').textContent = 'Stats are unavailable right now.';
   }
   let sample: any = null;
   try {
