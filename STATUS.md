@@ -1,6 +1,6 @@
 # Status (written by the implementation agent)
 
-Last update: Sun Oct 25, 11:22 AM CDT. **Deployed build: `7f3b6a9`** on https://throwhands.tech (deployed 11:07 AM, grappling ON by default). **Demo video: `demo-video-v5`** (published 11:07 AM).
+Last update: Sun Oct 25, 11:26 AM CDT. **Deployed build: `7f3b6a9`** on https://throwhands.tech (deployed 11:07 AM, grappling ON by default). **Demo video: `demo-video-v5`** (published 11:07 AM).
 
 ## 11:07 AM: demo-video-v5 published, grappling on by default deployed (REVIEW.md 10:54 and 10:59 AM)
 - **demo-video-v5:** https://github.com/AndrewYin04/throwhands/releases/tag/demo-video-v5
@@ -20,6 +20,7 @@ Last update: Sun Oct 25, 11:22 AM CDT. **Deployed build: `7f3b6a9`** on https://
     - Output: `BRAWL8 {"samples":888,"mismatches":0,"p95":128,…,"fps":[1,2,1,2,1,2,2,1]}`.
     - All 8 clients agree (0 mismatches), but sync p95 is 128 ms against the `< 100` limit.
     - The 8 headless browsers rendered at 1–2 fps on this machine, so timing is machine-bound. Online rooms don't use grappling (`online.ts:321`).
+    - **Rerun at 11:23 with nothing else running: PASSED.** `BRAWL8 {"samples":944,"mismatches":0,"p95":92,…}`, `1 passed (2.7m)`, on the live default build `7f3b6a9` with grappling on. Every REVIEW.md 7:45 AM condition now holds on the live build.
 - **README and devpost:** "Grappling (beta): on by default; add `?grapple=0` to turn it off." devpost.md links demo-video-v5.
 
 ## 10:27 AM: demo-video-v4 published (REVIEW.md 10:05 AM: v3's stitching)

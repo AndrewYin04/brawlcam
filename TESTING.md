@@ -11,6 +11,14 @@ BASE_URL=https://144-202-71-213.sslip.io npx playwright test practice online   #
 
 ## Latest full run
 
+Sun Oct 25, 11:07–11:26 AM CDT, live build `7f3b6a9` (grappling on by default), smoke checks with no URL flags:
+- **practice, won by KO:** pass. Output: `WON_KO {"rounds":["ko","ko"],"hits":36,"actions":47,"fps":30}`, no console errors.
+- **grab:** `grab-default.spec.ts` passes. Your own grab reps from session 2 register. Output: `{"grappleEnabled":[true],"actions":["grab"],"grappleEvents":["grab"]}`.
+- **drills:** `drills.spec.ts` passes, with 4 sections including "Grab and Shoulder Throw (beta)".
+- **8-browser brawl:**
+  - first run, under load: 1–2 fps, p95 128, fail
+  - rerun alone on an idle machine at 11:23: `{"samples":944,"mismatches":0,"p95":92}`, **pass (2.7m)**
+
 Sun Oct 25, 9:13–9:49 AM CDT, live build `fb00f2d` (grappling on by default for the trial):
 - `BASE_URL=https://throwhands.tech npx playwright test`: **59 passed, 1 failed, 1 skipped (36.1m)**.
   - The skip is the `@live` Forge test, which runs separately.
