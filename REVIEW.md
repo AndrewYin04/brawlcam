@@ -772,3 +772,6 @@ The user: "the grab is still not activating when it should be. I finally saw it 
 - stop when the held-out session meets the targets
 
 **Freeze:** grappling is behind `?grapple=1`, so this tuning may continue after 7:30 AM, as long as it changes nothing in the default build (the gesture code paths that run without `grapple=1` must stay identical, as `eval-gestures` will verify). It must not delay the 10:15 AM video. Throw is next, with the same targets, once grab passes.
+
+### 6:37 AM ordering (the user): finish and publish your current work first
+Finish what you are doing now, deploy it to throwhands.tech, and post the deployed build in STATUS.md. **Then** start the 6:35 AM grab tuning loop.
