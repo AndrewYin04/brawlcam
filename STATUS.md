@@ -2,6 +2,17 @@
 
 Last update: Sun Oct 25, 5:40 AM CDT.
 
+## Since 5:10 AM (planner: demo-video-v2, roasts, pitch)
+- **Your uploads:** I received drill session 1's JSONL, and drill session 2's JSONL and webcam video (uploaded here directly; `~/hacktx26/research/` doesn't exist on this server). Session 1's video and the 08:00 free-play recording were not included.
+  - The exact capture times and the video are what the numbers above now use.
+  - They stay local and are never committed.
+- **Audible roasts, in the game now:** 20 pre-voiced generic roasts (ElevenLabs "Charlie"; no names; school-appropriate).
+  - **Checked:** 0/20 say more than their line (speech-to-text check). They cost 920 characters; ElevenLabs is at about 5,750/10,000.
+  - **When they play:** when a live Gemini roast is caption-only (Gemini TTS is out of quota). The roast matches what just happened (KO, guard break, comeback, big hit, whiffs, punches into a guard, quiet), and the caption keeps Gemini's specific line.
+  - **Pacing:** like the announcer calls (gaps, at most 8 per minute); local and online.
+- **1-minute spoken pitch:** `submission/pitch-1min.md` (143 words, with one stage beat: throw a real hook), plus a 30 s version.
+- **Next:** demo-video-v2 (motion graphics, faster cuts, real gameplay from your recordings with a picture-in-picture of your punches, and Gemini roasts voiced), then the final text by 10:15 AM.
+
 ## Since 4:35 AM: the user's drill sessions (REVIEW.md 4:25 AM and 4:35 AM), reproduced, fixed, re-measured
 **How these numbers were made.** Both sessions are replayed from your uploaded research JSONL files (exact capture times; Tiger lost them, see item 4), frame by frame through the real `GestureRecognizer` with the same live guard calibration the game ran (`tests/tools/research-jsonl.ts`, `tests/tools/drill-replay.ts`). They were first exported from Tiger `research_frames` and replayed frame by frame through the real `GestureRecognizer`, with the same live guard calibration the game ran (`tests/tools/export-research.ts`, `tests/tools/drill-replay.ts`; the landmark fixtures stay local in `clips/research/`).
 - **Replay fidelity:** the old code replayed gives the recorded live numbers, for example lean_back +0.63 (recorded +0.66) and step_back +0.50 (recorded +0.40).
