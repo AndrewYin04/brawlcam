@@ -52,3 +52,44 @@ The planner watched demo-video-v1 frame by frame (21 frames across all 2:27). Wh
 12. Re-render after items 1 to 8 so the video shows the improved graphics. Keep the 2 to 3 minute length and Meta's four-part structure.
 
 Test the motion changes with the same clip-driven suite, and add screenshot or frame-strip evidence of the before and after look to `STATUS.md`.
+
+## 2026-10-25 1:30 AM CDT: HTTPS diagnosis, and a Smash-style look and real locomotion (overrides items 1 to 8 above where they conflict)
+
+### A. throwhands.tech HTTPS is still down (blocks the live demo URL)
+Verified by the planner at 1:25 AM:
+- **DNS:** correct everywhere. Google, Cloudflare, and the laptop's own resolver all answer 144.202.71.213 for `throwhands.tech` and `www.throwhands.tech`.
+- **Port 80:** Caddy answers `http://throwhands.tech` with `308` to https, so it knows the name.
+- **Port 443:** the TLS handshake fails for both names (curl: "failed to receive handshake"; Chrome: ERR_CONNECTION_CLOSED). `https://144-202-71-213.sslip.io` works.
+
+Caddy has no certificate for the domain yet. Check Caddy's logs for the ACME error: a Let's Encrypt rate limit from the earlier failed attempts, or a ZeroSSL account problem. Get the certificate, re-test with `curl -v https://throwhands.tech`, and post the result in STATUS.md. If Let's Encrypt is rate-limited, check its reported retry time and use another CA Caddy supports in the meantime.
+
+### B. The user's direction: "the graphics should be more like Super Smash Bros"
+In the user's words: "the movements are super awkward. the people are drifting around rather than walking/running. the people torsos and head and everything should be more human. it looks like they can only move their arms and do a kick motion and can't walk."
+
+**1. Real locomotion: the biggest problem.**
+- **Lower body and root motion** come from a locomotion state machine driven by the fighter's actual ground velocity: fighting-stance idle with a bounce, walk, run, step back, and turn. Crossfade between them by speed, and scale playback rate to ground speed so feet never slide. Fighters must never translate without their legs animating.
+- **Upper body** comes from the player's pose, layered additively on top of the clip: spine twist, chest, neck and head turn, shoulders, and arms. The torso and head then move like the player instead of staying rigid.
+- **Attacks** (jab, hook, uppercut, kick, block, shield, energy blast): when the gesture fires, blend in an authored attack clip, or exaggerate the pose with anticipation, follow-through, and hip rotation, so hits read as powerful.
+- **Reactions:** hit flinch, knockback tumble, a landing and get-up, and a KO.
+
+**2. Characters:** stylized, chunky, readable heroes instead of the recolored anime VRM.
+- Use rigged models that ship with walk, run, idle, punch, and hit clips.
+- Candidates to verify (check each license yourself and list it in the README):
+  - Quaternius "Animated Human" (listed as CC0 on OpenGameArt: idle, walk, run, punch, jump, death)
+  - KayKit Character Animations (listed as CC0, glTF added in v1.2)
+- Give each fighter a distinct silhouette, color, and accessory. Keep the Forge colors tinting the suit and aura.
+- Toon shading (`MeshToonMaterial`) plus an outline pass for the Smash look.
+
+**3. Smash-style presentation:**
+- **Side-on 2.5D camera** that pans and zooms to keep all fighters in frame, the way Smash does. Constrain movement to a left/right lane. Lean-to-move maps to this directly, and in Brawl, target the nearest opponent left or right.
+- **A floating stage** with a stylized sky or city background, edges you can be knocked off, and blast zones beyond them.
+- **HUD:** damage percent per fighter along the bottom with a portrait and stock icons, Smash-style, alongside or instead of health bars. Keep KO rules consistent with the spec, or update the spec note.
+- **KO effects:** a blast-zone flash and streak, hit sparks, impact freeze frames (hit-stop of about 3 to 6 frames on heavy hits), screen shake, and bloom.
+
+**4. Safety:**
+- Keep the current renderer reachable behind a URL flag (for example `?classic`) until the new one passes the full suite, so the 7:30 AM freeze always has a working build.
+- Report progress in STATUS.md with before and after screenshots.
+- If B cannot be finished by about 6:30 AM, ship the locomotion and character parts first (B1 and B2): they fix the "drifting and only arms move" problem the user named.
+
+### C. Video v2
+Re-record after B. Show walking, running, punches with body rotation, and a Smash-style KO in the hook. Keep the 2 to 3 minute length and Meta's four-part structure.
