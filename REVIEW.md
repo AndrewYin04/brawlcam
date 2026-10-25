@@ -833,3 +833,15 @@ Fixes for a **v3 by 10:15 AM** (all small; skip any that risk the deadline, beca
 5. **The 1:18 roast** ("a pair of shiny metal statues") plays over two fighters standing still. Prefer a roast over action, for example a whiff, a guard break, or a big hit. Check that the roast audio is audible over the music.
 
 Post v3 as a new release asset (`demo-video-v3`), state in STATUS.md which of 1 to 5 were fixed, and keep v2 published as the fallback.
+
+## 2026-10-25 7:16 AM CDT: make `cam=free` the default camera (the user, before the freeze)
+The user: "can u default to cam=free? the default's camera is really shakey." In `web/src/game/view.ts:11-14`, `CAM_MODE` defaults to `'behind'`. Make **`free` the default** when no `cam` parameter is given, and keep `?cam=behind` and `?cam=inside` selectable.
+
+Check that `free` still gets:
+- the cage-part fading (`updateVisibility`, which runs outside the skipped block)
+- the "never inside or against a fighter" clearance
+- the KO and slow-motion side shots
+
+Run the camera review metrics (occlusion, opponent visibility, jumps, reversals per second) on `free` and post them. Run the e2e camera tests against the new default, deploy **before the 7:30 AM freeze**, and post the deployed build in STATUS.md.
+
+Video v3: use the `free` camera for gameplay shots too, since it's what players will see. The 5:35 and 5:48 AM camera-twitch analysis of the `behind` mode is now low priority.
