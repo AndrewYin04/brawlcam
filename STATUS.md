@@ -1,6 +1,53 @@
 # Status (written by the implementation agent)
 
-Last update: Sun Oct 25, 8:18 AM CDT. **Deployed build: `8feb4b4`** on https://throwhands.tech (deployed 8:14 AM).
+Last update: Sun Oct 25, 9:15 AM CDT. **Deployed build: `fb00f2d`** on https://throwhands.tech (deployed 9:12 AM).
+
+## 9:12 AM: match-end calls fixed (REVIEW.md 6:08 + 7:58 AM), deployed and checked in live matches
+- **Bug reproduced first:** `tests/unit/announcer-match-end.ts` drives the real `Announcer` with 10 real bot-vs-bot sim duels, delivering events the way the game view does. On the old main (`b661b7b`):
+  - only 2 distinct results in 10 matches (`WE HAVE A WINNER!` / `WHAT A FIGHT!` alternating), with back-to-back repeats
+  - a separate KO call ("IT'S OVER!", "AND THAT'S THE FIGHT!", …) right before every result
+- **The fix (`a49b28f`, on top of the call-variety work `f3c8fa4`):**
+  - **Context-aware results:** flawless, comeback, super finish, close, dominant, decision, plus 5 generic lines. Round starts say "MATCH POINT! ROUND TWO!" and "ONE ROUND EACH... THIS DECIDES IT!". The last 3 lines per moment are never repeated, and that memory is kept in `localStorage`. A "RUN IT BACK?" / "REMATCH?" prompt follows the result.
+  - **A KO that ends the match plays only the result line.** Other KOs keep their KO call.
+  - **Retired lines** (none of them play any more):
+    - "WHAT A FIGHT!" (result)
+    - "WHAT A FIGHT WE HAVE!" (filler)
+    - "AND THAT'S THE FIGHT!" (KO; it played on round-1 KOs too)
+  - **No result, filler or KO line contains "fight".**
+- **ElevenLabs** (same "Charlie" voice, transcript-checked, 0 extra words):
+  - the call-variety work: 17 lines, 626 characters
+  - two more generic results ("THAT'S A WRAP!", "TAKE A BOW!"), 67 characters, so dropping "WHAT A FIGHT!" doesn't make ordinary 2-0 wins repeat
+  - account: 7,343/10,000 before the 67
+- **Tests:**
+  - `announcer-match-end.ts` passes: 6 distinct results in 10 matches, none twice in a row, 0 "fight" words from the last KO through the rematch prompt, one call per match-ending KO.
+  - `announcer-calls.ts` passes, and so does every other unit test.
+- **Live, in a real match:** `BASE_URL=https://throwhands.tech npx playwright test tests/e2e/match-end-calls.spec.ts` plays 3 matches vs the bot with rematches. Result: `1 passed (4.7m)`:
+  ```
+  MATCH_END 1 … "ko:IT'S OVER!","round2:MATCH POINT! ROUND TWO!", … "match_over:FLAWLESS!","rematch:RUN IT BACK?"
+  MATCH_END 2 … "ko:GOOD NIGHT!","round2:Round two! FIGHT!", … "match_over:NOT EVEN CLOSE!","rematch:REMATCH?"
+  MATCH_END 3 … "ko:K.O.!","round2:MATCH POINT! ROUND TWO!", … "match_over:TOTAL DOMINATION!","rematch:RUN IT BACK?"
+  MATCH_ENDS ["FLAWLESS!","NOT EVEN CLOSE!","TOTAL DOMINATION!"]
+  ```
+  The round-1 KO gets a KO call; the match-ending KO gets only the result.
+
+## 9:12 AM: Shoulder Throw animation (REVIEW.md 7:05 AM), deployed; it does NOT pass the section 11 review
+- **What changed** (`3be1e9b`, `564a602`, `e971110`; throw/clinch code only):
+  - **Grip** on the collar and sleeve.
+  - **Turn-in:** the thrower turns its back and drops its hips.
+  - **Load and arc:** the target is pulled onto the thrower's back and arcs over the shoulder.
+  - **Slam:** the target lands flat on its back and stays down 1.4 s, then gets up.
+  - **Camera:** one held side camera. A throw from range cuts once to that shot.
+  - **Banner and "25"** appear when the body lands, clear of the fighters.
+  - **`?debug=1`** shows the throw stages: `throw: reach ✓ → turn 64/60° ✓ → hinge 0.21/0.15 ✓ → THROW`.
+- **Non-grapple scenes:** jab, uppercut, knockback and KO render with identical metrics before and after.
+- **Fresh-context reviews:** three rounds, each verdict FAIL. The last review's high findings:
+  - a one-frame pop as the body loads onto the back
+  - the bodies pass through each other during the arc
+  - the camera swings back to behind the player about 0.6 s after the throw
+  - after a throw KO, the winner's foot sits in the loser's head
+- **Frame-by-frame sheets:** `/home/agent/projects/brawlcam/.claude/worktrees/agent-a5b620bd6380cf62a/video/out/review/r-throw-v6/`. "Before" sheets are in `r-throw-before/` next to it.
+- **It is clearly better than the old throw.** The old one jumped to a far wide camera mid-throw and flung the body. That's why it's in the game.
+- **The video keeps the current throw.** Per the 7:45 AM rule, `demo-video-v3`'s moves section uses the throw animation it was recorded with.
 
 ## 8:12 AM: demo-video-v3 published (REVIEW.md 7:30, 7:36 and 7:45 AM)
 - **Release:** https://github.com/AndrewYin04/throwhands/releases/tag/demo-video-v3 (`throwhands-demo-v3.mp4`, 2:35, 1080p30, −14.8 LUFS, −1.4 dBTP). Mirror: https://throwhands.tech/media/throwhands-demo-v3.mp4.

@@ -136,6 +136,8 @@ export class Announcer {
         if (e.kind === 'super_uppercut') {
           this.say('super_uppercut');
           sfx.crowdRoar(1);
+        } else if ((e.kind as string) === 'throw') {
+          // No strike call: the 'throw' event right behind this hit (both held until the slam) calls "SHOULDER THROW!".
         } else if (list.length >= 3) {
           this.say('combo');
           this.hitTimes.set(e.attacker, []);
