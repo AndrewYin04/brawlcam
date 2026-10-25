@@ -40,6 +40,7 @@ export const GESTURE_CFG = {
   hookTurnDeg: 35, // deg torso turn within the strike window (shoulder-depth yaw is noisy) ...
   hookSweepWithTurn: 0.3, // ... with at least this sweep also makes a hook
   twoArmRise: 0.25, // m: both wrists rising at least this (and within 2x of each other) is a two-arm move, not a strike
+  bigSwingSpeed: 3.0, // m/s: a big swing this fast is a strike even if the arms end near the face
   bigUpRise: 0.4, // m wrist rise: a big uppercut (hooks rise <= 0.43 m, and less than they sweep)
   upOverSweep: 0.75, // a big uppercut rises at least this fraction of its sweep
   // uppercut
@@ -121,6 +122,7 @@ export const GRAPPLE_CFG = {
   reachExt: 0.75, // extension (fraction of arm length) both arms must pass
   reachSync: 0.25, // s: the two arms must pass reachExt within this of each other
   reachRise: 0.12, // an arm "reaches" when it passes reachExt having extended by at least this within reachRiseWindow
+  reachUp: 0.25, // m wrist rise within reachRiseWindow that also counts as a reach (camera below the face)
   reachRiseWindow: 0.4, // s (so an arm already held out near reachExt in a long guard is not a reach)
   // Pull: then both wrists come back to the chest, close together.
   pullExt: 0.45, // both extensions below this
@@ -238,7 +240,12 @@ export class GrappleDetector {
       // A reach is a motion: the arm passes reachExt after extending by reachRise within the window.
       let lo = e;
       for (const x of this.hist) lo = Math.min(lo, x[h]);
-      const reaching = ext && e - lo >= c.reachRise;
+      // Reaching toward a camera that looks up (a laptop below the face) barely changes the measured extension (depth is
+      // weak) but lifts the wrist in camera space: a wrist rise of reachUp also counts (drill session 2dd3adbd, grab 6).
+      let yLo = h === 'L' ? f.yL ?? 0 : f.yR ?? 0;
+      for (const x of this.hist) yLo = Math.min(yLo, h === 'L' ? x.yL : x.yR);
+      const yUp = (h === 'L' ? f.yL ?? 0 : f.yR ?? 0) - yLo;
+      const reaching = ext && (e - lo >= c.reachRise || yUp >= c.reachUp);
       // A fresh rise counts even if the arm never dropped below reachExt: a low guard can sit right at reachExt (drill
       // session 2dd3adbd, ext 0.78-0.81), which left that arm "reached" from an old rise and never in sync with the other.
       if (reaching && (!this.wasReach[h] || f.t - this.riseAt[h] > c.reachRiseWindow)) this.riseAt[h] = f.t;
@@ -248,7 +255,9 @@ export class GrappleDetector {
     // Both arms out now, having risen within reachSync of each other: a (new) reach.
     if (this.wasReach.L && this.wasReach.R && Math.abs(this.riseAt.L - this.riseAt.R) <= c.reachSync) {
       const at = Math.max(this.riseAt.L, this.riseAt.R);
-      if (!this.reach || this.reach.t !== at) {
+      // A re-rise within the same motion (extension flickering around reachExt) does not replace a live reach.
+      const live = this.reach && !this.reach.pulled && !this.reach.thrown && f.t - this.reach.t <= c.reachMaxHold;
+      if (!this.reach || (this.reach.t !== at && !live)) {
         // The guard the reach started from (the arms' recent lows): the pull is a return to it.
         let loL = f.extL, loR = f.extR, guardGap = f.gap / Math.max(0.15, f.sw), lo = Infinity, yLoL = f.yL ?? 0, yLoR = f.yR ?? 0;
         for (const x of this.hist) {
@@ -295,8 +304,9 @@ export class GrappleDetector {
       // from. A low guard sits at ext ~0.75, hands ~1.3 shoulder widths apart; that player reaches overhead and pulls
       // down to it (drill session 2dd3adbd), never reaching pullExt.
       const chest = f.extL < c.pullExt && f.extR < c.pullExt && f.gap < c.pullGap * f.sw;
-      const toGuard = (e: number, lo: number, pk: number) => e <= lo + c.pullToGuard && pk - e >= c.pullFromPeak;
-      const guardPull = r.sync <= c.pullSyncReach && Math.min(r.upL, r.upR) >= c.pullReachUp && toGuard(f.extL, r.loL, r.peakL) && toGuard(f.extR, r.loR, r.peakR) && f.gap < Math.max(c.pullGap, r.guardGap * c.pullGapVsGuard) * f.sw;
+      // Back from the reach: extension came back, or (camera below the face) the wrist came back down.
+      const toGuard = (e: number, lo: number, pk: number, up: number, y: number, yLo: number) => e <= lo + c.pullToGuard && (pk - e >= c.pullFromPeak || yLo + up - y >= c.reachUp);
+      const guardPull = r.sync <= c.pullSyncReach && Math.min(r.upL, r.upR) >= c.pullReachUp && toGuard(f.extL, r.loL, r.peakL, r.upL, f.yL ?? 0, r.yLoL) && toGuard(f.extR, r.loR, r.peakR, r.upR, f.yR ?? 0, r.yLoR) && f.gap < Math.max(c.pullGap, r.guardGap * c.pullGapVsGuard) * f.sw;
       if ((chest || guardPull) && turn <= c.pullMaxTurnDeg) {
         if (r.pullSince < 0) r.pullSince = f.t;
         if (f.t - r.pullSince >= c.pullHold) {
@@ -361,6 +371,7 @@ export class GestureRecognizer {
   private gestFilter = new VecFilter(15 * 3, 6, 0.8);
   private lastStrike: Record<string, number> = { L: -9, R: -9, kickL: -9, kickR: -9 };
   private lastCandidate: Record<string, number> = {};
+  private lastStrikeKind: Record<string, string> = {};
   private pending: { hand: 'L' | 'R'; a: Action; t: number } | null = null;
   /** A jab held while the other arm may be joining it in a two-arm reach (GRAPPLE_CFG.jabHold*). t = when held. */
   private jabHold: { hand: 'L' | 'R'; a: Action & { t: number }; t: number } | null = null;
@@ -525,7 +536,7 @@ export class GestureRecognizer {
     });
 
     // Peak-based strike detection: robust to frame rate (works the same at 10, 15, or 30 fps).
-    const candidates: { hand: 'L' | 'R'; kind: ActionKind; score: number; speed: number; t: number }[] = [];
+    const candidates: { hand: 'L' | 'R'; kind: ActionKind; score: number; speed: number; t: number; big?: boolean }[] = [];
     const torsoYaw = Math.atan2(-(lS[2] - rS[2]), lS[0] - rS[0]);
     for (const hi of handInfo) {
       const side = hi.h === 'L' ? 1 : -1; // +X is the person's left
@@ -536,7 +547,10 @@ export class GestureRecognizer {
       if (n < 3) continue;
       const k = n - 2;
       const pk = F[k];
-      if (pk.t - this.lastStrike[hi.h] < this.cfg.handRefractory) continue;
+      // Inside the refractory only a big swing may follow a jab: a big hook's wind-up (arm drawn out) can read as a jab
+      // 0.3 s before the swing (drill session 2dd3adbd, exact timing); the swing must still fire.
+      const inRefractory = pk.t - this.lastStrike[hi.h] < this.cfg.handRefractory;
+      if (inRefractory && this.lastStrikeKind[hi.h] !== 'jab') continue;
       if (pk.t - (this.lastCandidate[hi.h] ?? -9) < 0.12) continue;
       const peakOf = (key: 'ext' | 'y' | 'u' | 'elbow') => {
         if (!(pk[key] >= F[k - 1][key] && pk[key] > F[n - 1][key])) return null;
@@ -603,11 +617,13 @@ export class GestureRecognizer {
         let kind: ActionKind | null = null;
         if (rise >= this.cfg.bigUpRise && rise >= this.cfg.upOverSweep * sweep) kind = 'uppercut';
         else if (sweep >= this.cfg.hookSweep || (turn >= this.cfg.hookTurnDeg && sweep >= this.cfg.hookSweepWithTurn)) kind = 'hook';
-        if (kind) for (const c of candidates) if (c.hand === hi.h && c.kind !== kind && (c.kind === 'jab' || c.kind === 'hook' || c.kind === 'uppercut')) {
-          if (this.debugLog) this.debugLog.push(`${t.toFixed(2)} reclass ${c.kind}${c.hand} -> ${kind} (sweep ${sweep.toFixed(2)} rise ${rise.toFixed(2)} turn ${turn.toFixed(0)})`);
+        if (kind) for (const c of candidates) if (c.hand === hi.h && (c.kind === 'jab' || c.kind === 'hook' || c.kind === 'uppercut')) {
+          if (this.debugLog && c.kind !== kind) this.debugLog.push(`${t.toFixed(2)} reclass ${c.kind}${c.hand} -> ${kind} (sweep ${sweep.toFixed(2)} rise ${rise.toFixed(2)} turn ${turn.toFixed(0)})`);
           c.kind = kind;
+          c.big = true;
         }
       }
+      if (inRefractory) for (let i = candidates.length - 1; i >= 0; i--) if (candidates[i].hand === hi.h && !(candidates[i].big && candidates[i].speed >= this.cfg.bigSwingSpeed)) candidates.splice(i, 1);
     }
     if (this.debugLog) for (const c of candidates) this.debugLog.push(`${t.toFixed(2)} cand ${c.kind}${c.hand} score ${c.score.toFixed(2)} speed ${c.speed.toFixed(2)} peakT ${c.t.toFixed(2)}`);
     // Ignore slow, gestural movements.
@@ -756,6 +772,10 @@ export class GestureRecognizer {
         const p = this.pending;
         this.pending = null;
         decideBilateral(c, p);
+      } else if (c.big && c.speed >= this.cfg.bigSwingSpeed && !this.xshield && !this.blocking) {
+        // A big fast swing (arbiter-confirmed hook/uppercut): its follow-through carries the arms across the face, which
+        // looks like a block or X forming. Defenses form slowly; this fires now (drill session 2dd3adbd, exact timing).
+        emitSingle({ kind: c.kind, hand: c.hand, speed: c.speed, t: c.t });
       } else if (otherSpeed(c.hand) > this.cfg.bilateralSpeed || defensiveEnd) {
         // The other hand is moving too: wait briefly to see if this is a two-handed move.
         this.pending = { hand: c.hand, a: { kind: c.kind, hand: c.hand, speed: c.speed }, t };
@@ -783,7 +803,7 @@ export class GestureRecognizer {
       }
     }
     for (const a of [...held, ...out.actions.slice(nBefore)]) {
-      if (a.hand === 'L' || a.hand === 'R') this.lastStrike[a.hand] = a.t;
+      if (a.hand === 'L' || a.hand === 'R') (this.lastStrike[a.hand] = a.t), (this.lastStrikeKind[a.hand] = a.kind);
       else if (a.hand === 'B') this.lastStrike.L = this.lastStrike.R = a.t;
     }
 

@@ -17,7 +17,7 @@ const EXPECT: Record<string, { kind?: string; hand?: string; dir?: 'fwd' | 'back
   step_left: { dir: 'left' }, lean_left: { dir: 'left' }, step_right: { dir: 'right' }, lean_right: { dir: 'right' },
 };
 
-export type LabelStats = { label: string; frames: number; fwd: number; strafe: number; rightSign: number; reps: number; hit: number; got: Record<string, number> };
+export type LabelStats = { label: string; frames: number; fwd: number; strafe: number; rightSign: number; reps: number; hit: number; got: Record<string, number>; perRep: { rep: number; ok: boolean; got: string[] }[] };
 
 export function replay(file: string, opts: { recorded?: boolean; configure?: (r: GestureRecognizer) => void } = {}) {
   const data = JSON.parse(fs.readFileSync(file, 'utf8')) as { name: string; frames: F[] };
@@ -87,7 +87,7 @@ export function replay(file: string, opts: { recorded?: boolean; configure?: (r:
   for (const [label, s] of per) {
     const got: Record<string, number> = {};
     for (const r of s.reps.values()) for (const g of r.got) got[g] = (got[g] ?? 0) + 1;
-    stats.push({ label, frames: s.n, fwd: s.fwd / s.n, strafe: s.strafe / s.n, rightSign: s.right / s.n, reps: s.reps.size, hit: [...s.reps.values()].filter((r) => r.ok).length, got });
+    stats.push({ label, frames: s.n, fwd: s.fwd / s.n, strafe: s.strafe / s.n, rightSign: s.right / s.n, reps: s.reps.size, hit: [...s.reps.values()].filter((r) => r.ok).length, got, perRep: [...s.reps.entries()].map(([rep, r]) => ({ rep, ok: r.ok, got: r.got })) });
   }
   return { name: data.name, calib: rec.calib, stats };
 }
@@ -106,5 +106,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const files = (names.length ? names : fs.readdirSync(path.join(ROOT, 'clips/research')).map((f) => f.replace('.json', ''))).map((n) => path.join(ROOT, 'clips/research', n.endsWith('.json') ? n : n + '.json'));
   const all = files.map((f) => replay(f, { recorded }));
   for (const r of all) console.log(table(r) + '\n');
+  if (args.includes('--reps')) for (const r of all) for (const st of r.stats) if (st.perRep.length && st.perRep.some((x) => x.got.length || !x.ok)) console.log(r.name.slice(0, 8), st.label.padEnd(13), st.perRep.map((x) => `r${x.rep}${x.ok ? '✓' : '✗'}[${x.got.join(' ')}]`).join('  '));
   if (jsonOut) fs.writeFileSync(jsonOut, JSON.stringify(all, null, 1));
 }
