@@ -8,7 +8,7 @@ import { randomUUID } from 'crypto';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const OUT = path.join(ROOT, 'video/out/ui');
-const BASE = process.env.BASE_URL ?? 'https://144-202-71-213.sslip.io';
+const BASE = process.env.BASE_URL ?? 'https://throwhands.tech';
 fs.mkdirSync(OUT, { recursive: true });
 const only = process.argv.slice(2);
 const want = (id: string) => !only.length || only.includes(id);
@@ -105,6 +105,27 @@ if (want('store')) {
   await p.screenshot({ path: path.join(OUT, 'store.png') });
   await c.close();
   console.log('ui store');
+}
+
+if (want('tutorial')) {
+  // The movement tutorial, driven by a real clip through the injected camera; ?clean hides the camera preview so
+  // no footage appears on screen, only the game UI. The player steps to their left (picture shifted) mid-capture.
+  const { injectCamera } = await import('../tests/e2e/helpers');
+  const gpu = await chromium.launch({ args: ['--use-angle=gl-egl', '--ignore-gpu-blocklist', '--enable-gpu'] });
+  const c = await gpu.newContext({ viewport: { width: 1280, height: 720 }, permissions: ['camera'] });
+  await injectCamera(c, 'guard_02');
+  const p = await c.newPage();
+  await p.goto(`${BASE}/?mode=practice&clean&nocomment&aifixture`);
+  await p.waitForSelector('#tut:not(.hidden)', { timeout: 120_000 });
+  await p.evaluate(() => (window as any).__cam.zoom(1.3));
+  await p.waitForFunction(() => (window as any).__brawl.tutorial?.done.includes('fwd'), null, { timeout: 8000 }).catch(() => {});
+  await p.evaluate(() => (window as any).__cam.zoom(1));
+  await p.waitForTimeout(400);
+  await p.evaluate(() => (window as any).__cam.offset(70));
+  await p.waitForTimeout(250);
+  await p.screenshot({ path: path.join(OUT, 'tutorial.png') });
+  await gpu.close();
+  console.log('ui tutorial');
 }
 
 await browser.close();

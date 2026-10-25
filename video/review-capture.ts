@@ -54,10 +54,12 @@ async function runScene(page: Page, sc: Scene) {
   fs.rmSync(dir, { recursive: true, force: true });
   fs.mkdirSync(dir, { recursive: true });
   await page.evaluate((cfg) => (window as any).__rec.scene(cfg), sc.cfg);
+  // Placements at t=0 happen before the warm-up, so the capture never starts with fighters gliding into place.
+  for (const [t, method, ...args] of sc.cues ?? []) if (t === 0 && method === 'place') await page.evaluate(({ method, args }) => (window as any).__rec[method](...args), { method, args });
   await page.evaluate((n) => (window as any).__rec.step(n), sc.warmup ?? 30 * 3.3);
   await page.evaluate(() => (window as any).__rec.resetCamStats?.());
   const frames = Math.round(sc.seconds * 30);
-  const cues = [...(sc.cues ?? [])].sort((a, b) => a[0] - b[0]);
+  const cues = [...(sc.cues ?? [])].filter((c) => !(c[0] === 0 && c[1] === 'place')).sort((a, b) => a[0] - b[0]);
   const probes: any[] = [];
   for (let i = 0; i < frames; i++) {
     while (cues.length && cues[0][0] * 30 <= i) {

@@ -24,7 +24,7 @@ export class Announcer {
   private lowHpCalled = new Set<number>();
   private chant = false;
   /** Log of calls played (tests/review). */
-  log: { at: number; key: string; text: string }[] = [];
+  log: { at: number; key: string; text: string; id: string }[] = [];
   enabled = true;
 
   /** True when a stock call played in the last `sec` seconds (the AI line then stays caption-only). */
@@ -48,7 +48,7 @@ export class Announcer {
     this.lastAt = now;
     this.recent.push(now);
     this.lastId = pick.id;
-    this.log.push({ at: Date.now(), key, text: pick.text });
+    this.log.push({ at: Date.now(), key, text: pick.text, id: pick.id });
     if (this.log.length > 200) this.log.shift();
     text?.(pick.text);
     return true;

@@ -684,9 +684,9 @@ export class HeroFighter {
           // Step in when the target is beyond reach (measured once the body is back at rest).
           const from = upper.getWorldPosition(new THREE.Vector3());
           const gap = from.distanceTo(goal) - reach * 0.97;
-          // Never step into the target's body (roots stay at least 0.62 m apart).
+          // Never step into the target's body (roots stay at least 0.5 m apart: two ~0.25 m bodies touching).
           const rootDist = this.root.position.distanceTo(s.target.root.position);
-          s.lunge = THREE.MathUtils.clamp(this.lungeNow + gap, 0, Math.max(0, Math.min(0.8, rootDist - 0.62)));
+          s.lunge = THREE.MathUtils.clamp(this.lungeNow + gap, 0, Math.max(0, Math.min(0.95, rootDist - 0.5)));
           lungeWant = s.lunge * w;
           this.body.position.z = lungeWant;
           this.root.updateMatrixWorld(true);

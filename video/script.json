@@ -1,14 +1,12 @@
 {
- "note": "Demo video plan. Follows Meta's required structure (problem/human connection ~30 s, demo ~90 s, AI ~30 s, tools ~30 s). Visuals: game footage rendered by video/record-scenes.ts (avatars only, no third-party footage), UI captures from the deployed site, and HTML title cards. Voiceover: ElevenLabs.",
+ "note": "demo-video-v2 (Sun Oct 25). Every caption describes what is on screen in that segment; each gameplay shot is used once. Gameplay is the real game in record mode, driven by saved pose landmarks (numbers only, no third-party footage appears). Announcer calls heard in gameplay segments are the game's own stock calls, at the frames the game fired them.",
  "segments": [
   {
    "id": "hook",
    "section": "hook",
-   "visual": "shot:hook_uppercut",
-   "title": "",
-   "vo": "This is a real punch, thrown by a real body, landing on a friend across the country.",
-   "offset": 2.2,
-   "hold": 2.2
+   "visual": "shot:walk_in",
+   "vo": "Step toward the camera and your fighter walks in. Jab, hook, then drive a fist up for the super uppercut.",
+   "calls": true
   },
   {
    "id": "logo",
@@ -26,68 +24,86 @@
    "id": "connect",
    "section": "problem",
    "visual": "shot:online_split",
-   "vo": "So we built a fighting game that runs in any browser with a webcam. Send a friend a link, and you're trading punches in seconds, laptop or phone."
+   "vo": "So we built a fighting game that runs in a browser with a webcam. Two friends, two screens, one fight."
   },
   {
-   "id": "practice",
+   "id": "tutorial",
    "section": "demo",
-   "visual": "shot:hook_uppercut_alt",
-   "vo": "Raise your fists and your superhero mirrors you. Throw a jab, a hook, an uppercut: faster punches hit harder. Forearms up blocks."
+   "visual": "ui:tutorial",
+   "vo": "A short tutorial teaches movement: step or lean toward the camera to advance, back to retreat, and sideways to circle."
   },
   {
-   "id": "supers",
+   "id": "circle",
    "section": "demo",
-   "visual": "shot:supers",
-   "vo": "Land hits to fill your super meter. Cross your arms for a shield. Push both palms forward for an energy blast. Drive a fist up for a slow-motion super uppercut."
+   "visual": "shot:circle",
+   "vo": "Your fighter really walks: it circles left and right, steps back, and comes forward, always facing the opponent.",
+   "calls": true
   },
   {
-   "id": "local2p",
+   "id": "contact",
    "section": "demo",
    "visual": "shot:duel_side",
-   "vo": "Two friends can share one camera. Each person controls their own fighter."
+   "vo": "Two players, each driving a fighter with their own punches. Every fist reaches its target before the hit lands.",
+   "calls": true
   },
   {
-   "id": "online",
+   "id": "guard",
    "section": "demo",
-   "visual": "ui:lobby",
-   "vo": "Or play online. Create a room, share the four-letter code. Friends can watch, cheer, and queue up for winner stays on."
+   "visual": "shot:guard_break",
+   "vo": "Forearms up raises your guard. It drains with every blocked hit, and when it breaks, you're dizzy.",
+   "calls": true
+  },
+  {
+   "id": "ironwall",
+   "section": "demo",
+   "visual": "shot:iron_wall",
+   "vo": "With a full super meter, cross your forearms above your face. Iron Wall blocks everything and counters the attacker.",
+   "calls": true
+  },
+  {
+   "id": "cage",
+   "section": "demo",
+   "visual": "shot:cage_slam",
+   "vo": "A super uppercut near the fence slams your opponent into the cage.",
+   "calls": true
   },
   {
    "id": "brawl",
    "section": "demo",
    "visual": "shot:brawl",
-   "vo": "Brawl puts up to eight fighters in one ring, with knockback, ring-outs, and a live KO feed. Bots fill the empty spots."
+   "vo": "Brawl puts up to eight fighters in the octagon, with a live KO feed. Bots fill the empty spots.",
+   "calls": true
+  },
+  {
+   "id": "online",
+   "section": "demo",
+   "visual": "ui:lobby",
+   "vo": "Online, create a room and share the four-letter code. Friends can watch, cheer, and queue up for winner stays on."
   },
   {
    "id": "forge",
    "section": "demo",
    "visual": "ui:forge",
-   "vo": "Fighter Forge turns one sentence into your own fighter. Meta's Muse Spark writes the name, story, and moves, Muse Image paints the card, and your suit takes its colors."
-  },
-  {
-   "id": "rivalry",
-   "section": "demo",
-   "visual": "ui:rivalry",
-   "vo": "After an online match you get a rivalry card to send the friend you just beat. Then hit rematch."
+   "vo": "Fighter Forge turns one sentence into your own fighter. Meta's Muse Spark writes it, and Muse Image paints the card."
   },
   {
    "id": "board",
    "section": "demo",
    "visual": "ui:leaderboard",
-   "vo": "Online wins feed an Elo leaderboard."
+   "vo": "Online wins feed an Elo leaderboard, stored in Tiger Data."
   },
   {
    "id": "ai",
    "section": "ai",
-   "visual": "card:ai|shot:duel_side_alt",
-   "vo": "AI is the controller. A pose model runs in your browser, so no video ever leaves your device. Our gesture engine turns joint angles into punches, blocks, and supers. Gemini calls the fight out loud, and Meta's Muse models make every fighter unique."
+   "visual": "card:ai",
+   "vo": "AI is the controller. A pose model runs in your browser, so no video leaves your device. Our gesture engine turns joint angles into punches, guards, and supers. Gemini writes live commentary, and an announcer voice made with ElevenLabs calls the big moments."
   },
   {
    "id": "tools",
    "section": "tools",
    "visual": "card:tools|card:tests",
-   "vo": "We built it in a weekend with Claude Code. Playwright tests play pro fighters' shadowboxing footage into headless browsers as a fake webcam, and check that both players' screens agree on every tick. A Vultr server runs the game and every online room, and Tiger Data stores the stats.",
-   "say": "We built it in a weekend with Claude Code. Playwright tests play pro fighters' shadowboxing footage into headless browsers as a fake webcam, and check that both players' screens agree on every tick. A Vulture server runs the game and every online room, and Tiger Data stores the stats."
+   "vo": "We built it with Claude Code. Playwright tests feed real people's movement into headless browsers as a fake webcam and check that both players' screens agree on every tick. Fresh-context reviewers score every visual change. A Vultr server runs the game, and Tiger Data stores the stats.",
+   "say": "We built it with Claude Code. Playwright tests feed real people's movement into headless browsers as a fake webcam and check that both players' screens agree on every tick. Fresh-context reviewers score every visual change. A Vulture server runs the game, and Tiger Data stores the stats."
   },
   {
    "id": "business",
@@ -99,7 +115,8 @@
    "id": "close",
    "section": "close",
    "visual": "card:close",
-   "vo": "Pull up a friend. Throw hands, at throwhands dot tech."
+   "vo": "Pull up a friend. Throw hands, at throwhands dot tech.",
+   "say": "Pull up a friend. Throw hands, at throw hands dot tech."
   }
  ]
 }

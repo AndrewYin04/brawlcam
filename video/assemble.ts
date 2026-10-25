@@ -82,7 +82,29 @@ for (const seg of script.segments) {
   const done = path.join(SEG, `${String(n).padStart(2, '0')}_${seg.id}.mp4`);
   visualClip(seg.visual, length, raw, seg.offset ?? 0);
   const caps = captionFilters(seg.vo, 0.15, voLen);
-  ff(['-i', raw, '-i', vo, '-filter_complex', `[0:v]${caps.join(',')},fade=t=in:st=0:d=0.2,fade=t=out:st=${(length - 0.2).toFixed(2)}:d=0.2[v];[1:a]adelay=150|150,apad,atrim=0:${length}[a]`, '-map', '[v]', '-map', '[a]', ...VENC, '-c:a', 'aac', '-b:a', '160k', '-ar', '44100', '-ac', '2', '-t', String(length), done]);
+  // Gameplay segments: the game's own announcer calls at the frames it fired them, plus a quiet crowd bed.
+  const inputs = ['-i', raw, '-i', vo];
+  const mixes = ['[1:a]adelay=150|150,apad,atrim=0:' + length + '[vo]'];
+  const labels = ['[vo]'];
+  if (seg.calls && seg.visual.startsWith('shot:')) {
+    const shot = seg.visual.slice(5);
+    const cf = path.join(OUT, `${shot}.calls.json`);
+    const off = seg.offset ?? 0;
+    const calls: { t: number; id: string }[] = fs.existsSync(cf) ? JSON.parse(fs.readFileSync(cf, 'utf8')) : [];
+    for (const c of calls.filter((c) => c.t >= off && c.t < off + length - 0.6)) {
+      const k = inputs.length / 2;
+      inputs.push('-i', path.join(ROOT, 'web/public/calls', c.id + '.mp3'));
+      const ms = Math.round((c.t - off) * 1000);
+      mixes.push(`[${k}:a]volume=0.55,adelay=${ms}|${ms},apad,atrim=0:${length}[c${k}]`);
+      labels.push(`[c${k}]`);
+    }
+    inputs.push('-f', 'lavfi', '-i', `anoisesrc=color=brown:amplitude=0.5:d=${length}`);
+    const k = inputs.length / 2 - 1;
+    mixes.push(`[${k}:a]bandpass=f=650:width_type=o:w=1.5,volume=0.22,afade=t=in:d=0.4,afade=t=out:st=${(length - 0.4).toFixed(2)}:d=0.4[crowd]`);
+    labels.push('[crowd]');
+  }
+  const amix = labels.length > 1 ? `${mixes.join(';')};${labels.join('')}amix=inputs=${labels.length}:duration=first:normalize=0[a]` : `${mixes[0].replace('[vo]', '[a]')}`;
+  ff([...inputs, '-filter_complex', `[0:v]${caps.join(',')},fade=t=in:st=0:d=0.2,fade=t=out:st=${(length - 0.2).toFixed(2)}:d=0.2[v];${amix}`, '-map', '[v]', '-map', '[a]', ...VENC, '-c:a', 'aac', '-b:a', '160k', '-ar', '44100', '-ac', '2', '-t', String(length), done]);
   parts.push(done);
   audioParts.push(vo);
   console.log('segment', seg.id, length.toFixed(1), 's');
