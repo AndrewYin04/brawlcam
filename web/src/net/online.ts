@@ -138,6 +138,7 @@ class Conn {
         break;
       case 'roster':
         this.roster = m;
+        hooks.roster = m;
         this.host = m.host === this.slot;
         renderLobby();
         break;

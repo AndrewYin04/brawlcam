@@ -71,8 +71,12 @@ export class LocalSession implements Session {
     for (const a of actions) this.sim.pushAction(id, { kind: a.kind, hand: a.hand, speed: a.speed });
   }
 
+  /** Test knob (?infmeter): keep local fighters' super meter full, to probe cooldowns directly. */
+  infiniteMeter = false;
+
   tick(dt: number): TickResult | null {
     if (!this.started) return { snap: this.sim.snapshot(true), events: [] };
+    if (this.infiniteMeter) for (const id of this.localIds) { const f = this.sim.get(id); if (f) f.meter = 100; }
     for (const b of this.bots) b.tick(this.sim);
     this.sim.step(Math.min(dt, 0.1));
     const events = this.sim.drainEvents();

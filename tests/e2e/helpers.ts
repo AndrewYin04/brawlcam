@@ -49,6 +49,15 @@ export async function injectCamera(ctx: BrowserContext, clip: string | null, fai
         zoom: (z: number) => (state.zoom = z),
         blank: (b: boolean) => (state.blank = b),
         fail: (f: string | null) => (state.fail = f),
+        freeze: (t: number | null) => {
+          for (const v of state.vids ?? []) {
+            if (t == null) void v.play();
+            else {
+              v.pause();
+              v.currentTime = t;
+            }
+          }
+        },
         state,
       };
       const md = navigator.mediaDevices ?? ((navigator as any).mediaDevices = {});

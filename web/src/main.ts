@@ -36,7 +36,9 @@ export const hooks = {
   rivalry: null as unknown,
   forge: null as unknown,
   /** Recent distinct snapshots with local arrival time (epoch ms), for sync assertions in tests. */
-  snapLog: [] as { t: number; at: number; round: number; timer: number; phase: string; hp: number[] }[],
+  snapLog: [] as { t: number; at: number; round: number; timer: number; phase: string; hp: number[]; f: number[][] }[],
+  targetChanges: 0,
+  roster: null as any,
 };
 (window as any).__brawl = hooks;
 window.addEventListener('error', (e) => hooks.errors.push(String(e.message)));
@@ -242,6 +244,7 @@ export function beginSession(s: Session, camera: 'behind' | 'side' | 'wide', mod
 }
 
 function beginLocal(s: LocalSession, camera: 'behind' | 'side' | 'wide', mode: string) {
+  s.infiniteMeter = params.has('infmeter');
   beginSession(s, camera, mode, mode === 'demo');
 }
 
@@ -424,7 +427,10 @@ function startLoop() {
         hooks.snapshot = r.snap;
         const lastLog = hooks.snapLog[hooks.snapLog.length - 1];
         if (!lastLog || lastLog.t !== r.snap.t) {
-          hooks.snapLog.push({ t: r.snap.t, at: performance.timeOrigin + performance.now(), round: r.snap.round, timer: r.snap.timer, phase: r.snap.phase, hp: r.snap.f.map((f) => f.hp) });
+          hooks.snapLog.push({ t: r.snap.t, at: performance.timeOrigin + performance.now(), round: r.snap.round, timer: r.snap.timer, phase: r.snap.phase, hp: r.snap.f.map((f) => f.hp), f: r.snap.f.map((f) => [f.id, f.x, f.z, f.hp, f.kb, f.kos, f.alive]) });
+          const meF = r.snap.f.find((f) => session!.localIds.includes(f.id));
+          if (meF && (hooks as any).lastTg !== undefined && (hooks as any).lastTg !== meF.tg) hooks.targetChanges++;
+          if (meF) (hooks as any).lastTg = meF.tg;
           if (hooks.snapLog.length > 2000) hooks.snapLog.splice(0, 500);
         }
         if (hooks.mode === 'idle' && session.over) session.rematch();
