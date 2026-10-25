@@ -17,16 +17,8 @@ export type HeroModel = (typeof HERO_MODELS)[number];
 const BODIES = ['male_light', 'male_dark', 'female_light', 'female_dark'];
 /** Per-slot look so every fighter reads differently even at Brawl scale: top, leg wear, hair or headgear. */
 type Look = { top: 0 | 1 | 2; pants: boolean; head: 'short' | 'bun' | 'headgear' | 'mohawk' | 'long' | 'none'; hair: number };
-const LOOKS: Look[] = [
-  { top: 0, pants: false, head: 'short', hair: 0x1b120c },
-  { top: 1, pants: false, head: 'bun', hair: 0x120c08 },
-  { top: 0, pants: true, head: 'headgear', hair: 0 },
-  { top: 2, pants: false, head: 'long', hair: 0xd8b25a },
-  { top: 1, pants: false, head: 'mohawk', hair: 0xd83a2a },
-  { top: 2, pants: true, head: 'headgear', hair: 0 },
-  { top: 2, pants: false, head: 'short', hair: 0x2a1a10 },
-  { top: 1, pants: true, head: 'long', hair: 0x8a2a1a },
-];
+// The user preferred the plain fighters (no added hair, headgear, tops or pants): looks are off for every slot.
+const LOOKS: Look[] = [{ top: 0, pants: false, head: 'none', hair: 0 }];
 const BUILD: Record<string, [number, number]> = { '': [1, 1], heavy: [1.03, 1.12], lean: [0.98, 0.94] }; // [height, width]
 
 const loader = new GLTFLoader();
@@ -836,14 +828,15 @@ export class HeroFighter {
   /** Where the current strike's fist/foot is now (sparks go at the contact point). */
   contactPoint(out = new THREE.Vector3()) {
     const s = this.strike;
-    if (s?.kind === 'kick') return this.bones[s.hand === 'L' ? 'foot_l' : 'foot_r']!.getWorldPosition(out);
+    const foot = this.bones[s?.hand === 'L' ? 'foot_l' : 'foot_r'];
+    if (s?.kind === 'kick' && foot) return foot.getWorldPosition(out); // (bones are missing until the model loads)
     return this.glovePos(s?.hand ?? 'R', out);
   }
 
   probe() {
     const w = (o: THREE.Object3D | null | undefined) => (o ? o.getWorldPosition(new THREE.Vector3()).toArray() : null);
     const q = (o: THREE.Object3D | null | undefined) => (o ? o.getWorldQuaternion(new THREE.Quaternion()).toArray() : null);
-    return { root: w(this.root), lFoot: w(this.bones.foot_l), rFoot: w(this.bones.foot_r), chest: q(this.bones.spine_03), head: q(this.bones.Head), contacts: this.contacts.slice(-10), headPos: w(this.bones.Head), hairPos: w(this.hairGroup), hairScale: this.hairGroup ? this.hairGroup.getWorldScale(new THREE.Vector3()).toArray() : null };
+    return { root: w(this.root), lFoot: w(this.bones.foot_l), rFoot: w(this.bones.foot_r), chest: q(this.bones.spine_03), head: q(this.bones.Head), contacts: this.contacts.slice(-10), vis: this.root.visible, inScene: !!this.root.parent, opacity: this.opacity, bodyVis: this.body.visible, rootPos: this.root.position.toArray(), headPos: w(this.bones.Head), hairPos: w(this.hairGroup), hairScale: this.hairGroup ? this.hairGroup.getWorldScale(new THREE.Vector3()).toArray() : null };
   }
 
   dispose() {

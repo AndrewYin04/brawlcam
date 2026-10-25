@@ -102,11 +102,12 @@ export class SkyStage {
       c.textBaseline = 'middle';
       c.fillText('THROW HANDS  ·  THROW HANDS', 512, 68);
     });
-    for (let k = 0; k < 4; k++) {
-      const a = (k / 4) * Math.PI * 2 + Math.PI / 4;
-      const b = new THREE.Mesh(new THREE.PlaneGeometry(14, 1.75), new THREE.MeshBasicMaterial({ map: banner, fog: true }));
-      b.position.set(Math.cos(a) * 25, 10.5, Math.sin(a) * 25);
-      b.lookAt(0, 10.5, 0);
+    // Low LED boards around the floor in front of the first row (they used to hang high and sit behind the HUD).
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2 + Math.PI / 8;
+      const b = new THREE.Mesh(new THREE.PlaneGeometry(5.6, 0.7), new THREE.MeshBasicMaterial({ map: banner, fog: true }));
+      b.position.set(Math.cos(a) * 7.6, 0.4, Math.sin(a) * 7.6);
+      b.lookAt(0, 0.4, 0);
       this.group.add(b);
     }
   }
