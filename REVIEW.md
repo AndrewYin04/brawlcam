@@ -431,3 +431,28 @@ Make the drills **prompt-by-prompt** instead of reps on a beat:
 - **Order:** randomized moves (jab L/R, hook L/R, straight, uppercut, block, X-cross, palm, knee, kick, step and lean in each direction), each about 6 times, so the player can't anticipate. The "stand still" (20 s) and "big punches while standing still" blocks stay as their own sections at the start, because bug A needs them.
 - **Calm pacing:** a progress bar ("23 / 90"), and a pause on Space.
 - The live per-move tally and the end summary stay as specified above.
+
+### 3:05 AM: the user's first research session, and a saving bug
+- **Data available now:** Tiger `research_frames`, session `50c46d79…` (1,706 frames, 2:53:12 to 2:56:34 AM CDT). The user played in research mode without pressing marker keys; use it for bug A where the user stood still and punched (look at `move` during strikes). Note the rate: 1,706 frames over about 202 s is about 8.4 fps. Check whether that is the pose rate on the user's laptop or the upload sampling, and report it.
+- **Bug: the local files were never saved.** They download only when the user clicks "Stop & save files" on the REC bar, and the user left without clicking it, so the video was lost. Fixes:
+  - save automatically when the session ends: leaving the match, Quit, `pagehide`/`beforeunload` (where the browser allows), and the end of a drill run
+  - make the button large, and add a toast after saving: "Saved to your Downloads folder: throwhands-research-….webm and .jsonl"
+  - for long sessions, also offer saving every 2 minutes while recording, so a crash loses at most 2 minutes
+  - in drill mode, save automatically when the script finishes
+
+### 3:08 AM: the user's second research session (files saved), and two findings
+Session `ee6f97a0…` (Tiger `research_frames`; the user also has the local `.webm` and `.jsonl`), 157.5 s. Planner analysis of the JSONL:
+1. **The pose rate on the user's laptop is 6.9 fps** (1,085 frames over 157.5 s; the earlier session was about 8.4 fps). The game assumes 20 or more. **High priority:**
+   - find whether the GPU delegate is actually in use on the user's laptop Chrome (the preview showed a "GPU" label), and whether the worker, the new hero renderer and bloom, or the research recorder (MediaRecorder at 1.5 Mbps) is starving the pose loop
+   - measure pose fps with research mode on and off, `?classic` on and off, and bloom on and off
+   - the target is 20+ fps on a laptop. If the renderer is the cause, add an automatic quality step-down (no bloom or outlines, a lower pixel ratio) whenever the pose rate drops below 15 fps.
+2. **Bug A data:**
+   - forward/back input within 0.6 s of a detected strike: 20 of 551 frames nonzero (9 backward); the gate mostly works
+   - **at least 0.6 s from any strike: 254 of 534 frames nonzero, 128 backward, minimum -1.00**
+   - 142 strikes in 157 s, about one every 1.1 s, so these frames are the wind-ups and recoveries between punches
+   - the planner is confirming with the user that they stood in place the whole time. If so, the drift comes from the between-strike motion (wind-up and recoil), not the strike frames, and the gate needs to cover strike onset and recovery, or the distance cue needs to ignore torso twist, as in the 2:50 AM ideas. Use this session as the repro.
+
+### 3:12 AM correction to the 3:08 AM note
+The user confirmed they **were moving** during session `ee6f97a0` (stepping left, right, forward and back, and strafing). So the "254 of 534 frames nonzero between strikes" figure is mostly real movement, **not** evidence of bug A. Don't use this session as the bug A repro. The only bug-relevant signal in it is the frames within 0.6 s of strikes (20 of 551 nonzero, 9 backward, minimum -1.00), and those may include intentional steps.
+
+**A clean repro still needs the "big punches while standing still" drill.** Ship the minimal drill mode (stand still, big punches standing still, and movement) as the next item, so the user can record it. The 6.9 fps pose-rate finding (item 1 of the 3:08 AM note) still stands and is high priority.
