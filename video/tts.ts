@@ -17,7 +17,7 @@ for (const seg of script.segments) {
   const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${VOICE}?output_format=mp3_44100_128`, {
     method: 'POST',
     headers: { 'xi-api-key': KEY, 'content-type': 'application/json' },
-    body: JSON.stringify({ text: seg.vo, model_id: 'eleven_multilingual_v2', voice_settings: { stability: 0.4, similarity_boost: 0.8, style: 0.35, use_speaker_boost: true } }),
+    body: JSON.stringify({ text: seg.say ?? seg.vo, model_id: 'eleven_multilingual_v2', voice_settings: { stability: 0.4, similarity_boost: 0.8, style: 0.35, use_speaker_boost: true } }),
   });
   if (!r.ok) {
     console.log(seg.id, 'ERR', r.status, (await r.text()).slice(0, 200));

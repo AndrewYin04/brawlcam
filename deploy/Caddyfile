@@ -10,6 +10,12 @@
 	handle /ws {
 		reverse_proxy 127.0.0.1:8787
 	}
+	# Demo video and other large media (not part of the app build).
+	handle /media/* {
+		root * /srv/brawlcam
+		header Cache-Control "public, max-age=600"
+		file_server
+	}
 	handle {
 		root * /srv/brawlcam/dist
 		@hashed path /assets/*

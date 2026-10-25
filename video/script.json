@@ -86,7 +86,8 @@
    "id": "tools",
    "section": "tools",
    "visual": "card:tools|card:tests",
-   "vo": "We built it in a weekend with Claude Code. Playwright tests play pro fighters' shadowboxing footage into headless browsers as a fake webcam, and check that both players' screens agree on every tick. A Vultr server runs the game and every online room, and Tiger Data stores the stats."
+   "vo": "We built it in a weekend with Claude Code. Playwright tests play pro fighters' shadowboxing footage into headless browsers as a fake webcam, and check that both players' screens agree on every tick. A Vultr server runs the game and every online room, and Tiger Data stores the stats.",
+   "say": "We built it in a weekend with Claude Code. Playwright tests play pro fighters' shadowboxing footage into headless browsers as a fake webcam, and check that both players' screens agree on every tick. A Vulture server runs the game and every online room, and Tiger Data stores the stats."
   },
   {
    "id": "business",

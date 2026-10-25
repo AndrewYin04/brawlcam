@@ -76,6 +76,9 @@ export const GESTURE_CFG = {
   turnOn: 0.6, // rad torso yaw to switch target
   turnOff: 0.25,
   turnHold: 0.25,
+  // movement mode: 'lean' (lean to strafe, step to advance) or 'point' (hold an arm out to point where to go)
+  moveMode: 'lean' as 'lean' | 'point',
+  pointHold: 0.3, // s an arm must stay extended and still
   // presence
   minShoulderVis: 0.5,
 };
@@ -135,6 +138,7 @@ export class GestureRecognizer {
   private calibStart = -1;
   private standingAnkleY: [number, number] | null = null;
   private legsBusyUntil = -9;
+  private pointSince: Record<string, number | null> = {};
 
   /** Start (or restart) the 3-second guard calibration. */
   beginCalibration() {
@@ -425,6 +429,24 @@ export class GestureRecognizer {
     // While striking or blocking, ignore movement noise from the torso.
     const busy = out.actions.length > 0 || this.blocking;
     out.move = busy ? [0, 0] : [strafe, fwd];
+    if (this.cfg.moveMode === 'point') {
+      // Hand-pointing prototype: one arm held straight and still points where to go (the other arm stays free).
+      let pm: [number, number] = [0, 0];
+      for (const hi of handInfo) {
+        const straight = hi.elbow > 145 && hi.ext > 0.8 && hi.speed < 0.8;
+        const key = 'point' + hi.h;
+        if (straight) {
+          if (this.pointSince[key] == null) this.pointSince[key] = t;
+          if (t - this.pointSince[key]! >= this.cfg.pointHold) {
+            const d = sub(hi.W, hi.S);
+            const lateral = d[0] / (Math.hypot(d[0], d[2]) || 1);
+            const forward = d[2] / (Math.hypot(d[0], d[2]) || 1);
+            pm = Math.abs(lateral) > Math.abs(forward) ? [Math.sign(lateral), 0] : [0, forward > 0 ? 1 : -1];
+          }
+        } else this.pointSince[key] = null;
+      }
+      out.move = this.blocking ? [0, 0] : pm;
+    }
 
     // ---- torso turn (target switching) ----
     const yaw = Math.atan2(-(lS[2] - rS[2]), lS[0] - rS[0]);

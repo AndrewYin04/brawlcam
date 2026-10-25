@@ -30,6 +30,8 @@ export class PoseInput {
     this.players = n;
     this.assigner = new PeopleAssigner<PosePerson>(n);
     this.recognizers = Array.from({ length: n }, (_, i) => this.recognizers[i] ?? new GestureRecognizer());
+    const mode = new URLSearchParams(location.search).get('move');
+    if (mode === 'point') for (const r of this.recognizers) r.cfg.moveMode = 'point';
     this.recognizers.length = n;
     this.latest = this.recognizers.map(() => ({ present: false, actions: [], blocking: false, xshield: false, move: [0, 0], turn: 0, legs: false, joints: null }));
     this.pendingActions = this.recognizers.map(() => []);
