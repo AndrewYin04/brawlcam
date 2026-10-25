@@ -330,3 +330,17 @@ So most lines play through the browser's `speechSynthesis`, which is flat and ro
 
 ### Order
 1, 2, and 4 first (they affect every match and the video), then 3, then the rest of the queue (opt-in streams, then credits). Freeze 7:30 AM.
+
+## 2026-10-25 2:45 AM CDT: the user prefers the original camera angle; make the cage fade (replaces item 1 of the 2:35 AM section)
+The user, after the screenshot: "i think the camera angle is good; maybe the cage can turn transparent or something? worth experimenting to see what 'keep camera inside the cage' means bc what happens when the player is close to the camera?"
+
+The user's concern about clamping the camera inside the cage: when the fighters are near the fence on the camera's side, a clamped camera gets squeezed onto the player's back, the framing jumps, and the camera can clip into the fighter. Round 4 (72bc4f4) already clamps the camera inside the walls and offsets it about 35°. The user has not compared it with the original angle yet. So:
+
+1. **Cage fading, needed with any camera.** Every cage element (chain-link panel, post, pad, top rail) that sits between the camera and any part of either fighter fades to about 10 to 20% opacity or dithers out, smoothly over about 150 ms, and returns when it no longer occludes. Fade only the occluding sections, not the whole cage, so the octagon still reads. The damage numbers and hit sparks must never be hidden by the cage.
+2. **Two camera modes behind a URL flag, for the user to compare:**
+   - `?cam=behind` (**the default for now**, the user's preferred angle): the original behind-the-fighter follow camera, not clamped to the cage, relying on fading. Keep the opponent visible: if the player's own fighter covers more than about 20% of the opponent's upper body, make the player's fighter partly transparent, and optionally shift the camera slightly sideways. Do not change the overall angle.
+   - `?cam=inside`: the round 4 clamped camera with its 35° offset.
+
+   Record both through the section 11 "camera near the cage" scene (fighters in a corner, against the fence on the camera's side, and on the far side). Report the occlusion percentage, opponent visibility, and camera jumps (frame-to-frame camera movement over 0.3 m) for each in STATUS.md, with screenshots. The user picks the default after trying both.
+3. **Post material:** the padded posts render as solid black in the user's screenshot. Fix the material and lighting.
+4. The 2:35 AM items 2 (only as described in point 2 here), 3 (HUD), and 4 (commentator) still stand.
