@@ -85,7 +85,17 @@ async function runScene(page: Page, sc: Scene) {
     }
     if (qd(a.chest, b.chest) < 1e-7 && qd(a.head, b.head) < 1e-7) frozen++;
   }
-  const m = { scene: sc.name, frames: me.length, footSlideMeanCm: +((slideSum / Math.max(1, slideN)) * 100).toFixed(2), footSlideMaxCm: +(slideMax * 100).toFixed(2), movingFrames: moving, driftFrames: drift, frozenTorsoHeadFrames: frozen };
+  // Contact (spec 11 "strikes visibly connect"): fist/foot-to-target distance on each contact frame, all fighters.
+  const seen = new Set<string>();
+  const contacts: { kind: string; d: number }[] = [];
+  for (const p of probes) for (const [fi, f] of (p as any[]).entries()) for (const c of f?.contacts ?? []) {
+    const key = `${fi}:${c.t}:${c.kind}`;
+    if (!seen.has(key)) { seen.add(key); contacts.push(c); }
+  }
+  if (process.env.DEBUG_CONTACT) console.log(JSON.stringify(contacts));
+  const cd = contacts.map((c) => c.d * 100);
+  const contact = cd.length ? { contactHits: cd.length, contactMeanCm: +(cd.reduce((a, b) => a + b, 0) / cd.length).toFixed(1), contactMaxCm: +Math.max(...cd).toFixed(1) } : { contactHits: 0 };
+  const m = { scene: sc.name, ...contact, frames: me.length, footSlideMeanCm: +((slideSum / Math.max(1, slideN)) * 100).toFixed(2), footSlideMaxCm: +(slideMax * 100).toFixed(2), movingFrames: moving, driftFrames: drift, frozenTorsoHeadFrames: frozen };
   fs.writeFileSync(path.join(OUT, `${sc.name}_metrics.json`), JSON.stringify(m));
   console.log(JSON.stringify(m));
 }

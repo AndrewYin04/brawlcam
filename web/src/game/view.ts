@@ -43,6 +43,7 @@ export class MatchView {
   private hintTimer: number | undefined;
   private slowmoUntil = 0;
   private hitStopUntil = 0;
+  private pendingHits: { at: number; e: SimEvent }[] = [];
   private fallCamUntil = 0;
   private fallTarget: number | null = null;
   private koFeed: HTMLElement;
@@ -96,8 +97,28 @@ export class MatchView {
       this.onEvent?.(e);
       switch (e.type) {
         case 'hit': {
+          // Hero renderer: the strike animation reaches the target a moment after the sim registers the hit;
+          // start the strike now (aimed at the target) and play the impact on the contact frame.
+          const attS = this.slots.get(e.attacker);
+          const tgtS = this.slots.get(e.target);
+          if (attS?.avatar instanceof HeroFighter && tgtS?.avatar instanceof HeroFighter && !(e as any).__delayed) {
+            const af = this.snap?.f.find((x) => x.id === e.attacker);
+            if (af?.atk && this.snap) attS.avatar.attack(af.atk.k, af.atk.h, `${af.atk.k}${af.atk.h}${(this.snap.t - af.atk.age).toFixed(2)}`, tgtS.avatar);
+            const delay = Math.min(0.35, attS.avatar.contactDelay());
+            if (delay > 0.005) {
+              this.pendingHits.push({ at: this.time + delay, e: { ...e, __delayed: true } as SimEvent });
+              break;
+            }
+          }
           const tgt = this.slots.get(e.target);
           const att = this.slots.get(e.attacker);
+          if (att?.avatar instanceof HeroFighter) {
+            // Spark at the fist (contact point), not where the sim guessed.
+            const cp = att.avatar.contactPoint();
+            (e as any).x = cp.x;
+            (e as any).y = cp.y;
+            (e as any).z = cp.z;
+          }
           const pos = new THREE.Vector3(e.x, e.y, e.z);
           const col = att ? att.snap.color : '#fff';
           this.vfx.hit(pos, col, e.damage, e.blocked, e.shielded, e.isSuper);
@@ -217,6 +238,13 @@ export class MatchView {
   /** Per-frame render. dt in real seconds. */
   frame(dt: number) {
     this.time += dt;
+    if (this.pendingHits.length) {
+      const due = this.pendingHits.filter((p) => p.at <= this.time);
+      if (due.length) {
+        this.pendingHits = this.pendingHits.filter((p) => p.at > this.time);
+        this.handleEvents(due.map((p) => p.e));
+      }
+    }
     const s = this.snap;
     const animDt = this.time < this.hitStopUntil ? 0 : this.slowmo ? dt * 0.3 : dt;
     if (s) {
@@ -228,9 +256,11 @@ export class MatchView {
         // Smooth toward snapshot positions.
         const k = 1 - Math.exp(-dt * 18);
         const target = new THREE.Vector3(f.x, 0, f.z);
-        // Teleports (new round, respawn) snap instead of gliding across the stage.
+        // Teleports (new round, respawn) snap instead of gliding across the stage. A fighter about to be hit holds
+        // still until the fist lands (the knockback starts at the contact frame).
+        const awaitingHit = this.pendingHits.some((p) => (p.e as any).target === f.id);
         if (slot.pos.distanceTo(target) > 2.2) slot.pos.copy(target);
-        else slot.pos.lerp(target, k);
+        else if (!awaitingHit) slot.pos.lerp(target, k);
         slot.yaw += wrap(f.yaw - slot.yaw) * k;
         slot.avatar.root.position.copy(slot.pos);
         slot.avatar.root.rotation.y = slot.yaw;
@@ -250,9 +280,12 @@ export class MatchView {
           const live = !f.bot && !!f.pr && (this.opts.localIds.includes(f.id) ? !!this.opts.localJoints(f.id) : !!f.j);
           slot.avatar.livePose = live;
           slot.avatar.setJoints(live ? joints : null);
-          if (f.atk && f.atk.age < 0.3) slot.avatar.attack(f.atk.k, f.atk.h, `${f.atk.k}${f.atk.h}${(s.t - f.atk.age).toFixed(2)}`);
-          slot.avatar.edgeDist = ((s as any).R ?? 99) - Math.hypot(f.x, f.z);
-          slot.avatar.update(animDt, this.time, { shield: f.sh, meterFull: f.meter >= 100, airborne: f.y, alive: !!f.alive, blocking: !!f.b });
+          if (f.atk && f.atk.age < 0.3) {
+            // Hits already started this strike aimed at the target (handleEvents); anything else is a whiff into the air.
+            slot.avatar.attack(f.atk.k, f.atk.h, `${f.atk.k}${f.atk.h}${(s.t - f.atk.age).toFixed(2)}`, null);
+          }
+          const fa = f as any;
+          slot.avatar.update(animDt, this.time, { shield: f.sh, meterFull: f.meter >= 100, airborne: f.y, alive: !!f.alive, blocking: !!f.b, guard: fa.gd ?? 100, dizzy: !!fa.dz, ironWall: !!fa.iw });
         } else {
           slot.avatar.setJoints(joints);
           slot.avatar.update(animDt, this.time, { shield: f.sh, meterFull: f.meter >= 100, airborne: f.y, alive: !!f.alive || s.f.length <= 2 });
@@ -324,8 +357,9 @@ export class MatchView {
       if (USE_HEROES) {
         // Closer over-the-shoulder framing: both fighters fill most of the frame height.
         // Higher and further to the side than before so the chibi heroes' big heads never hide the opponent.
-        pos = me.pos.clone().addScaledVector(fwd, portrait ? -3.0 : -2.15).addScaledVector(right, portrait ? 0.95 : 1.25).setY(portrait ? 2.2 : 1.95);
-        look = (opp ? opp.pos.clone().lerp(me.pos, 0.35) : me.pos.clone().addScaledVector(fwd, 1.2)).setY(0.7);
+        // Over the right shoulder of a 1.8 m fighter: you on the left third, the opponent clear in the middle.
+        pos = me.pos.clone().addScaledVector(fwd, portrait ? -3.4 : -2.55).addScaledVector(right, portrait ? 0.8 : 1.05).setY(portrait ? 2.1 : 1.9);
+        look = (opp ? opp.pos.clone().lerp(me.pos, 0.15) : me.pos.clone().addScaledVector(fwd, 1.4)).setY(1.15);
       } else {
         pos = me.pos.clone().addScaledVector(fwd, portrait ? -3.6 : -2.7).addScaledVector(right, portrait ? 0.7 : 1.05).setY(portrait ? 2.3 : 2.0);
         look = (opp ? opp.pos.clone() : me.pos.clone().addScaledVector(fwd, 1.5)).setY(1.2);

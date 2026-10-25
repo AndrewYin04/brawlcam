@@ -1,19 +1,27 @@
-// Smash-style hero fighter: KayKit Adventurers (CC0) characters with real animation clips.
-// Legs and root always come from the locomotion state machine (driven by actual ground velocity), so fighters
-// walk and run instead of drifting. The player's pose is layered on the spine, chest, head and arms.
-// Attacks and reactions blend in authored clips (bots, remote fighters) or exaggerate the live pose (local player).
+// Hero fighter: human-proportioned toon fighters (Quaternius Universal Base Characters + Universal Animation
+// Library, CC0). Legs and root come from a locomotion state machine driven by the actual ground velocity (walk,
+// jog, walk back; circling turns the hips toward the motion while the chest keeps facing the opponent), so
+// fighters never drift. The player's live pose is layered on the chest, head and arms. Strikes play authored
+// clips and a two-bone IK pulls the fist (or foot) onto the target on the contact frame, with a step-in lunge
+// when the target is out of arm's reach, so hits visibly connect.
 import * as THREE from 'three';
 import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { J, type Joints, type V3 } from '../../../shared/joints';
 import type { FighterStyle } from './avatar';
 
-export const HERO_MODELS = ['knight', 'barbarian', 'mage', 'rogue', 'rogue-hooded'] as const;
+/** Body + build per roster slot: distinct silhouettes from body type, skin tone and build. */
+export const HERO_MODELS = ['male_light', 'female_dark', 'male_dark:heavy', 'female_light', 'male_light:heavy', 'female_dark:lean', 'male_dark', 'female_light:lean'] as const;
 export type HeroModel = (typeof HERO_MODELS)[number];
+const BODIES = ['male_light', 'male_dark', 'female_light', 'female_dark'];
+const BUILD: Record<string, [number, number]> = { '': [1, 1], heavy: [1.03, 1.12], lean: [0.98, 0.94] }; // [height, width]
 
 const loader = new GLTFLoader();
+loader.setMeshoptDecoder(MeshoptDecoder);
 const modelCache = new Map<string, Promise<GLTF>>();
-let animCache: Promise<THREE.AnimationClip[]> | null = null;
+const ANIM_URL = '/characters/th-animations.glb';
+const bodyUrl = (b: string) => `/characters/th-${b}.glb`;
 
 function loadGltf(url: string) {
   let p = modelCache.get(url);
@@ -25,7 +33,7 @@ function loadGltf(url: string) {
 }
 
 export function preloadHeroes(onProgress?: (f: number) => void): Promise<void> {
-  const urls = ['/characters/kaykit-animations.glb', ...HERO_MODELS.map((m) => `/characters/kaykit-${m}.glb`)];
+  const urls = [ANIM_URL, ...BODIES.map(bodyUrl)];
   let done = 0;
   return Promise.all(
     urls.map((u) =>
@@ -37,23 +45,74 @@ export function preloadHeroes(onProgress?: (f: number) => void): Promise<void> {
   ).then(() => {});
 }
 
-function clips(): Promise<THREE.AnimationClip[]> {
-  if (!animCache) animCache = loadGltf('/characters/kaykit-animations.glb').then((g) => g.animations);
-  return animCache;
+const ARM = /^(clavicle|upperarm|lowerarm|hand|index|middle|pinky|ring|thumb)_/;
+const boneOf = (track: THREE.KeyframeTrack) => track.name.slice(0, track.name.lastIndexOf('.'));
+
+/** Static pose of the matching bones at time t of a clip, as 2-key tracks. */
+function poseTracks(clip: THREE.AnimationClip, t: number, match: RegExp) {
+  const out: THREE.KeyframeTrack[] = [];
+  for (const tr of clip.tracks) {
+    if (!match.test(boneOf(tr)) || !tr.name.endsWith('.quaternion')) continue;
+    const v = Array.from((tr as any).createInterpolant().evaluate(t) as Float32Array);
+    out.push(new THREE.QuaternionKeyframeTrack(tr.name, [0, 1], [...v, ...v]));
+  }
+  return out;
 }
 
-const PROPS = /Sword|Shield|Axe|Mug|Wand|Staff|Spellbook|Knife|Crossbow|Throwable/;
-const SCALE = 0.62; // KayKit heroes are ~2.25 m chibis; this makes them ~1.4 m, big-headed and readable
-// Native ground speed of the in-place clips at SCALE (m/s), used to scale playback so feet don't slide.
+/** Clip with its arm tracks replaced (fighters walk with their guard up). */
+function withArms(clip: THREE.AnimationClip, arms: THREE.KeyframeTrack[], name: string) {
+  const tracks = clip.tracks.filter((t) => !ARM.test(boneOf(t))).map((t) => t.clone());
+  return new THREE.AnimationClip(name, clip.duration, [...tracks, ...arms.map((t) => t.clone())]);
+}
+
+let clipSet: Promise<Map<string, THREE.AnimationClip>> | null = null;
+function buildClips(): Promise<Map<string, THREE.AnimationClip>> {
+  if (clipSet) return clipSet;
+  clipSet = loadGltf(ANIM_URL).then((g) => {
+    const src = g.animations;
+    const get = (n: string) => {
+      const c = src.find((x) => x.name === n);
+      if (!c) throw new Error('missing clip ' + n);
+      // Keep rotations everywhere, translation only on root/pelvis (each body keeps its own bone lengths).
+      const k = c.clone();
+      k.tracks = k.tracks.filter((t) => !t.name.endsWith('.position') || /^(root|pelvis)$/.test(boneOf(t)));
+      return k;
+    };
+    const jab = get('Punch_Jab');
+    const guard = poseTracks(jab, 0, ARM);
+    const m = new Map<string, THREE.AnimationClip>();
+    m.set('idle', withArms(get('Idle_Loop'), guard, 'idle'));
+    m.set('walk', withArms(get('Walk_Loop'), guard, 'walk'));
+    m.set('run', withArms(get('Jog_Fwd_Loop'), guard, 'run'));
+    m.set('jab', jab);
+    m.set('cross', get('Punch_Cross'));
+    m.set('hitHead', get('Hit_Head'));
+    m.set('hitChest', get('Hit_Chest'));
+    m.set('knockback', get('Hit_Knockback'));
+    m.set('death', get('Death01'));
+    m.set('getUp', get('LayToIdle'));
+    m.set('airborne', get('Jump_Loop'));
+    m.set('land', get('Jump_Land'));
+    m.set('cheer', get('Dance_Loop'));
+    m.set('cast', get('Spell_Simple_Shoot'));
+    m.set('dizzy', get('Zombie_Idle_Loop'));
+    m.set('blockHit', get('Hit_Chest'));
+    return m;
+  });
+  return clipSet;
+}
+
 const _qp = typeof location !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams();
-const WALK_SPEED = Number(_qp.get('walkspeed') ?? 1.15);
-const RUN_SPEED = Number(_qp.get('runspeed') ?? 3.1);
+// Native ground speed of the in-place clips (m/s), measured from the stance foot: playback scales to the
+// fighter's real speed so planted feet stay planted.
+const WALK_SPEED = Number(_qp.get('walkspeed') ?? 0.84);
+const RUN_SPEED = Number(_qp.get('runspeed') ?? 2.6);
 
 /** Three-step toon ramp. */
 let toonRamp: THREE.DataTexture | null = null;
 function ramp() {
   if (!toonRamp) {
-    const d = new Uint8Array([90, 90, 90, 255, 175, 175, 175, 255, 255, 255, 255, 255]);
+    const d = new Uint8Array([110, 110, 110, 255, 190, 190, 190, 255, 255, 255, 255, 255]);
     toonRamp = new THREE.DataTexture(d, 3, 1, THREE.RGBAFormat);
     toonRamp.minFilter = toonRamp.magFilter = THREE.NearestFilter;
     toonRamp.needsUpdate = true;
@@ -62,7 +121,7 @@ function ramp() {
 }
 
 /** Inverted-hull outline material that pushes vertices out along normals (works with skinning). */
-function outlineMaterial(color = 0x05060c, width = 0.018) {
+function outlineMaterial(color = 0x05060c, width = 0.012) {
   const m = new THREE.MeshBasicMaterial({ color, side: THREE.BackSide });
   m.onBeforeCompile = (sh) => {
     sh.vertexShader = sh.vertexShader.replace('#include <project_vertex>', `transformed += normal * ${width.toFixed(4)};\n#include <project_vertex>`);
@@ -70,50 +129,50 @@ function outlineMaterial(color = 0x05060c, width = 0.018) {
   return m;
 }
 
-type ActionName = 'idle' | 'walk' | 'walkBack' | 'run' | 'strafeL' | 'strafeR' | 'punchA' | 'punchB' | 'kick' | 'hitA' | 'hitB' | 'blockHit' | 'block' | 'death' | 'lie' | 'getUp' | 'airborne' | 'land' | 'cheer' | 'cast';
-const CLIP: Record<ActionName, string> = {
-  idle: 'Unarmed_Idle',
-  walk: 'Walking_A',
-  walkBack: 'Walking_Backwards',
-  run: 'Running_A',
-  strafeL: 'Running_Strafe_Left',
-  strafeR: 'Running_Strafe_Right',
-  punchA: 'Unarmed_Melee_Attack_Punch_A',
-  punchB: 'Unarmed_Melee_Attack_Punch_B',
-  kick: 'Unarmed_Melee_Attack_Kick',
-  hitA: 'Hit_A',
-  hitB: 'Hit_B',
-  blockHit: 'Block_Hit',
-  block: 'Blocking',
-  death: 'Death_A',
-  lie: 'Lie_Idle',
-  getUp: 'Lie_StandUp',
-  airborne: 'Jump_Idle',
-  land: 'Jump_Land',
-  cheer: 'Cheer',
-  cast: 'Spellcast_Shoot',
-};
-const LOCO: ActionName[] = ['idle', 'walk', 'walkBack', 'run', 'strafeL', 'strafeR'];
+/** Toon skin material; grey/white cloth in the texture (shorts, sports top) takes the fighter's color. */
+function bodyMaterial(map: THREE.Texture | null, tint: THREE.Color) {
+  const m = new THREE.MeshToonMaterial({ map, gradientMap: ramp(), color: 0xffffff });
+  m.userData.tint = { value: tint.clone() };
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.uTint = m.userData.tint;
+    sh.fragmentShader = sh.fragmentShader.replace('void main() {', 'uniform vec3 uTint;\nvoid main() {').replace(
+      '#include <map_fragment>',
+      `#include <map_fragment>
+        { vec3 c = diffuseColor.rgb; float mx = max(c.r, max(c.g, c.b)); float mn = min(c.r, min(c.g, c.b));
+          float sat = mx > 0.001 ? (mx - mn) / mx : 0.; float cloth = 1. - smoothstep(0.10, 0.2, sat);
+          diffuseColor.rgb = mix(c, uTint * (0.45 + 0.75 * mx), cloth); }`,
+    );
+  };
+  return m;
+}
+
+type Strike = { kind: string; hand: 'L' | 'R'; t0: number; contactT: number; target: HeroFighter | null; lunge: number; recorded: boolean };
 
 const _q = new THREE.Quaternion();
 const _q2 = new THREE.Quaternion();
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
+const UP = new THREE.Vector3(0, 1, 0);
+const BLUE = new THREE.Color(0x55bbff);
+const YELLOW = new THREE.Color(0xffe14d);
+const RED = new THREE.Color(0xff3344);
 
 export class HeroFighter {
   root = new THREE.Group(); // world position + yaw (set by the view)
-  body = new THREE.Group(); // local offsets: airborne height, tumble, flinch
+  body = new THREE.Group(); // local offsets: airborne height, tumble, flinch, lunge
   ready: Promise<void>;
   style: FighterStyle;
   glowBoost = 0;
   private model!: THREE.Object3D;
   private mixer!: THREE.AnimationMixer;
-  private actions = new Map<ActionName, THREE.AnimationAction>();
-  private bones: Record<string, THREE.Object3D | undefined> = {};
-  private loco = new Map<ActionName, number>(); // current locomotion weights
-  private oneShot: { name: ActionName; until: number; overrideArms: number } | null = null;
+  private actions = new Map<string, THREE.AnimationAction>();
+  bones: Record<string, THREE.Object3D | undefined> = {};
+  private len: Record<string, number> = {};
+  private loco = { idle: 1, walk: 0, run: 0 };
+  private oneShot: { name: string; until: number; overrideArms: number } | null = null;
   private lastPos = new THREE.Vector3();
   private vel = new THREE.Vector2(); // local ground velocity (x = right, y = forward), smoothed
+  private lowerYaw = 0; // hips turned toward the direction of travel (radians)
   private materials: THREE.MeshToonMaterial[] = [];
   private ring!: THREE.Mesh;
   private ringMat!: THREE.MeshBasicMaterial;
@@ -134,9 +193,12 @@ export class HeroFighter {
   private koTime = -1;
   private time = 0;
   private lastAtkKey = '';
+  private strike: Strike | null = null;
+  private lungeNow = 0;
+  /** Fist/foot-to-target distance (m) on each contact frame (review-loop metric: under 0.10). */
+  contacts: { kind: string; d: number; t: number }[] = [];
   /** true when this fighter's arms follow a live pose (local or networked human). */
   livePose = false;
-  /** Distance to the platform edge (m), set by the view: near the edge the fighter teeters. */
   edgeDist = 99;
   modelName: HeroModel;
 
@@ -148,9 +210,11 @@ export class HeroFighter {
   }
 
   private async load() {
-    const [gltf, anims] = await Promise.all([loadGltf(`/characters/kaykit-${this.modelName}.glb`), clips()]);
+    const [bodyName, build = ''] = this.modelName.split(':');
+    const [gltf, clips] = await Promise.all([loadGltf(bodyUrl(bodyName)), buildClips()]);
     const model = SkeletonUtils.clone(gltf.scene);
-    model.scale.setScalar(SCALE);
+    const [hs, ws] = BUILD[build] ?? [1, 1];
+    model.scale.set(ws, hs, ws);
     this.model = model;
     const tint = new THREE.Color(this.style.color);
     const outlineMat = outlineMaterial();
@@ -158,38 +222,41 @@ export class HeroFighter {
     model.traverse((o) => {
       const mesh = o as THREE.Mesh;
       if (!mesh.isMesh) return;
-      if (PROPS.test(mesh.name)) {
-        mesh.visible = false;
-        return;
-      }
       mesh.frustumCulled = false;
       const src = mesh.material as THREE.MeshStandardMaterial;
-      const toon = new THREE.MeshToonMaterial({ map: src.map ?? null, gradientMap: ramp(), color: 0xffffff });
-      toon.userData.isSuit = /Body|Arm|Leg|Cape/.test(mesh.name);
-      if (toon.userData.isSuit) toon.color.copy(new THREE.Color(1, 1, 1).lerp(tint, 0.55));
+      const isBody = /Superhero/.test(src.name ?? '');
+      const toon = isBody ? bodyMaterial(src.map ?? null, tint) : new THREE.MeshToonMaterial({ map: src.map ?? null, gradientMap: ramp(), color: 0xffffff });
+      toon.userData.isBody = isBody;
       this.materials.push(toon);
       mesh.material = toon;
-      // Outline hull: a second draw of the same (skinned) geometry, back faces only, pushed outward.
-      const SkinnedCtor = (mesh as THREE.SkinnedMesh).isSkinnedMesh ? THREE.SkinnedMesh : THREE.Mesh;
-      const hull = new SkinnedCtor(mesh.geometry, outlineMat) as THREE.Mesh;
-      if ((mesh as THREE.SkinnedMesh).isSkinnedMesh) (hull as THREE.SkinnedMesh).bind((mesh as THREE.SkinnedMesh).skeleton, (mesh as THREE.SkinnedMesh).bindMatrix);
+      if (!isBody || !(mesh as THREE.SkinnedMesh).isSkinnedMesh) return;
+      // Outline hull: a second draw of the same skinned geometry, back faces only, pushed outward.
+      const sk = mesh as THREE.SkinnedMesh;
+      const hull = new THREE.SkinnedMesh(sk.geometry, outlineMat);
+      hull.bind(sk.skeleton, sk.bindMatrix);
       hull.frustumCulled = false;
       hull.name = mesh.name + '_outline';
       outlines.push(hull);
       (hull as any).__parent = mesh.parent;
     });
     for (const h of outlines) ((h as any).__parent as THREE.Object3D).add(h);
-    const names: Record<string, string> = { hips: 'hips', spine: 'spine', chest: 'chest', head: 'head', ual: 'upperarml', lal: 'lowerarml', wl: 'wristl', uar: 'upperarmr', lar: 'lowerarmr', wr: 'wristr', hl: 'handl', hr: 'handr' };
-    for (const [k, n] of Object.entries(names)) this.bones[k] = model.getObjectByName(n);
+    for (const n of ['pelvis', 'spine_01', 'spine_02', 'spine_03', 'neck_01', 'Head', 'clavicle_l', 'clavicle_r', 'upperarm_l', 'lowerarm_l', 'hand_l', 'upperarm_r', 'lowerarm_r', 'hand_r', 'thigh_l', 'calf_l', 'foot_l', 'thigh_r', 'calf_r', 'foot_r', 'ball_l', 'ball_r'])
+      this.bones[n] = model.getObjectByName(n);
     this.body.add(model);
+    model.updateMatrixWorld(true);
+    const wp = (n: string) => this.bones[n]!.getWorldPosition(new THREE.Vector3());
+    for (const s of ['l', 'r']) {
+      this.len['ua' + s] = wp('upperarm_' + s).distanceTo(wp('lowerarm_' + s));
+      this.len['la' + s] = wp('lowerarm_' + s).distanceTo(wp('hand_' + s));
+      this.len['th' + s] = wp('thigh_' + s).distanceTo(wp('calf_' + s));
+      this.len['ca' + s] = wp('calf_' + s).distanceTo(wp('foot_' + s));
+    }
 
     this.mixer = new THREE.AnimationMixer(model);
-    for (const [name, clipName] of Object.entries(CLIP) as [ActionName, string][]) {
-      const clip = anims.find((c) => c.name === clipName);
-      if (!clip) continue;
+    for (const [name, clip] of clips) {
       const a = this.mixer.clipAction(clip);
-      if (!LOCO.includes(name)) {
-        a.setLoop(name === 'lie' || name === 'block' || name === 'airborne' ? THREE.LoopRepeat : THREE.LoopOnce, Infinity);
+      if (!['idle', 'walk', 'run', 'dizzy', 'airborne'].includes(name)) {
+        a.setLoop(THREE.LoopOnce, 1);
         a.clampWhenFinished = true;
       }
       a.enabled = true;
@@ -197,43 +264,55 @@ export class HeroFighter {
       a.play();
       this.actions.set(name, a);
     }
-    this.actions.get('idle')?.setEffectiveWeight(1);
-    this.loco.set('idle', 1);
+    this.actions.get('idle')!.setEffectiveWeight(1);
+    this.actions.get('idle')!.time = (this.modelName.length * 0.37) % 2.5; // desync breathing between fighters
     this.addGear();
   }
 
   private addGear() {
     const glow = new THREE.Color(this.style.aura ?? this.style.color);
-    // Blob shadow
-    const sh = new THREE.CanvasTexture(radial('rgba(0,0,0,0.55)', 'rgba(0,0,0,0)'));
-    this.shadow = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 1.1), new THREE.MeshBasicMaterial({ map: sh, transparent: true, depthWrite: false }));
+    // Contact shadow
+    const sh = new THREE.CanvasTexture(radial('rgba(0,0,0,0.6)', 'rgba(0,0,0,0)'));
+    this.shadow = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 1.0), new THREE.MeshBasicMaterial({ map: sh, transparent: true, depthWrite: false }));
     this.shadow.rotation.x = -Math.PI / 2;
     this.shadow.position.y = 0.012;
     this.root.add(this.shadow);
     // Team ring under the feet (brightens when the super meter is full)
-    this.ringMat = new THREE.MeshBasicMaterial({ color: glow, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
-    this.ring = new THREE.Mesh(new THREE.RingGeometry(0.42, 0.5, 48), this.ringMat);
+    this.ringMat = new THREE.MeshBasicMaterial({ color: glow, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+    this.ring = new THREE.Mesh(new THREE.RingGeometry(0.4, 0.46, 48), this.ringMat);
     this.ring.rotation.x = -Math.PI / 2;
     this.ring.position.y = 0.015;
     this.root.add(this.ring);
-    // Fists: glowing gloves on the hand slots (we fight unarmed)
-    this.gloveMat = new THREE.MeshToonMaterial({ color: glow, emissive: glow, emissiveIntensity: 0.35, gradientMap: ramp() });
-    const gl = new THREE.SphereGeometry(0.075 / SCALE, 16, 12);
-    this.gloveL = new THREE.Mesh(gl, this.gloveMat);
-    this.gloveR = new THREE.Mesh(gl, this.gloveMat);
-    this.bones.hl?.add(this.gloveL);
-    this.bones.hr?.add(this.gloveR);
-    // Shield bubble: fresnel rim only, visible only while the Shield super is active
+    // Boxing gloves, centered over the knuckles.
+    this.gloveMat = new THREE.MeshToonMaterial({ color: glow, emissive: glow, emissiveIntensity: 0.15, gradientMap: ramp() });
+    const gl = new THREE.SphereGeometry(0.075, 18, 14);
+    for (const s of ['l', 'r'] as const) {
+      const hand = this.bones['hand_' + s];
+      const fore = this.bones['lowerarm_' + s];
+      if (!hand || !fore) continue;
+      const g = new THREE.Mesh(gl, this.gloveMat);
+      // Offset along the forearm direction, in the hand bone's local frame.
+      const dirW = hand.getWorldPosition(new THREE.Vector3()).sub(fore.getWorldPosition(new THREE.Vector3())).normalize();
+      const handQ = hand.getWorldQuaternion(new THREE.Quaternion()).invert();
+      const ws = hand.getWorldScale(new THREE.Vector3());
+      g.position.copy(dirW.applyQuaternion(handQ).multiplyScalar(0.07 / ws.x));
+      g.scale.setScalar(1 / ws.x);
+      g.add(new THREE.Mesh(gl, outlineMaterial(0x05060c, 0.01)));
+      hand.add(g);
+      if (s === 'l') this.gloveL = g;
+      else this.gloveR = g;
+    }
+    // Guard bubble: fresnel rim, visible only while guarding or during Iron Wall
     this.shieldMat = new THREE.ShaderMaterial({
-      uniforms: { color: { value: new THREE.Color(0x66ccff) }, time: { value: 0 } },
+      uniforms: { color: { value: new THREE.Color(0x66ccff) }, time: { value: 0 }, strength: { value: 1 } },
       vertexShader: `varying vec3 vN; varying vec3 vV; void main(){ vec4 wp = modelMatrix*vec4(position,1.); vN = normalize(mat3(modelMatrix)*normal); vV = normalize(cameraPosition-wp.xyz); gl_Position = projectionMatrix*viewMatrix*wp; }`,
-      fragmentShader: `uniform vec3 color; uniform float time; varying vec3 vN; varying vec3 vV; void main(){ float f = pow(1.-abs(dot(vN,vV)),3.); float hex = 0.6+0.4*sin(time*6.); gl_FragColor = vec4(color*f*1.6*hex, f*0.9); }`,
+      fragmentShader: `uniform vec3 color; uniform float time; uniform float strength; varying vec3 vN; varying vec3 vV; void main(){ float f = pow(1.-abs(dot(vN,vV)),2.5); float hex = 0.8+0.2*sin(time*6.); gl_FragColor = vec4(color*(f*1.3+0.1)*hex*strength, (f*0.75+0.08)*strength); }`,
       transparent: true,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     });
-    this.shield = new THREE.Mesh(new THREE.SphereGeometry(0.85, 32, 20), this.shieldMat);
-    this.shield.position.y = 0.75;
+    this.shield = new THREE.Mesh(new THREE.SphereGeometry(0.95, 32, 20), this.shieldMat);
+    this.shield.position.y = 1.0;
     this.shield.visible = false;
     this.body.add(this.shield);
     // Target lock (Brawl)
@@ -247,7 +326,7 @@ export class HeroFighter {
   applyStyle(style: FighterStyle) {
     this.style = style;
     const tint = new THREE.Color(style.color);
-    for (const m of this.materials) if (m.userData.isSuit) m.color.copy(new THREE.Color(1, 1, 1).lerp(tint, 0.55));
+    for (const m of this.materials) if (m.userData.isBody) m.userData.tint.value.copy(tint);
     const glow = new THREE.Color(style.aura ?? style.color);
     this.ringMat?.color.copy(glow);
     if (this.gloveMat) {
@@ -268,42 +347,72 @@ export class HeroFighter {
   flinchFrom(dirWorld: THREE.Vector3, amount: number) {
     this.flinch = Math.min(1, this.flinch + amount);
     this.flinchDir.copy(dirWorld).setY(0).normalize();
-    if (amount >= 0.6) this.play(Math.random() < 0.5 ? 'hitA' : 'hitB', 0.06, this.livePose ? 0.55 : 1);
-    else if (amount > 0) this.play('blockHit', 0.05, 0.4);
+    if (amount >= 0.6) this.play(amount >= 0.95 ? 'knockback' : Math.random() < 0.5 ? 'hitHead' : 'hitChest', 0.05, this.livePose ? 0.6 : 1);
+    else if (amount > 0) this.play('blockHit', 0.05, 0.3, 0.6);
   }
 
   /** Play a one-shot clip on top of locomotion. overrideArms: how much the clip beats the live pose (0..1). */
-  private play(name: ActionName, fade = 0.08, overrideArms = 1) {
+  private play(name: string, fade = 0.08, overrideArms = 1, weight = 1, timeScale = 1) {
     const a = this.actions.get(name);
     if (!a) return;
     if (this.oneShot && this.oneShot.name !== name) this.actions.get(this.oneShot.name)?.fadeOut(fade);
     a.reset();
-    a.setEffectiveTimeScale(1);
-    a.setEffectiveWeight(1);
+    a.setEffectiveTimeScale(timeScale);
+    a.setEffectiveWeight(weight);
     a.fadeIn(fade);
     a.play();
-    this.oneShot = { name, until: this.time + a.getClip().duration * 0.9, overrideArms };
+    this.oneShot = { name, until: this.time + (a.getClip().duration / timeScale) * 0.92, overrideArms };
   }
 
-  /** Strike started (from the simulation): wind-up/extension/recoil via clips or pose exaggeration. */
-  attack(kind: string, hand: string, key: string) {
-    if (key === this.lastAtkKey) return;
-    this.lastAtkKey = key;
-    if (kind === 'kick') return this.play('kick', 0.05, 1);
-    if (kind === 'blast') return this.play('cast', 0.05, this.livePose ? 0.4 : 1);
-    if (this.livePose) {
-      // The player's own arm is the punch; add the body: a quick twist and lunge.
-      this.glowBoost = 0.8;
-      this.punchTwist = hand === 'L' ? 1 : -1;
-      this.punchTwistT = 0;
+  /** Strike started (from the simulation). The clip gives the body motion; IK lands the fist on the target. */
+  attack(kind: string, hand: string, key: string, target: HeroFighter | null = null) {
+    if (key === this.lastAtkKey) {
+      if (target && this.strike && !this.strike.target) this.strike.target = target;
       return;
     }
-    this.play(kind === 'uppercut' || kind === 'super_uppercut' || hand === 'R' ? 'punchB' : 'punchA', 0.05, 1);
+    this.lastAtkKey = key;
+    const h: 'L' | 'R' = hand === 'L' ? 'L' : 'R';
+    this.glowBoost = 0.6;
+    if (kind === 'blast') {
+      this.play('cast', 0.05, this.livePose ? 0.4 : 1);
+      return;
+    }
+    // Contact time: live players already threw the punch (the recognizer fires near full extension), so the fist
+    // snaps on quickly; authored clips reach full extension later.
+    let contactT = 0.16;
+    if (kind === 'kick') contactT = 0.24;
+    else if (this.livePose) contactT = 0.07;
+    else if (kind === 'jab') {
+      this.play('jab', 0.05, 1, 1, 1.25);
+      contactT = 0.15;
+    } else {
+      this.play('cross', 0.05, 1, 1, 1.3);
+      contactT = kind === 'hook' ? 0.2 : 0.22;
+    }
+    this.strike = { kind, hand: h, t0: this.time, contactT, target, lunge: 0, recorded: false };
   }
-  private punchTwist = 0;
-  private punchTwistT = 1;
 
-  update(dt: number, time: number, opts: { shield: number; meterFull: boolean; airborne: number; alive: boolean; blocking?: boolean }) {
+  /** Seconds until the current strike's fist reaches its target (0 if none in progress). */
+  contactDelay() {
+    if (!this.strike) return 0;
+    return Math.max(0, this.strike.t0 + this.strike.contactT - this.time);
+  }
+
+  /** World point the current strike aims at on the target (head for punches, chest for kicks). */
+  private aimPoint(s: Strike, out: THREE.Vector3) {
+    const t = s.target!;
+    const bone = s.kind === 'kick' ? t.bones.spine_02 : t.bones.Head;
+    if (!bone) return null;
+    bone.getWorldPosition(out);
+    if (s.kind !== 'kick') out.y += 0.04;
+    // Stop on the surface facing the attacker.
+    const me = this.root.getWorldPosition(_v2);
+    const dir = me.sub(out).setY(0).normalize();
+    out.addScaledVector(dir, s.kind === 'kick' ? 0.14 : 0.11);
+    return out;
+  }
+
+  update(dt: number, time: number, opts: { shield: number; meterFull: boolean; airborne: number; alive: boolean; blocking?: boolean; guard?: number; dizzy?: boolean; ironWall?: boolean }) {
     this.time = time;
     if (!this.mixer) return;
     // ---- ground velocity in the fighter's local frame (from the root's actual motion) ----
@@ -324,116 +433,179 @@ export class HeroFighter {
     // ---- KO / get-up ----
     if (!opts.alive && this.wasAlive) {
       this.play('death', 0.08, 1);
+      this.oneShot!.until = Infinity; // stay down (clamped on the last frame) until revived
       this.koTime = time;
     }
     if (opts.alive && !this.wasAlive) {
-      this.actions.get('death')?.fadeOut(0.1);
-      this.actions.get('lie')?.fadeOut(0.1);
-      this.play('getUp', 0.1, 1);
+      this.actions.get('death')?.fadeOut(0.15);
+      this.play('getUp', 0.12, 1, 1, 1.4);
       this.koTime = -1;
     }
     this.wasAlive = opts.alive;
-    if (this.koTime >= 0 && time - this.koTime > 0.8 && this.oneShot?.name === 'death') this.play('lie', 0.2, 1);
 
-    // ---- airborne: tumble in the air, land with a squash ----
+    // ---- airborne: tumble in the air, land, get up ----
     if (airborne && !this.wasAirborne) this.play('airborne', 0.08, 1);
     if (!airborne && this.wasAirborne) {
-      this.play('land', 0.05, 1);
+      if (this.tumble > 2.5 && opts.alive) this.play('getUp', 0.06, 1, 1, 1.8);
+      else this.play('land', 0.05, 1);
       this.tumble = 0;
     }
     this.wasAirborne = airborne;
-    if (airborne) this.tumble += dt * 7;
+    if (airborne) this.tumble += dt * 6;
 
-    // ---- locomotion weights (legs never translate without animating) ----
-    const target = new Map<ActionName, number>();
-    LOCO.forEach((n) => target.set(n, 0));
-    let rate = 1;
-    if (speed < 0.18) target.set('idle', 1);
-    else {
-      const ax = Math.abs(this.vel.x);
-      const fwd = this.vel.y;
-      if (ax > Math.abs(fwd) * 1.2 && speed > 0.6) {
-        target.set(this.vel.x > 0 ? 'strafeR' : 'strafeL', 1);
-        rate = THREE.MathUtils.clamp(speed / RUN_SPEED, 0.4, 1.8);
-      } else if (fwd < -0.15) {
-        target.set('walkBack', 1);
-        rate = THREE.MathUtils.clamp(speed / WALK_SPEED, 0.4, 2);
-      } else if (speed < 1.9) {
-        const w = THREE.MathUtils.clamp((speed - 0.18) / 0.5, 0, 1);
-        target.set('walk', w);
-        target.set('idle', 1 - w);
-        rate = THREE.MathUtils.clamp(speed / WALK_SPEED, 0.5, 1.8);
-      } else {
-        target.set('run', 1);
-        rate = THREE.MathUtils.clamp(speed / RUN_SPEED, 0.6, 1.6);
-      }
-    }
-    const oneShotActive = this.oneShot && time < this.oneShot.until;
-    const oneShotFull = oneShotActive && ['death', 'lie', 'getUp', 'airborne', 'land', 'kick'].includes(this.oneShot!.name);
+    // ---- dizzy (guard broken): wobble loop ----
     const k = 1 - Math.exp(-dt * 10);
-    for (const n of LOCO) {
+    const dizzyA = this.actions.get('dizzy');
+    if (dizzyA) dizzyA.setEffectiveWeight(THREE.MathUtils.lerp(dizzyA.getEffectiveWeight(), opts.dizzy && opts.alive ? 1 : 0, k));
+
+    // ---- locomotion: idle / walk / jog, hips turned toward the travel direction ----
+    let target = { idle: 1, walk: 0, run: 0 };
+    let rate = 1;
+    let wantYaw = 0;
+    if (speed >= 0.15) {
+      // Travel angle relative to facing: 0 = forward, ±π/2 = sideways, π = backward.
+      let ang = Math.atan2(-this.vel.x, this.vel.y);
+      let back = false;
+      if (Math.abs(ang) > Math.PI * 0.6) {
+        back = true;
+        ang = ang > 0 ? ang - Math.PI : ang + Math.PI;
+      }
+      wantYaw = THREE.MathUtils.clamp(ang, -1.45, 1.45);
+      const run = speed > 1.5;
+      const w = THREE.MathUtils.clamp((speed - 0.15) / 0.35, 0, 1);
+      target = { idle: 1 - w, walk: run ? 0 : w, run: run ? w : 0 };
+      rate = (run ? speed / RUN_SPEED : speed / WALK_SPEED) * (back ? -1 : 1);
+      rate = Math.sign(rate) * THREE.MathUtils.clamp(Math.abs(rate), 0.35, 1.8);
+    }
+    this.lowerYaw += (wantYaw - this.lowerYaw) * (1 - Math.exp(-dt * 9));
+    const oneShotActive = !!this.oneShot && time < this.oneShot.until;
+    const fullBody = (oneShotActive && ['death', 'getUp', 'airborne', 'land', 'knockback'].includes(this.oneShot!.name)) || !opts.alive;
+    for (const n of ['idle', 'walk', 'run'] as const) {
       const a = this.actions.get(n);
       if (!a) continue;
-      const cur = this.loco.get(n) ?? 0;
-      const next = cur + ((oneShotFull ? 0 : target.get(n)!) - cur) * k;
-      this.loco.set(n, next);
-      a.setEffectiveWeight(next);
+      const tw = fullBody || (opts.dizzy && opts.alive) ? 0 : target[n];
+      this.loco[n] += (tw - this.loco[n]) * k;
+      a.setEffectiveWeight(this.loco[n]);
       if (n !== 'idle') a.setEffectiveTimeScale(rate);
     }
-    if (this.oneShot && !oneShotActive && !['lie', 'airborne'].includes(this.oneShot.name)) {
-      this.actions.get(this.oneShot.name)?.fadeOut(0.15);
+    if (this.oneShot && !oneShotActive) {
+      this.actions.get(this.oneShot.name)?.fadeOut(0.18);
       this.oneShot = null;
     }
-    // Blocking without a live pose: blocking loop on top.
-    const blockA = this.actions.get('block');
-    if (blockA) blockA.setEffectiveWeight(THREE.MathUtils.lerp(blockA.getEffectiveWeight(), opts.blocking && !this.livePose ? 1 : 0, k));
 
     this.mixer.update(dt);
+    this.body.position.set(0, opts.airborne, this.lungeNow);
+    this.root.updateMatrixWorld(true);
+
+    // Hips toward the travel direction, chest counter-rotated so the fighter keeps facing the opponent.
+    if (Math.abs(this.lowerYaw) > 0.01 && !fullBody) {
+      rotateWorld(this.bones.pelvis, UP, this.lowerYaw);
+      rotateWorld(this.bones.spine_01, UP, -this.lowerYaw * 0.35);
+      rotateWorld(this.bones.spine_02, UP, -this.lowerYaw * 0.35);
+      rotateWorld(this.bones.spine_03, UP, -this.lowerYaw * 0.3);
+    }
 
     // ---- live pose layered on torso, head and arms ----
-    const wantPose = this.livePose && this.joints && opts.alive && !oneShotFull ? (oneShotActive ? 1 - (this.oneShot!.overrideArms ?? 1) : 1) : 0;
+    const wantPose = this.livePose && this.joints && opts.alive && !fullBody && !opts.dizzy ? (oneShotActive ? 1 - (this.oneShot!.overrideArms ?? 1) : 1) : 0;
     this.poseWeight += (wantPose - this.poseWeight) * (1 - Math.exp(-dt * 14));
     if (this.joints && this.poseWeight > 0.01) this.applyPose(this.joints, this.poseWeight);
 
-    // Punch body motion for live-pose fighters: twist toward the punching side and lunge, then recoil.
-    if (this.punchTwistT < 1) {
-      this.punchTwistT += dt / 0.28;
-      const c = Math.sin(Math.min(1, this.punchTwistT) * Math.PI);
-      const spine = this.bones.spine;
-      if (spine) spine.quaternion.multiply(_q.setFromAxisAngle(_v2.set(0, 1, 0), -this.punchTwist * 0.35 * c));
-      const hips = this.bones.hips;
-      if (hips) hips.quaternion.multiply(_q.setFromAxisAngle(_v2.set(1, 0, 0), 0.12 * c));
-      this.body.position.z = 0.12 * c;
-    } else this.body.position.z *= 0.8;
+    // Guard for clip-driven fighters: forearms up in front of the face.
+    if (opts.blocking && !this.livePose && opts.alive && !fullBody) this.blockPose();
 
-    // ---- teeter: near the edge on the ground, flail the arms and wobble ----
-    if (opts.alive && !airborne && this.edgeDist < 0.45 && this.edgeDist > -0.2) {
-      const t2 = time * 14;
-      for (const [b, sgn] of [[this.bones.ual, 1], [this.bones.uar, -1]] as const) if (b) b.quaternion.multiply(_q.setFromAxisAngle(_v2.set(0, 0, 1), sgn * (1.1 + 0.5 * Math.sin(t2 + sgn))));
-      if (this.bones.spine) this.bones.spine.quaternion.multiply(_q.setFromAxisAngle(_v2.set(1, 0, 0), 0.25 * Math.sin(time * 9)));
-    }
+    // ---- strike: lunge + IK onto the target, contact measurement ----
+    this.updateStrike(dt);
 
-    // ---- body offsets: airborne height, tumble, flinch ----
+    // ---- body offsets: airborne height, tumble, flinch, lunge ----
     this.flinch = Math.max(0, this.flinch - dt * 3.5);
     const local = this.flinchDir.clone().applyQuaternion(this.root.quaternion.clone().invert());
-    this.body.position.x = local.x * this.flinch * 0.15;
+    this.body.position.x = local.x * this.flinch * 0.12;
+    this.body.position.z = this.lungeNow + local.z * this.flinch * 0.12;
     this.body.position.y = opts.airborne;
-    this.body.rotation.x = airborne ? -this.tumble : -this.flinch * 0.3 * Math.sign(local.z || 1);
+    this.body.rotation.x = airborne ? -Math.min(this.tumble, Math.PI * 1.6) : 0;
 
     // ---- gear ----
     this.glowBoost = Math.max(0, this.glowBoost - dt * 3);
-    if (this.gloveMat) this.gloveMat.emissiveIntensity = 0.35 + this.glowBoost * 2 + (opts.meterFull ? 0.5 + 0.3 * Math.sin(time * 8) : 0);
+    if (this.gloveMat) this.gloveMat.emissiveIntensity = 0.12 + this.glowBoost * 0.8 + (opts.meterFull ? 0.35 + 0.25 * Math.sin(time * 8) : 0);
     if (this.ringMat) {
-      this.ringMat.opacity = opts.meterFull ? 0.75 + 0.25 * Math.sin(time * 8) : 0.4;
+      this.ringMat.opacity = opts.meterFull ? 0.75 + 0.25 * Math.sin(time * 8) : 0.35;
       this.ring.scale.setScalar(opts.meterFull ? 1.1 + 0.05 * Math.sin(time * 8) : 1);
     }
     if (this.shield) {
-      this.shield.visible = opts.shield > 0;
+      // Guard bubble: shrinks and turns blue -> yellow -> red as the guard meter drops; gold for Iron Wall.
+      const iron = !!opts.ironWall || opts.shield > 0;
+      const guarding = !!opts.blocking && opts.alive;
+      this.shield.visible = iron || guarding;
+      const g = THREE.MathUtils.clamp((opts.guard ?? 100) / 100, 0, 1);
+      const col = this.shieldMat.uniforms.color.value as THREE.Color;
+      if (iron) col.set(0xffc53d);
+      else if (g > 0.5) col.copy(BLUE).lerp(YELLOW, (1 - g) * 2);
+      else col.copy(YELLOW).lerp(RED, 1 - g * 2);
+      this.shield.scale.setScalar(iron ? 1.05 : 0.6 + 0.4 * g);
+      this.shieldMat.uniforms.strength.value = iron ? 1.2 : 0.9;
       this.shieldMat.uniforms.time.value = time;
     }
-    const sh = THREE.MathUtils.clamp(1 - opts.airborne / 3, 0.25, 1);
-    this.shadow.scale.setScalar(sh);
+    this.shadow.scale.setScalar(THREE.MathUtils.clamp(1 - opts.airborne / 3, 0.25, 1));
     this.root.visible = opts.alive || this.koTime >= 0;
+  }
+
+  private updateStrike(dt: number) {
+    const s = this.strike;
+    let lungeWant = 0;
+    if (s) {
+      const t = this.time - s.t0;
+      const end = s.contactT + 0.32;
+      if (t > end) this.strike = null;
+      else if (s.target) {
+        // IK weight: rise to 1 at contact, hold briefly, release.
+        const w = t < s.contactT ? smooth(t / s.contactT) : t < s.contactT + 0.07 ? 1 : 1 - smooth((t - s.contactT - 0.07) / 0.25);
+        const goal = this.aimPoint(s, new THREE.Vector3());
+        if (goal) {
+          const kick = s.kind === 'kick';
+          const side = s.hand === 'L' ? 'l' : 'r';
+          const upper = this.bones[(kick ? 'thigh_' : 'upperarm_') + side]!;
+          const reach = kick ? this.len['th' + side] + this.len['ca' + side] : this.len['ua' + side] + this.len['la' + side] + 0.07;
+          // Step in when the target is beyond reach (measured once the body is back at rest).
+          const from = upper.getWorldPosition(new THREE.Vector3());
+          const gap = from.distanceTo(goal) - reach * 0.97;
+          s.lunge = THREE.MathUtils.clamp(this.lungeNow + gap, 0, 0.8);
+          lungeWant = s.lunge * w;
+          this.body.position.z = lungeWant;
+          this.root.updateMatrixWorld(true);
+          if (s.kind === 'uppercut' || s.kind === 'super_uppercut') goal.y -= (1 - w) * 0.45; // rise from under the chin
+          if (kick) {
+            const pole = this.root.localToWorld(new THREE.Vector3(side === 'l' ? 0.2 : -0.2, 1.4, 1.2));
+            twoBoneIK(upper, this.bones['calf_' + side]!, this.bones['foot_' + side]!, goal, pole, w, this.len['th' + side], this.len['ca' + side], 0);
+          } else {
+            const pole = this.root.localToWorld(new THREE.Vector3(side === 'l' ? 0.7 : -0.7, 0.6, -0.3));
+            twoBoneIK(upper, this.bones['lowerarm_' + side]!, this.bones['hand_' + side]!, goal, pole, w, this.len['ua' + side], this.len['la' + side], 0.07);
+          }
+          if (!s.recorded && t >= s.contactT) {
+            s.recorded = true;
+            const hit = kick ? this.bones['foot_' + side]!.getWorldPosition(new THREE.Vector3()) : this.glovePos(s.hand);
+            this.contacts.push({ kind: s.kind, d: +hit.distanceTo(goal).toFixed(3), t: +this.time.toFixed(2), lunge: +s.lunge.toFixed(2), gap: +gap.toFixed(2), w: +w.toFixed(2), live: this.livePose } as any);
+            if (this.contacts.length > 50) this.contacts.shift();
+          }
+        }
+      }
+    }
+    this.lungeNow = s && s.target ? lungeWant : this.lungeNow * Math.exp(-dt * 10);
+  }
+
+  /** Bots/remote fighters without a live pose: forearms up in front of the face. */
+  private blockPose() {
+    const rq = this.root.getWorldQuaternion(new THREE.Quaternion());
+    for (const side of ['l', 'r'] as const) {
+      const ua = this.bones['upperarm_' + side];
+      const la = this.bones['lowerarm_' + side];
+      const hd = this.bones['hand_' + side];
+      if (!ua || !la || !hd) continue;
+      const sx = side === 'l' ? 1 : -1;
+      const elbowDir = new THREE.Vector3(sx * 0.25, -0.55, 0.8).normalize().applyQuaternion(rq);
+      const foreDir = new THREE.Vector3(-sx * 0.25, 1, 0.15).normalize().applyQuaternion(rq);
+      rotateBoneTowards(ua, dirOf(ua, la), elbowDir, 0.85);
+      rotateBoneTowards(la, dirOf(la, hd), foreDir, 0.85);
+    }
   }
 
   /** Rotate torso/head/arm bones toward the player's joints (swing only), blended by weight. */
@@ -441,61 +613,60 @@ export class HeroFighter {
     const P = j.p.map((v) => new THREE.Vector3(v[0], v[1], v[2]));
     const rootQ = this.root.getWorldQuaternion(new THREE.Quaternion());
     const toWorld = (v: THREE.Vector3) => v.clone().applyQuaternion(rootQ);
-    // Torso: rotate the chest so its shoulder line matches the player's.
-    const chest = this.bones.chest;
-    const ual = this.bones.ual;
-    const uar = this.bones.uar;
+    const chest = this.bones.spine_03;
+    const ual = this.bones.upperarm_l;
+    const uar = this.bones.upperarm_r;
     if (chest && ual && uar) {
-      chest.updateWorldMatrix(true, false);
       const cur = ual.getWorldPosition(new THREE.Vector3()).sub(uar.getWorldPosition(new THREE.Vector3())).normalize();
       const want = toWorld(P[J.lSh].clone().sub(P[J.rSh])).normalize();
-      // Lean: tilt the chest toward the player's torso up vector.
-      const curUp = new THREE.Vector3(0, 1, 0).applyQuaternion(chest.getWorldQuaternion(new THREE.Quaternion()));
       const mh = P[J.lHip].clone().add(P[J.rHip]).multiplyScalar(0.5);
       const ms = P[J.lSh].clone().add(P[J.rSh]).multiplyScalar(0.5);
       const wantUp = toWorld(ms.sub(mh)).normalize();
       rotateBoneTowards(chest, cur, want, w * 0.8);
-      chest.updateWorldMatrix(true, false);
-      rotateBoneTowards(chest, curUp, wantUp, w * 0.5);
+      const neck = this.bones.neck_01;
+      if (neck) rotateBoneTowards(chest, dirOf(chest, neck), wantUp, w * 0.5);
     }
-    // Head: turn toward the player's facing (nose relative to ears).
-    const head = this.bones.head;
+    const head = this.bones.Head;
     if (head) {
-      head.updateWorldMatrix(true, false);
       const me = P[J.lEar].clone().add(P[J.rEar]).multiplyScalar(0.5);
       const wantFwd = toWorld(P[J.nose].clone().sub(me).setY(0)).normalize();
-      const curFwd = new THREE.Vector3(0, 0, 1).applyQuaternion(head.getWorldQuaternion(new THREE.Quaternion())).setY(0).normalize();
-      if (wantFwd.lengthSq() > 0.5 && curFwd.lengthSq() > 0.5) rotateBoneTowards(head, curFwd, wantFwd, w * 0.7);
+      const hq = head.getWorldQuaternion(new THREE.Quaternion());
+      // The head's own forward axis, learned from the first frame (when it faces the root's forward).
+      if (!head.userData.fwdLocal) head.userData.fwdLocal = new THREE.Vector3(0, 0, 1).applyQuaternion(rootQ).applyQuaternion(hq.clone().invert());
+      const nowFwd = (head.userData.fwdLocal as THREE.Vector3).clone().applyQuaternion(hq).setY(0).normalize();
+      if (wantFwd.lengthSq() > 0.5 && nowFwd.lengthSq() > 0.5) rotateBoneTowards(head, nowFwd, wantFwd, w * 0.7);
     }
-    // Arms: upper arm toward the elbow, forearm toward the wrist.
     for (const side of ['l', 'r'] as const) {
-      const ua = this.bones['ua' + side];
-      const la = this.bones['la' + side];
-      const wr = this.bones['w' + side];
+      const ua = this.bones['upperarm_' + side];
+      const la = this.bones['lowerarm_' + side];
+      const wr = this.bones['hand_' + side];
       if (!ua || !la || !wr) continue;
       const S = side === 'l' ? P[J.lSh] : P[J.rSh];
       const E = side === 'l' ? P[J.lEl] : P[J.rEl];
       const W = side === 'l' ? P[J.lWr] : P[J.rWr];
-      ua.updateWorldMatrix(true, false);
-      const curU = la.getWorldPosition(new THREE.Vector3()).sub(ua.getWorldPosition(new THREE.Vector3())).normalize();
-      rotateBoneTowards(ua, curU, toWorld(E.clone().sub(S)).normalize(), w);
-      la.updateWorldMatrix(true, false);
-      const curL = wr.getWorldPosition(new THREE.Vector3()).sub(la.getWorldPosition(new THREE.Vector3())).normalize();
-      rotateBoneTowards(la, curL, toWorld(W.clone().sub(E)).normalize(), w);
+      rotateBoneTowards(ua, dirOf(ua, la), toWorld(E.clone().sub(S)).normalize(), w);
+      rotateBoneTowards(la, dirOf(la, wr), toWorld(W.clone().sub(E)).normalize(), w);
     }
   }
 
   glovePos(side: 'L' | 'R', out = new THREE.Vector3()) {
     const g = side === 'L' ? this.gloveL : this.gloveR;
     if (g) g.getWorldPosition(out);
-    else this.root.getWorldPosition(out).setY(1);
+    else this.root.getWorldPosition(out).setY(1.4);
     return out;
+  }
+
+  /** Where the current strike's fist/foot is now (sparks go at the contact point). */
+  contactPoint(out = new THREE.Vector3()) {
+    const s = this.strike;
+    if (s?.kind === 'kick') return this.bones[s.hand === 'L' ? 'foot_l' : 'foot_r']!.getWorldPosition(out);
+    return this.glovePos(s?.hand ?? 'R', out);
   }
 
   probe() {
     const w = (o: THREE.Object3D | null | undefined) => (o ? o.getWorldPosition(new THREE.Vector3()).toArray() : null);
     const q = (o: THREE.Object3D | null | undefined) => (o ? o.getWorldQuaternion(new THREE.Quaternion()).toArray() : null);
-    return { root: w(this.root), lFoot: w(this.model?.getObjectByName('footl')), rFoot: w(this.model?.getObjectByName('footr')), chest: q(this.bones.chest), head: q(this.bones.head) };
+    return { root: w(this.root), lFoot: w(this.bones.foot_l), rFoot: w(this.bones.foot_r), chest: q(this.bones.spine_03), head: q(this.bones.Head), contacts: this.contacts.slice(-10) };
   }
 
   dispose() {
@@ -504,17 +675,57 @@ export class HeroFighter {
   }
 }
 
+function smooth(x: number) {
+  const t = THREE.MathUtils.clamp(x, 0, 1);
+  return t * t * (3 - 2 * t);
+}
+
+function dirOf(a: THREE.Object3D, b: THREE.Object3D) {
+  return b.getWorldPosition(new THREE.Vector3()).sub(a.getWorldPosition(new THREE.Vector3())).normalize();
+}
+
+/** Rotate a bone about a world axis by an angle. */
+function rotateWorld(bone: THREE.Object3D | undefined, axis: THREE.Vector3, angle: number) {
+  if (!bone) return;
+  const parentQ = bone.parent!.getWorldQuaternion(new THREE.Quaternion());
+  const boneQ = bone.getWorldQuaternion(new THREE.Quaternion());
+  const newWorld = _q.setFromAxisAngle(axis, angle).multiply(boneQ);
+  bone.quaternion.copy(parentQ.invert().multiply(newWorld));
+  bone.updateMatrixWorld(true);
+}
+
 /** Rotate a bone (in world space) so that direction `from` turns toward `to`, by fraction w. */
 function rotateBoneTowards(bone: THREE.Object3D, from: THREE.Vector3, to: THREE.Vector3, w: number) {
   if (from.lengthSq() < 1e-6 || to.lengthSq() < 1e-6) return;
-  const delta = _q.setFromUnitVectors(from, to);
+  const delta = _q.setFromUnitVectors(from.clone().normalize(), to.clone().normalize());
   if (w < 1) delta.slerp(_q2.identity(), 1 - w);
-  const parent = bone.parent!;
-  const parentQ = parent.getWorldQuaternion(new THREE.Quaternion());
+  const parentQ = bone.parent!.getWorldQuaternion(new THREE.Quaternion());
   const boneQ = bone.getWorldQuaternion(new THREE.Quaternion());
   const newWorld = delta.multiply(boneQ);
   bone.quaternion.copy(parentQ.invert().multiply(newWorld));
   bone.updateMatrixWorld(true);
+}
+
+/**
+ * Two-bone IK: bend upper/lower so the end (plus `tip` metres along the lower bone) reaches goal.
+ * pole: world point the middle joint (elbow/knee) bends toward. Blended by w.
+ */
+function twoBoneIK(upper: THREE.Object3D, lower: THREE.Object3D, end: THREE.Object3D, goal: THREE.Vector3, pole: THREE.Vector3, w: number, a: number, b0: number, tip: number) {
+  if (w <= 0.001) return;
+  const b = b0 + tip;
+  const S = upper.getWorldPosition(new THREE.Vector3());
+  const toG = goal.clone().sub(S);
+  const dist = THREE.MathUtils.clamp(toG.length(), Math.abs(a - b) + 1e-3, a + b - 1e-3);
+  const n = toG.normalize();
+  const cosA = THREE.MathUtils.clamp((a * a + dist * dist - b * b) / (2 * a * dist), -1, 1);
+  const p = pole.clone().sub(S);
+  const perp = p.sub(n.clone().multiplyScalar(p.dot(n)));
+  if (perp.lengthSq() < 1e-6) perp.set(0, -1, 0);
+  perp.normalize();
+  const E = S.clone().addScaledVector(n, a * cosA).addScaledVector(perp, a * Math.sqrt(1 - cosA * cosA));
+  const G = S.clone().addScaledVector(n, dist);
+  rotateBoneTowards(upper, dirOf(upper, lower), E.clone().sub(S), w);
+  rotateBoneTowards(lower, dirOf(lower, end), G.sub(lower.getWorldPosition(new THREE.Vector3())), w);
 }
 
 function radial(inner: string, outer: string) {

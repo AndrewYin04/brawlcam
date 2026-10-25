@@ -130,10 +130,10 @@ export const BRAWL_DEFAULTS: SimConfig = {
 export const TUNING = {
   hpMax: 100,
   moveSpeed: 2.4,
-  engageDist: 1.3,
+  engageDist: 1.0, // about one arm's length between 1.8 m fighters, so fists visibly reach
   assistIdle: 1.5, // s without forward/back input before the duel assist walks you back into range
-  minDist: 0.85,
-  reach: { jab: 1.75, hook: 1.6, uppercut: 1.6, kick: 1.95, palm: 0, xshield: 0 } as Record<ActionKind, number>,
+  minDist: 0.7,
+  reach: { jab: 1.3, hook: 1.2, uppercut: 1.2, kick: 1.5, palm: 0, xshield: 0 } as Record<ActionKind, number>,
   speedMin: 1.5, // m/s, maps to 5 HP
   speedMax: 6.0, // m/s, maps to 15 HP
   blockFactor: 0.2,

@@ -1,5 +1,6 @@
 // CPU fighter. Produces the same inputs and actions as a human player.
 import type { Action, Sim, SimEvent } from './sim';
+import { TUNING } from './sim';
 import { packJoints } from './joints';
 import { proceduralJoints } from './animate';
 
@@ -54,7 +55,7 @@ export class Bot {
 
     if (fighting && me.alive && tgt) {
       const dist = Math.hypot(tgt.x - me.x, tgt.z - me.z);
-      const want = sim.cfg.mode === 'brawl' ? 1.25 : 1.3;
+      const want = TUNING.engageDist; // arm's length
       if (dist > want + 0.15) fwd = Math.min(1, (dist - want) * 1.5);
       else if (dist < want - 0.25) fwd = -0.5;
       if (sim.cfg.mode === 'brawl') {
@@ -70,7 +71,7 @@ export class Bot {
       blocking = this.level >= 0 && t < this.blockUntil;
 
       // Level -1: passive training dummy (never attacks), used by tests and as an option.
-      if (this.level >= 0 && t >= this.nextAttackAt && dist < 2.2 && t >= me.stunUntil) {
+      if (this.level >= 0 && t >= this.nextAttackAt && dist < TUNING.reach.jab + 0.1 && t >= me.stunUntil) {
         const roll = this.rng();
         let a: Action;
         if (me.meter >= 100 && roll < 0.45) {
