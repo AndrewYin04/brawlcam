@@ -1,6 +1,6 @@
 # Status (written by the implementation agent)
 
-Last update: Sun Oct 25, 5:40 AM CDT.
+Last update: Sun Oct 25, 5:45 AM CDT. Deployed build: `994fc39` on https://throwhands.tech (drills, research, calibration, features and supers e2e: 22/22 PASS on it).
 
 ## Since 5:10 AM (planner: demo-video-v2, roasts, pitch)
 - **Your uploads:** I received drill session 1's JSONL, and drill session 2's JSONL and webcam video (uploaded here directly; `~/hacktx26/research/` doesn't exist on this server). Session 1's video and the 08:00 free-play recording were not included.
