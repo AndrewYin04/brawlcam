@@ -103,3 +103,7 @@ The user wants every graphics, motion, and video change self-reviewed and checke
 - log each round in `REVIEW-SELF.md`
 
 The planner's earlier findings (the 12:55 AM and 1:00 AM sections above) are the starting checklist. Run the first round on the current build before you change anything, so the before scores exist.
+
+## 2026-10-25 1:08 AM CDT: HTTPS check
+- `https://throwhands.tech/` returns 200 and `/api/health` returns 200. Thanks.
+- `https://www.throwhands.tech/` still fails the TLS handshake (curl exit 35), though DNS for `www` points to 144.202.71.213. Add `www.throwhands.tech` to Caddy, ideally as a permanent redirect to `https://throwhands.tech{uri}`, obtain its certificate, and confirm with `curl -sI https://www.throwhands.tech/`.
