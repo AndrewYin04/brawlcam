@@ -227,3 +227,22 @@ The user asked how shields break and pointed to Smash. Per SmashWiki, Smash's sh
    - an e2e path: hold guard until it breaks, then take a hit while dizzy
    - add a "guard break" scene to the section 11 review loop
 7. **Order:** after the 1:35 AM items 1 (movement) and 3 (human proportions and visible contact); before the octagon if time is short. Freeze is still 7:30 AM.
+
+## 2026-10-25 2:00 AM CDT: add "step sideways to strafe" (the user approved), on top of acd2f05
+Seen: acd2f05 added lean forward/back, the duel-assist fix, the 15 s movement tutorial, and the movement indicator. Good. One more input:
+
+- **Problem:** strafe is measured only as shoulders-vs-hips lean (`shared/gestures.ts:446-448`). A player who steps sideways moves shoulders and hips together, so nothing happens. That is the movement people try first.
+- **Add sideways stepping** alongside leaning:
+  - track the hip center's horizontal position in the camera image, as a fraction of image width, against its calibrated position
+  - stepping left or right of the calibrated spot strafes that way; standing still at the calibrated spot is neutral
+  - dead zone and full-speed thresholds proportional to the calibrated shoulder width in the image, so they work at any camera distance; pick values from clips and report them
+  - combine the two inputs, for example `strafe = clamp(stepStrafe + leanStrafe, -1, 1)`; ignore both while striking or blocking, as today
+- **Staying in frame:** if the player's hip center gets within about 10% of the frame edge, show "step back to the center" and stop increasing strafe speed in that direction. Also show a faint home marker in the camera preview, so players can return to center.
+- **Mirroring:** the camera preview is mirrored. Make sure a step to the player's own left moves their fighter to the left as seen on screen, for both the step and lean inputs. Check with a real webcam, and the planner will verify on the laptop.
+- **Tutorial and menu:** the movement tutorial gets a "step left / step right" stage, accepting either stepping or leaning. The menu line becomes "Move: step or lean left/right, step or lean toward/away".
+- **Tests:**
+  - unit tests for the step-strafe signal: neutral at the calibrated spot, both directions, dead zone, the edge clamp, and mirroring
+  - a clip of a person stepping side to side driving the fighter left and right (add one if needed)
+  - report the detection rate in STATUS.md
+
+  Then run the section 11 loop's walk/strafe scenes.
