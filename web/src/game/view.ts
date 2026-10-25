@@ -211,7 +211,11 @@ export class MatchView {
         slot.avatar.root.position.copy(slot.pos);
         slot.avatar.root.rotation.y = slot.yaw;
         let joints: Joints | null = null;
-        if (this.opts.localIds.includes(f.id) && f.pr) joints = this.opts.localJoints(f.id);
+        // Your own fighter mirrors your live pose immediately (also during calibration and the countdown).
+        if (this.opts.localIds.includes(f.id)) {
+          joints = this.opts.localJoints(f.id);
+          if (joints && !(window as any).__brawl.mirrorAt) (window as any).__brawl.mirrorAt = performance.now();
+        }
         if (!joints && f.pr) joints = unpackJoints(f.j as number[] | undefined);
         if (!joints) {
           // Idle guard (or the procedural strike) when no live pose: absent players, bots without data.

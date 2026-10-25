@@ -172,6 +172,7 @@ async function ensureCamera(players: number): Promise<boolean> {
       (hooks as any).stage = 'camera';
       await startCamera(video, isMobile);
       cameraOk = true;
+      (hooks as any).cameraAt = performance.now();
     } catch (e) {
       const f = e instanceof CameraFailure ? e : new CameraFailure('unknown', String(e));
       showCameraProblem(f);

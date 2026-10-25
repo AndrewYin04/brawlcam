@@ -2,6 +2,8 @@ import { test, expect, type Page, type Browser } from '@playwright/test';
 import { launchWithClip, openPage, hooks, waitScreen, realErrors, TQ } from './helpers';
 
 const FIGHTERS = ['shadow_fighterA', 'shadow_fighterB', 'shadow_fighterC', 'shadow_fighterD', 'shadow_fighterE', 'shadow_fighterF', 'shadow_fighterG', 'jab_01'];
+// 8 browsers on this 7 GB test machine: capsule fighters (lowgfx) and no trace recording, or it swaps.
+test.use({ trace: 'off', screenshot: 'off' });
 const opened: Browser[] = [];
 test.afterEach(async () => {
   while (opened.length) await opened.pop()!.close().catch(() => {});
@@ -18,13 +20,13 @@ const roster = (p: Page) => p.evaluate(() => {
 
 test('winner stays on: 8 browsers, rotates through 4+ matches, spectators cheer, queue survives reconnect, fighter leaves mid-match', async () => {
   test.setTimeout(14 * 60_000);
-  const A = await player(FIGHTERS[0], `/?${TQ}&skipcal&roundsecs=10`);
+  const A = await player(FIGHTERS[0], `/?${TQ}&skipcal&lowgfx&roundsecs=10`);
   await waitScreen(A.page, 'menu');
   await A.page.click('[data-action=online-create]');
   await A.page.waitForFunction(() => (window as any).__brawl?.online?.room, null, { timeout: 20_000 });
   const room = (await hooks(A.page)).online.room;
   const others = [];
-  for (const clip of FIGHTERS.slice(1)) others.push(await player(clip, `/?room=${room}&${TQ}&skipcal&renderfps=8`));
+  for (const clip of FIGHTERS.slice(1)) others.push(await player(clip, `/?room=${room}&${TQ}&skipcal&lowgfx&renderfps=8`));
   for (const o of others) await waitScreen(o.page, 'lobby', 60_000);
   const all = [A, ...others];
   await A.page.check('input[name=mode][value=wso]');

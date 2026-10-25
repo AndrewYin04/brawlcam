@@ -4,6 +4,8 @@ import { chromium } from '@playwright/test';
 import { GL_ARGS } from '../../playwright.config';
 
 const FIGHTERS = ['shadow_fighterA', 'shadow_fighterB', 'shadow_fighterC', 'shadow_fighterD', 'shadow_fighterE', 'shadow_fighterF', 'shadow_fighterG', 'shadow_fighterH'];
+// 8 browsers on this 7 GB test machine: capsule fighters (lowgfx) and no trace recording, or it swaps.
+test.use({ trace: 'off', screenshot: 'off' });
 const opened: Browser[] = [];
 test.afterEach(async () => {
   while (opened.length) await opened.pop()!.close().catch(() => {});
@@ -14,7 +16,7 @@ async function player(clip: string, path: string, opts = {}) {
   return { b, ...(await openPage(b, path, opts)) };
 }
 async function host(clip: string, q: string) {
-  const h = await player(clip, `/?${TQ}&skipcal${q}`);
+  const h = await player(clip, `/?${TQ}&skipcal&lowgfx${q}`);
   await waitScreen(h.page, 'menu');
   await h.page.fill('#nickname', 'E2E Brawler 1');
   await h.page.dispatchEvent('#nickname', 'change');
@@ -57,7 +59,7 @@ test('8 browsers, 8 different fighter clips: full 2-minute brawl, all clients ag
   const A = await host(FIGHTERS[0], '');
   const others = [];
   for (const clip of FIGHTERS.slice(1)) {
-    const p = await player(clip, `/?room=${A.room}&${TQ}&skipcal&renderfps=3`);
+    const p = await player(clip, `/?room=${A.room}&${TQ}&skipcal&lowgfx&renderfps=3`);
     others.push(p);
   }
   for (const o of others) await waitScreen(o.page, 'lobby', 60_000);
@@ -83,7 +85,7 @@ test('8 browsers, 8 different fighter clips: full 2-minute brawl, all clients ag
   expect(new Set(hs.map((h) => h.matchOver.winner)).size).toBe(1);
   // With 8 browsers saturating this 8-core test server, client main threads delay socket handling;
   // the 2-browser online test measures p95 49 ms on the same network path. Recorded in TESTING.md.
-  expect(sync.p95).toBeLessThan(300);
+  expect(sync.p95).toBeLessThan(100);
   for (const P of [A, ...others]) expect(realErrors(P.consoleErrors)).toEqual([]);
 });
 
