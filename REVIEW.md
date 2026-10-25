@@ -512,3 +512,17 @@ Two places put a delivery instruction inside the text to be spoken:
 5. **Review loop:** add a "close range, behind camera" scene. Both fighters trade at arm's length and in a clinch-like distance, with the penetration, facing, and fist metrics above. Run it before reporting these fixed.
 
 Order: 4 (fps), then 1 to 3, then the 3:15 AM audio items.
+
+### 3:26 AM CORRECTION to the 3:22 AM note: the user clarified the screenshot
+The user's fighter is the man in **pink shorts**, nearest the camera. "you can see its hand through the body and the face eyes too through its head and its weird."
+
+So the cause is the **see-through mode from 012470a** ("your fighter turns see-through when it covers the opponent"). Rendering a skinned mesh semi-transparently without depth handling shows its inner and back surfaces: the far hand through the torso, and the eyes and face through the back of the head. That is also why the planner read the fighter as facing the camera.
+
+**Withdrawn:** 3:22 AM item 2 ("faces the camera"). Don't change the pose yaw mapping because of that note. Item 1 (interpenetration) may also be an artifact of the transparency; check it with the fighter opaque before changing collision. Keep the penetration metric either way.
+
+**Fix the see-through mode:**
+- Render the player's fighter in **two passes**: a depth-only pre-pass, then the color pass at reduced opacity with depth test equal, so only the nearest surface of the fighter shows and nothing inside or behind it does. Alternatively, use dithered (screen-door) transparency with depth writes on.
+- Or drop the transparency: keep the player opaque, and draw the **opponent's hidden parts as a colored silhouette** through the player (an x-ray outline). This is the usual fighting-game approach. Try both, compare frames in the section 11 loop, and pick whichever looks cleaner.
+- **Metric:** in the close-range behind-camera scene, no back-facing or interior triangles of the player's fighter are visible (render a debug pass to confirm), and the opponent stays visible above 80%.
+
+Items 3 (fists, gloves, guard shape: check whether the bare-handed look is real or another transparency artifact) and 4 (the 6 fps pose rate, first priority) still stand.
