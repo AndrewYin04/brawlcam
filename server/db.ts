@@ -61,6 +61,8 @@ async function q<T extends pg.QueryResultRow = any>(sql: string, params: unknown
   }
 }
 
+const STREAM_COLS = Array.from({ length: 33 }, (_, j) => [`x${j}`, `y${j}`, `z${j}`, `v${j}`]).flat();
+
 async function migrate() {
   const stmts = [
     `CREATE TABLE IF NOT EXISTS players (id uuid PRIMARY KEY, nickname text NOT NULL, elo int NOT NULL DEFAULT 1000, wins int NOT NULL DEFAULT 0, losses int NOT NULL DEFAULT 0, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now())`,
@@ -76,8 +78,11 @@ async function migrate() {
     `SELECT create_hypertable('research_frames', by_range('time', INTERVAL '1 day'), if_not_exists => TRUE)`,
     `ALTER TABLE research_frames SET (timescaledb.compress, timescaledb.compress_segmentby = 'session_id', timescaledb.compress_orderby = 'time')`,
     `SELECT add_compression_policy('research_frames', compress_after => INTERVAL '1 hour', if_not_exists => TRUE)`,
-    // Opt-in continuous pose streams (motion-data consent): world landmarks at 15 fps, 132 reals per frame. No video.
-    `CREATE TABLE IF NOT EXISTS pose_streams (time timestamptz NOT NULL, session_id uuid NOT NULL, label text NOT NULL, lm real[] NOT NULL)`,
+    // Opt-in continuous pose streams (motion-data consent): world landmarks at 15 fps, no video. One smallint column per
+    // coordinate (x/y/z in mm, visibility in %) so Timescale's columnar compression works (3.4x, about 5.9 MB per
+    // player-hour; arrays only reached 1.7x). The first array-based version held only test rows and is replaced.
+    `DO $$ BEGIN IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'pose_streams' AND column_name = 'lm') THEN DROP MATERIALIZED VIEW IF EXISTS pose_stream_minutes; DROP TABLE pose_streams; END IF; END $$`,
+    `CREATE TABLE IF NOT EXISTS pose_streams (time timestamptz NOT NULL, session_id uuid NOT NULL, label text NOT NULL, ${STREAM_COLS.map((c) => c + ' smallint').join(', ')})`,
     `SELECT create_hypertable('pose_streams', by_range('time', INTERVAL '1 day'), if_not_exists => TRUE)`,
     `ALTER TABLE pose_streams SET (timescaledb.compress, timescaledb.compress_segmentby = 'session_id', timescaledb.compress_orderby = 'time')`,
     `SELECT add_compression_policy('pose_streams', compress_after => INTERVAL '1 hour', if_not_exists => TRUE)`,
@@ -208,12 +213,13 @@ export const STREAM_DB_LIMIT = 600 * 1024 * 1024;
 export async function insertPoseStream(sessionId: string, label: string, rows: { t: number; lm: number[] }[]) {
   if (!rows.length) return true;
   const vals: unknown[] = [];
-  const ph = rows.map((r, i) => {
-    vals.push(new Date(r.t), sessionId, label, r.lm);
-    const o = i * 4;
-    return `($${o + 1},$${o + 2},$${o + 3},$${o + 4})`;
+  const ph = rows.map((r) => {
+    const o = vals.length;
+    // metres -> millimetres, visibility 0..1 -> percent
+    vals.push(new Date(r.t), sessionId, label, ...r.lm.map((v, i) => Math.max(-32000, Math.min(32000, Math.round(i % 4 === 3 ? v * 100 : v * 1000)))));
+    return `(${Array.from({ length: 135 }, (_, i) => '$' + (o + i + 1)).join(',')})`;
   });
-  return !!(await q(`INSERT INTO pose_streams (time, session_id, label, lm) VALUES ${ph.join(',')}`, vals));
+  return !!(await q(`INSERT INTO pose_streams (time, session_id, label, ${STREAM_COLS.join(', ')}) VALUES ${ph.join(',')}`, vals));
 }
 
 export async function streamStats() {

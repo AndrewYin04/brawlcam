@@ -191,7 +191,10 @@ export class MatchView {
         }
         case 'iron_counter': {
           const w = this.slots.get(e.id);
+          const att = this.slots.get(e.attacker);
           if (w) this.vfx.shockwave(w.pos.clone().setY(1.2), 0xffc53d, 1.6);
+          // The attacker bounces off the wall: big flinch / knockback reaction.
+          if (w && att) att.avatar.flinchFrom(att.pos.clone().sub(w.pos), 1);
           sfx.sfxBlock();
         }
           if (this.snap && this.snap.f.length > 2) this.addKoFeed(`${this.name(e.id)}’s Iron Wall countered ${this.name(e.attacker)}`);
@@ -325,7 +328,7 @@ export class MatchView {
             slot.avatar.attack(f.atk.k, f.atk.h, `${f.atk.k}${f.atk.h}${(s.t - f.atk.age).toFixed(2)}`, null);
           }
           const fa = f as any;
-          slot.avatar.update(animDt, this.time, { shield: 0, meterFull: f.meter >= 100, airborne: f.y, alive: !!f.alive || awaitingHit, blocking: !!f.b, guard: fa.gd ?? 100, dizzy: (fa.dz ?? 0) > 0, ironWall: (fa.iw ?? 0) > 0 });
+          slot.avatar.update(animDt, this.time, { shield: 0, meterFull: f.meter >= 100, airborne: awaitingHit ? 0 : f.y, alive: !!f.alive || awaitingHit, blocking: !!f.b, guard: fa.gd ?? 100, dizzy: (fa.dz ?? 0) > 0, ironWall: (fa.iw ?? 0) > 0 });
         } else {
           slot.avatar.setJoints(joints);
           slot.avatar.update(animDt, this.time, { shield: f.iw, meterFull: f.meter >= 100, airborne: f.y, alive: !!f.alive || s.f.length <= 2 });
@@ -377,9 +380,9 @@ export class MatchView {
         // Brawl: centered on you, widened just enough for the fighters near you.
         let near = 0;
         for (const o of others) if (o.snap.alive) near = Math.max(near, Math.min(5, o.pos.distanceTo(me.pos)));
-        const d = (portrait ? 3.6 : 2.4) + near * 0.35;
-        pos = me.pos.clone().addScaledVector(back, d).addScaledVector(new THREE.Vector3(back.z, 0, -back.x), -0.9).setY((portrait ? 2.6 : 2.0) + near * 0.2);
-        look = me.pos.clone().addScaledVector(back, -1.6).setY(0.7);
+        const d = (portrait ? 3.8 : 2.8) + near * 0.4;
+        pos = me.pos.clone().addScaledVector(back, d).addScaledVector(new THREE.Vector3(back.z, 0, -back.x), -1.0).setY((portrait ? 2.4 : 1.9) + near * 0.1);
+        look = me.pos.clone().addScaledVector(back, -1.6).setY(1.0);
       } else {
         pos = me.pos.clone().addScaledVector(back, portrait ? 7 : 5).setY(portrait ? 6 : 4.2);
         look = me.pos.clone().addScaledVector(back, -2).setY(0.9);
@@ -393,12 +396,13 @@ export class MatchView {
         // Higher and further to the side than before so the chibi heroes' big heads never hide the opponent.
         // Over the right shoulder of a 1.8 m fighter: you on the left third, the opponent clear in the middle.
         // About 35 degrees off the shoulder line, so the gap between the fighters (and the fist landing) is visible.
-        pos = me.pos.clone().addScaledVector(fwd, portrait ? -3.2 : -2.3).addScaledVector(right, portrait ? 1.2 : 1.65).setY(portrait ? 2.1 : 1.9);
+        pos = me.pos.clone().addScaledVector(fwd, portrait ? -3.1 : -2.2).addScaledVector(right, portrait ? 1.4 : 2.1).setY(portrait ? 2.1 : 1.85);
         look = (opp ? opp.pos.clone().lerp(me.pos, 0.1) : me.pos.clone().addScaledVector(fwd, 1.4)).setY(1.2);
       } else {
         pos = me.pos.clone().addScaledVector(fwd, portrait ? -3.6 : -2.7).addScaledVector(right, portrait ? 0.7 : 1.05).setY(portrait ? 2.3 : 2.0);
         look = (opp ? opp.pos.clone() : me.pos.clone().addScaledVector(fwd, 1.5)).setY(1.2);
       }
+      if (me.snap.y > 0.3 && opp) look = look.clone().lerp(me.pos.clone().setY(1 + me.snap.y), 0.5); // keep a launched you in frame
       if (this.slowmo && opp) {
         // Dramatic side angle during slow motion, framing both fighters and the launch.
         const mid = me.pos.clone().add(opp.pos).multiplyScalar(0.5);
@@ -411,9 +415,35 @@ export class MatchView {
       const ft = this.slots.get(this.fallTarget);
       if (ft) look = look.clone().lerp(ft.avatar.root.getWorldPosition(new THREE.Vector3()).setY(ft.snap.y ?? 0), 0.6);
     }
-    // Keep the camera inside the octagon cage (never behind a post, pad or the chain-link).
+    // Keep the camera inside the octagon cage (never behind a post, pad or the chain-link). Near the fence, swing the
+    // camera around you (keeping its height and distance) instead of pushing it in or lifting it.
     if (USE_HEROES && this.arena.stage) {
-      const A = apothem(this.arena.stage.radius) - 0.3;
+      const A = apothem(this.arena.stage.radius) - 0.35;
+      const outside = (p: THREE.Vector3) => {
+        let m = 0;
+        for (let k = 0; k < 8; k++) {
+          const ang = ((k + 0.5) / 8) * Math.PI * 2 + Math.PI / 8;
+          m = Math.max(m, p.x * Math.cos(ang) + p.z * Math.sin(ang) - A);
+        }
+        return m;
+      };
+      if (me && outside(pos) > 0) {
+        const off = pos.clone().sub(me.pos);
+        let best = pos;
+        let bestOut = outside(pos);
+        for (const deg of [20, -20, 40, -40, 60, -60, 80, -80, 100, -100]) {
+          const cand = me.pos.clone().add(off.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), (deg * Math.PI) / 180));
+          cand.y = pos.y;
+          const o = outside(cand);
+          if (o < bestOut - 1e-6) {
+            best = cand;
+            bestOut = o;
+            if (o <= 0) break;
+          }
+        }
+        // Prefer the smallest swing that fits; keep a smooth orbit memory so it doesn't flip sides each frame.
+        pos = best;
+      }
       for (let k = 0; k < 8; k++) {
         const ang = ((k + 0.5) / 8) * Math.PI * 2 + Math.PI / 8;
         const over = pos.x * Math.cos(ang) + pos.z * Math.sin(ang) - A;
@@ -421,11 +451,6 @@ export class MatchView {
           pos.x -= Math.cos(ang) * over;
           pos.z -= Math.sin(ang) * over;
         }
-      }
-      // Pushed in close to your back by the fence: rise and look down over the shoulder instead.
-      if (me) {
-        const d = Math.hypot(pos.x - me.pos.x, pos.z - me.pos.z);
-        if (d < 1.9) pos.y += (1.9 - d) * 0.9;
       }
     }
     this.arena.setCamera(pos, look, dt);

@@ -336,14 +336,14 @@ export class HeroFighter {
     this.shieldMat = new THREE.ShaderMaterial({
       uniforms: { color: { value: new THREE.Color(0x66ccff) }, time: { value: 0 }, strength: { value: 1 } },
       vertexShader: `varying vec3 vN; varying vec3 vV; void main(){ vec4 wp = modelMatrix*vec4(position,1.); vN = normalize(mat3(modelMatrix)*normal); vV = normalize(cameraPosition-wp.xyz); gl_Position = projectionMatrix*viewMatrix*wp; }`,
-      fragmentShader: `uniform vec3 color; uniform float time; uniform float strength; varying vec3 vN; varying vec3 vV; void main(){ float f = pow(1.-abs(dot(vN,vV)),2.2); float hex = 0.85+0.15*sin(time*6.); gl_FragColor = vec4(color*(0.75+f*0.6)*hex, clamp((f*0.85+0.07)*strength, 0., 1.)); }`,
+      fragmentShader: `uniform vec3 color; uniform float time; uniform float strength; varying vec3 vN; varying vec3 vV; void main(){ float f = pow(1.-abs(dot(vN,vV)),3.); float hex = 0.85+0.15*sin(time*6.); gl_FragColor = vec4(color*(0.8+f*0.5)*hex, clamp((f*0.9+0.03)*strength, 0., 1.)); }`,
       transparent: true,
       depthWrite: false,
     });
     // Tight around the defender only (not a big sphere around both fighters).
     this.shield = new THREE.Mesh(new THREE.SphereGeometry(0.62, 32, 20), this.shieldMat);
-    this.shield.scale.set(1, 1.35, 1);
-    this.shield.position.y = 1.1;
+    this.shield.scale.set(1, 1.6, 1);
+    this.shield.position.y = 0.97;
     this.shield.visible = false;
     this.body.add(this.shield);
     // Dizzy stars circling over the head (guard broken)
@@ -378,19 +378,20 @@ export class HeroFighter {
       m.add(new THREE.Mesh(geo, ol));
       g.add(m);
     };
-    const cap = new THREE.SphereGeometry(0.108, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.55);
-    if (L.head === 'short') add(cap, hairMat, [0, 0.095, -0.01], [1, 0.95, 1.08]);
+    // Head bone origin is at the jaw; the crown is about 0.25 m above it, the brow about 0.15 m.
+    const cap = new THREE.SphereGeometry(0.112, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.5);
+    if (L.head === 'short') add(cap, hairMat, [0, 0.155, -0.012], [1, 0.95, 1.1]);
     else if (L.head === 'bun') {
-      add(cap, hairMat, [0, 0.095, -0.01], [1.03, 1, 1.1]);
-      add(new THREE.SphereGeometry(0.055, 12, 10), hairMat, [0, 0.16, -0.1]);
+      add(cap, hairMat, [0, 0.155, -0.012], [1.03, 1, 1.12]);
+      add(new THREE.SphereGeometry(0.055, 12, 10), hairMat, [0, 0.21, -0.11]);
     } else if (L.head === 'long') {
-      add(cap, hairMat, [0, 0.095, -0.01], [1.06, 1, 1.12]);
-      add(new THREE.CapsuleGeometry(0.06, 0.16, 4, 10), hairMat, [0, 0.0, -0.09], [1.6, 1, 0.8]);
-    } else if (L.head === 'mohawk') add(new THREE.BoxGeometry(0.03, 0.06, 0.2), hairMat, [0, 0.215, -0.01]);
+      add(cap, hairMat, [0, 0.155, -0.012], [1.06, 1, 1.14]);
+      add(new THREE.CapsuleGeometry(0.06, 0.16, 4, 10), hairMat, [0, 0.07, -0.1], [1.6, 1, 0.8]);
+    } else if (L.head === 'mohawk') add(new THREE.BoxGeometry(0.03, 0.06, 0.2), hairMat, [0, 0.275, -0.012]);
     else if (L.head === 'headgear') {
       const gear = new THREE.MeshToonMaterial({ color: glow, gradientMap: ramp() });
-      add(new THREE.SphereGeometry(0.118, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.62), gear, [0, 0.085, -0.01], [1.02, 1, 1.1]);
-      add(new THREE.TorusGeometry(0.1, 0.022, 8, 20, Math.PI * 1.1), gear, [0, 0.07, 0.035]);
+      add(new THREE.SphereGeometry(0.122, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.5), gear, [0, 0.15, -0.012], [1.02, 1, 1.12]);
+      add(new THREE.TorusGeometry(0.105, 0.02, 8, 20, Math.PI), gear, [0, 0.15, 0.0], [1, 1, 1.1]);
     }
     // Head bone origin is near the jaw: place relative to it in world space at bind, then parent to the bone.
     this.root.updateMatrixWorld(true);
@@ -516,7 +517,8 @@ export class HeroFighter {
 
     // ---- KO / get-up ----
     if (!opts.alive && this.wasAlive) {
-      this.play('death', 0.05, 1, 1, 1.8); // Death01 staggers for ~1 s before the fall; speed it up
+      this.play('death', 0.05, 1, 1, 1.4);
+      this.actions.get('death')!.time = 1.05; // Death01 staggers for ~1 s before the fall: start at the fall
       this.oneShot!.until = Infinity; // stay down (clamped on the last frame) until revived
       this.koTime = time;
     }
@@ -528,7 +530,8 @@ export class HeroFighter {
     this.wasAlive = opts.alive;
     // While knocked out, the death clip (clamped on its last frame) always plays; nothing may replace it.
     if (!opts.alive && this.oneShot?.name !== 'death') {
-      this.play('death', 0.05, 1, 1, 1.8);
+      this.play('death', 0.05, 1, 1, 1.4);
+      this.actions.get('death')!.time = 1.05;
       this.oneShot!.until = Infinity;
     }
 
@@ -560,7 +563,7 @@ export class HeroFighter {
         ang = ang > 0 ? ang - Math.PI : ang + Math.PI;
       }
       wantYaw = THREE.MathUtils.clamp(ang, -1.45, 1.45);
-      const run = speed > 1.5;
+      const run = speed > 1.5 && Math.abs(ang) < 0.6; // side-steps and back-steps always walk (a shuffle, not a sprint)
       const w = THREE.MathUtils.clamp((speed - 0.15) / 0.35, 0, 1);
       target = { idle: 1 - w, walk: run ? 0 : w, run: run ? w : 0 };
       rate = (run ? speed / RUN_SPEED : speed / WALK_SPEED) * (back ? -1 : 1);
@@ -607,6 +610,16 @@ export class HeroFighter {
     this.poseWeight += (wantPose - this.poseWeight) * (1 - Math.exp(-dt * 14));
     if (this.joints && this.poseWeight > 0.01) this.applyPose(this.joints, this.poseWeight);
 
+    // Hit reaction on top of the live pose: snap the chest and head away from the blow.
+    if (this.flinch > 0.02 && opts.alive) {
+      const away = this.flinchDir.clone();
+      const axis = new THREE.Vector3(0, 1, 0).cross(away).normalize();
+      if (axis.lengthSq() > 0.5) {
+        rotateWorld(this.bones.spine_02, axis, this.flinch * 0.25);
+        rotateWorld(this.bones.spine_03, axis, this.flinch * 0.2);
+        rotateWorld(this.bones.Head, axis, this.flinch * 0.45);
+      }
+    }
     // Guard for clip-driven fighters: forearms up in front of the face.
     if (opts.blocking && !this.livePose && opts.alive && !fullBody) this.blockPose();
 
@@ -642,8 +655,8 @@ export class HeroFighter {
       else if (g > 0.5) col.copy(BLUE).lerp(YELLOW, (1 - g) * 2);
       else col.copy(YELLOW).lerp(RED, 1 - g * 2);
       const sc = iron ? 1.08 : 0.7 + 0.3 * g;
-      this.shield.scale.set(sc, sc * 1.35, sc);
-      this.shieldMat.uniforms.strength.value = iron ? 1.3 : 0.85;
+      this.shield.scale.set(sc, sc * 1.6, sc);
+      this.shieldMat.uniforms.strength.value = iron ? 0.9 : 0.6;
       this.shieldMat.uniforms.time.value = time;
     }
     this.stars.visible = !!opts.dizzy && opts.alive;
@@ -679,7 +692,9 @@ export class HeroFighter {
           // Step in when the target is beyond reach (measured once the body is back at rest).
           const from = upper.getWorldPosition(new THREE.Vector3());
           const gap = from.distanceTo(goal) - reach * 0.97;
-          s.lunge = THREE.MathUtils.clamp(this.lungeNow + gap, 0, 0.8);
+          // Never step into the target's body (roots stay at least 0.62 m apart).
+          const rootDist = this.root.position.distanceTo(s.target.root.position);
+          s.lunge = THREE.MathUtils.clamp(this.lungeNow + gap, 0, Math.max(0, Math.min(0.8, rootDist - 0.62)));
           lungeWant = s.lunge * w;
           this.body.position.z = lungeWant;
           this.root.updateMatrixWorld(true);

@@ -7,6 +7,7 @@ interface Particle {
   life: number;
   max: number;
   grow: number;
+  maxScale?: number;
 }
 
 let starTex: THREE.Texture | null = null;
@@ -47,9 +48,9 @@ export class VFX {
     this.labelLayer = labelLayer;
   }
 
-  private add(mesh: THREE.Mesh, v: THREE.Vector3, life: number, grow = 0) {
+  private add(mesh: THREE.Mesh, v: THREE.Vector3, life: number, grow = 0, maxScale?: number) {
     this.group.add(mesh);
-    this.particles.push({ mesh, v, life, max: life, grow });
+    this.particles.push({ mesh, v, life, max: life, grow, maxScale });
   }
 
   burst(pos: THREE.Vector3, color: THREE.ColorRepresentation, count = 18, speed = 4, size = 0.05) {
@@ -80,7 +81,8 @@ export class VFX {
     if (facing) m.lookAt(pos.clone().add(facing));
     else m.lookAt(this.camera.position);
     m.scale.setScalar(0.15 * size);
-    this.add(m, new THREE.Vector3(), 0.35, 5 * size);
+    // Bounded growth: a ring never grows past about a fighter's size (it used to fill half the screen).
+    this.add(m, new THREE.Vector3(), 0.25, 5 * size, SPRITE_SPARKS.on ? 0.4 * size : undefined);
   }
 
   groundRing(pos: THREE.Vector3, color: THREE.ColorRepresentation, size = 1.5) {
@@ -88,7 +90,7 @@ export class VFX {
     m.position.copy(pos).setY(0.05);
     m.rotation.x = -Math.PI / 2;
     m.scale.setScalar(0.2);
-    this.add(m, new THREE.Vector3(), 0.6, 4 * size);
+    this.add(m, new THREE.Vector3(), 0.5, 4 * size, SPRITE_SPARKS.on ? 0.8 * size : undefined);
   }
 
   pillar(pos: THREE.Vector3, color: THREE.ColorRepresentation) {
@@ -209,7 +211,10 @@ export class VFX {
       }
       p.mesh.position.addScaledVector(p.v, dt);
       p.v.y -= 6 * dt * (p.grow ? 0 : 1);
-      if (p.grow) p.mesh.scale.multiplyScalar(1 + p.grow * dt);
+      if (p.grow) {
+        p.mesh.scale.multiplyScalar(1 + p.grow * dt);
+        if (p.maxScale && p.mesh.scale.x > p.maxScale) p.mesh.scale.setScalar(p.maxScale);
+      }
       (p.mesh.material as THREE.MeshBasicMaterial).opacity = p.life / p.max;
       keep.push(p);
     }

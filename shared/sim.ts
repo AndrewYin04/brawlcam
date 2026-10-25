@@ -148,10 +148,10 @@ export const BRAWL_DEFAULTS: SimConfig = {
 export const TUNING = {
   hpMax: 100,
   moveSpeed: 2.4,
-  engageDist: 1.0, // about one arm's length between 1.8 m fighters, so fists visibly reach
+  engageDist: 1.2, // arm's length plus a step between 1.8 m fighters: strikes have room to extend (and step in)
   assistIdle: 1.5, // s without forward/back input before the duel assist walks you back into range
-  minDist: 0.7,
-  reach: { jab: 1.3, hook: 1.2, uppercut: 1.2, kick: 1.5, palm: 0, xshield: 0 } as Record<ActionKind, number>,
+  minDist: 0.85,
+  reach: { jab: 1.5, hook: 1.4, uppercut: 1.4, kick: 1.7, palm: 0, xshield: 0 } as Record<ActionKind, number>,
   speedMin: 1.5, // m/s, maps to 5 HP
   speedMax: 6.0, // m/s, maps to 15 HP
   // Guard (block gesture). Blocked hits deal blockFactor of the damage and drain the guard meter.
@@ -169,7 +169,7 @@ export const TUNING = {
   ironWallSeconds: 2.5,
   ironCounterDamage: 10,
   ironCounterStagger: 0.6, // s the countered attacker is stunned
-  ironCounterPush: 1.6,
+  ironCounterPush: 4.5,
   meterPerHit: 12,
   meterPerBlockedHit: 4,
   meterPerTaken: 8,
@@ -190,6 +190,7 @@ export const TUNING = {
   heavyKbMult: 2.2,
   roundEndPause: 3.5,
   gravity: 18,
+  strafeScale: 0.6,
   bodyRadius: 0.32,
   cageBounceMin: 1.2, // m/s into the fence before it counts as a slam
   cageRestitution: 0.45,
@@ -497,8 +498,10 @@ export class Sim {
         const lx = fz;
         const lz = -fx;
         const sp = TUNING.moveSpeed * (f.blocking ? 0.5 : 1) * (f.dizzyUntil > 0 ? TUNING.dizzyMoveScale : 1);
-        let mx = (fx * fwd + lx * strafe) * sp * dt;
-        let mz = (fz * fwd + lz * strafe) * sp * dt;
+        // Side-steps are slower than advancing/retreating (a shuffle, not a sideways sprint).
+        const ss = strafe * TUNING.strafeScale;
+        let mx = (fx * fwd + lx * ss) * sp * dt;
+        let mz = (fz * fwd + lz * ss) * sp * dt;
         // do not walk through the target
         if (fwd > 0 && dist - fwd * sp * dt < TUNING.minDist) {
           mx -= fx * fwd * sp * dt;
@@ -794,7 +797,7 @@ export class Sim {
       const push = base * (shielded ? 1 : 1 + tgt.kb / TUNING.duelKbScale) * (heavy ? TUNING.heavyKbMult : 1);
       tgt.vx += (dx / len) * push;
       tgt.vz += (dz / len) * push;
-      if (kind === 'super_uppercut' && !shielded && !blocked) tgt.vy = 7.5;
+      if (kind === 'super_uppercut' && !shielded && !blocked) tgt.vy = 6.2;
       else if (heavy && !shielded && !blocked) tgt.vy = Math.max(tgt.vy, 2.5);
       if (heavy) att.combo = 0;
     }
