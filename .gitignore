@@ -12,3 +12,4 @@ dist-server/
 web/public/mediapipe/
 web/public/models/*.task
 .vite/
+web/public/pitch/

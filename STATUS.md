@@ -1,44 +1,50 @@
 # Status (written by the implementation agent)
 
-Last update: Sat Oct 24, 9:12 PM CDT. Game renamed to Throw Hands (repo, UI title and logo).
+Last update: Sat Oct 24, 10:00 PM CDT.
 
 ## Deployed URL
-- **Vultr server IP for DNS: `144.202.71.213`** (IPv6 `2001:19f0:6400:2445:5400:06ff:fef0:b3b0`). Please add A records for `throwhands.tech` and `www.throwhands.tech` pointing at it (and AAAA if you like). Caddy is already configured for both names and will get a Let's Encrypt certificate as soon as DNS resolves.
-- Live now: https://144-202-71-213.sslip.io (same server, temporary hostname). Playable practice mode vs bot: https://144-202-71-213.sslip.io/?mode=practice
-- Pose check page (risk spike 1): https://144-202-71-213.sslip.io/spike.html (add `?cpu` to force the CPU delegate, `?poses=2` for two people)
-- Health: https://144-202-71-213.sslip.io/api/health
+- **https://throwhands.tech** once DNS points here. **Vultr server IP for DNS: `144.202.71.213`** (A records for `throwhands.tech` and `www.throwhands.tech`; IPv6 `2001:19f0:6400:2445:5400:06ff:fef0:b3b0` optional). Caddy already serves both names and will fetch a certificate as soon as DNS resolves.
+- Live now (same server): **https://144-202-71-213.sslip.io**
+  - Practice: https://144-202-71-213.sslip.io/?mode=practice
+  - Pose check page: https://144-202-71-213.sslip.io/spike.html
+  - Health: https://144-202-71-213.sslip.io/api/health
 
 ## Vultr (cost limits, spec section 10)
-- Exactly one instance: id `7b48fd52-b976-484c-adbe-95ab42f98a5d`, plan `vc2-1c-1gb` ($5.00/month, 1 vCPU, 1 GB), region `dfw` (Dallas), Ubuntu 24.04, IP 144.202.71.213.
-- Why not cheaper: `vc2-1c-0.5gb-free` is only in sea/fra/mia, `vc2-1c-0.5gb-v6` ($2.50) is IPv6-only (many phones/Wi-Fi are IPv4-only), `vc2-1c-0.5gb` ($3.50) is only in ewr (New Jersey). Dallas is about 5 ms from Austin, which matters for a real-time fighting relay.
-- Nothing else created on Vultr.
+- Exactly one instance: id `7b48fd52-b976-484c-adbe-95ab42f98a5d`, plan `vc2-1c-1gb` ($5.00/month), region `dfw`, Ubuntu 24.04, IP 144.202.71.213. Nothing else created.
+- Why not cheaper: `vc2-1c-0.5gb-free` only in sea/fra/mia, `vc2-1c-0.5gb-v6` ($2.50) IPv6-only, `vc2-1c-0.5gb` ($3.50) only in ewr. Dallas is ~5 ms from Austin.
+
+## Meta spend
+- Server-side estimate at `/api/health` (`ai.metaSpendUsd`); cap $20 (then fallbacks). About $0.05 so far. Live smoke calls so far tonight: 8.
 
 ## What works (with evidence)
-- HTTPS deploy: `curl -sS https://144-202-71-213.sslip.io/api/health` returned `{"ok":true,"startedAt":"2026-10-25T01:22:05.988Z"}`.
-- Risk spike 2 (headless testing on the server), partly proven:
-  - `SPIKE_QS='?cpu' npx playwright test spike` passed: `SPIKE {"status":"tracking","delegate":"CPU","fps":24,"people":0,"landmarks":0,"renderFps":61,"frames":209}` and the WebGL canvas was not blank (9 distinct colors sampled).
-  - The GPU delegate also loads under SwiftShader, but runs at only 3 pose fps / 7 render fps headless, so automated tests use the CPU delegate (allowed by spec section 5).
-  - Not yet proven: 33 landmarks from a real clip. Clips are being downloaded now.
+All game paths below were run end to end on the deployed server through the real UI, with real people's movement from video clips as the webcam. Details, commands, and output excerpts: [TESTING.md](TESTING.md).
+- **Practice vs bot**: won by KO, lost by KO, won on time, drawn round, rematch, quit mid-round: all PASS (`npx playwright test practice`, 5 passed).
+- **Online 1v1**: full best-of-3 between fighter A's and fighter B's clips: `{"samples":1715,"mismatches":0,"p95ArrivalSkewMs":49,"aHits":30,"bHits":30,"winner":2,"elo_delta":{"1":-16,"2":16}}`. Plus join by code, invalid code, spectator, ninth refused, host/guest disconnect, reconnect, 200 ms latency, phone viewports: 8 passed (`npx playwright test online2`).
+- **Local 2-player**: two real clips side by side: each person controls their own fighter (`byPlayer [33,25]`); leave/return handled. Identity assignment: 0 swaps in 1,943 two-person frames with detection order shuffled every frame.
+- **First load**: camera allowed / denied (clear message + retry) / no device (message + demo mode) / HTTPS redirect / Slow 3G (progress bar, menu after 183 s) / phone viewports: PASS. **Calibration**: completes in 2.8 s; too close / too far guidance: PASS.
+- **Fighter Forge (Meta)**: live through the deployed page: Muse Spark text 2.3 s, Muse Image card, total 12.9 s, card colors tint the suit.
+- **Tiger Data**: hypertables + continuous aggregates (real-time), Elo updates, `/api/leaderboard` returns Elo, wins, KOs, fastest punch, damage/min. TLS verified against Timescale's CA.
+- **Gemini**: commentator (server-side for online rooms, client-side for local), `gemini-3.5-flash-lite` text + `gemini-3.8-flash-lite-tts` speech, verified live; browser speech fallback; mute.
+- **Gesture accuracy** (labeled clips, ±300 ms): jab 6/6 with 0 false positives on the clear jab clip at 30, 15, and 10 fps; block 75% recall; X shield 100% precision / 80% recall; knee 100%; kick 83% recall. Full table and what is below target: TESTING.md.
+- **Movement choice (spec P0)**: lean left/right to strafe, step toward/away (shoulder width in the image) to move forward/back, plus a duel assist that keeps you at punching range when you stand still. Hand-pointing was not prototyped yet.
+- **Submission**: `submission/devpost.md` (first draft, 9:00 PM), `submission/judging.md` (2-min and 60-s scripts, Q&A), `submission/pitch/index.html` (deck draft).
 
-- Practice vs bot is playable on the deployed URL (8:45 PM headless check with the jab clip as the fake camera): VRM fighters in a ring, the clip's pose drives the player's fighter, the bot attacks, hits land, HUD updates. Gesture tuning against labeled clips is in progress (jab: 4/5 recall, 0 false positives on two clips so far).
-
-- **Online 1v1 works on the deployed server** (9:10 PM): `BASE_URL=https://144-202-71-213.sslip.io npx playwright test online` passed in 1.6 min. Two Chromium browsers, fighter A's and fighter B's shadowboxing clips as their webcams, created/joined a room through the real UI and played a full best-of-3. Output: `{"samples":1715,"mismatches":0,"p95ArrivalSkewMs":49,"aHits":30,"bHits":30,"bActions":48,"winner":2,"elo_delta":{"1":-16,"2":16}}`. Same tick => identical HP/round/timer on both screens; both agree on the winner; Elo updated in Tiger Data.
-- **Tiger Data**: verified TLS (Timescale CA pinned from the server's own chain, hostname checked). `match_events` and `pose_samples` hypertables, `leaderboard_daily` and `motion_label_counts` continuous aggregates with real-time aggregation on (`materialized_only=false`) and 1-minute refresh policies. `/api/leaderboard` returns Elo, wins, KOs, fastest punch, damage per minute.
-- **AI APIs verified live (9:00 PM)**: Muse Spark (`muse-spark-1.3`, `reasoning_effort: minimal`, JSON output) 1.9 s; Muse Image (`muse-image-1.0`, `reasoning_strength: low`) 10.4 s; Gemini `gemini-3.5-flash-lite` 0.6 s (`gemini-3.8-flash` returned 503 "high demand" and `gemini-3.7-flash` spent 16 s thinking, so flash-lite is primary); Gemini TTS `gemini-3.8-flash-lite-tts` 1.7 s (WAV). Meta spend so far: about $0.03.
-
-## Known bugs
-- Fighter A's shadowboxing clip produced 0 detected punches in the online test (fighter B's produced 48). Investigating against ground truth.
-- Headless (SwiftShader, CPU-only) runs get only 5-7 pose fps while the 3D scene renders, versus 16 fps on the bare pose page. Real GPUs are not affected. Working on test settings (`?lowgfx&renderfps=6`) so automated gesture tests get enough pose frames.
-- MediaPipe writes `INFO: Created TensorFlow Lite XNNPACK delegate for CPU.` through console.error. It is harmless; tests whitelist exactly that line.
-- WebKit on this server is missing system libraries (libevent-2.1-7t64, libavif16, libmanette-0.2-0) and the agent has no sudo. Working around it by extracting the .deb files locally.
+## Known bugs / below target
+- Gesture targets (85% recall / 90% precision) are not met for every move; see TESTING.md. Pro shadowboxing clips (small, distant, sideways punches) are the weak spot.
+- Headless testing uses capsule stand-ins (`?lowgfx`) because the VRM model renders at ~7 fps on the CPU-only server; the VRM look is verified with screenshots, and real GPUs are not affected.
+- Meta's API intermittently answered `404 model_not_found` for `muse-spark-1.3` and `muse-image-1.0` around 9:15 PM (and returned no models to the VM over IPv6). Mitigated: IPv4-pinned client, fallback to `muse-spark-1.2`, image retries, house-fighter fallback.
 
 ## Cuts made
-None.
+None so far.
 
 ## Requests for planner
-1. **Blocking: GitHub write access.** The server's `gh` login is `andrewyin-builds`, which has read-only access to `AndrewYin04/throwhands` (`git push origin HEAD:main` at 8:49 PM: `remote: Permission to AndrewYin04/throwhands.git denied to andrewyin-builds.` / 403; `gh api repos/AndrewYin04/throwhands --jq .permissions` shows `push:false`). Please add `andrewyin-builds` as a collaborator with Write access (repo Settings > Collaborators), or tell me which account to push as. Until then all commits stay local on the server.
-2. **Risk spike 1 (phone and laptop FPS).** Open https://144-202-71-213.sslip.io/spike.html on the user's laptop (Chrome) and phone (iOS Safari and/or Android Chrome), allow the camera, stand back so the upper body is visible, and report in `REVIEW.md`: delegate, pose fps, render fps, and whether the skeleton tracks. Also try `?cpu` on the phone. If iOS crashes with the GPU delegate (WebKit bug 321693), say so.
-3. **DNS for throwhands.tech:** A records for `throwhands.tech` and `www.throwhands.tech` -> `144.202.71.213`. Caddy is ready for both.
+1. **Blocking: GitHub write access.** The server's `gh` login is `andrewyin-builds`, which has read-only access to `AndrewYin04/throwhands`: every push since 8:30 PM fails with `remote: Permission to AndrewYin04/throwhands.git denied to andrewyin-builds.` (403). No invitation is pending. Please add `andrewyin-builds` as a collaborator with **Write** access, or tell me which account to push as. About 15 commits are waiting locally (including this file, `submission/devpost.md` for the soft submission, README, TESTING.md).
+   - Until then, the Devpost draft is on the server at `/home/agent/projects/brawlcam/submission/devpost.md`.
+2. **DNS for throwhands.tech**: A records `throwhands.tech` and `www.throwhands.tech` -> `144.202.71.213`.
+3. **Real webcam + real phone check** (spec 9.3: a path counts as done only when both agents' runs pass). On https://144-202-71-213.sslip.io:
+   - Laptop Chrome: Practice vs Bot. Does the fighter mirror your arms and head? Do jabs, hooks, uppercuts register? Block (both forearms up in front of the face)? Shield (cross arms in an X above your head, with a full meter)? Report misses and false triggers in REVIEW.md.
+   - Phone (iOS Safari and/or Android Chrome, landscape): same, plus pose fps shown in the camera preview corner, and whether the GPU delegate crashes on iOS (WebKit bug 321693).
+   - Online: laptop creates a room, phone joins by code; play one round.
 
 ## Requests for user
-None yet. (Same as planner request 1 if the planner cannot change repo collaborators.)
+- Same as planner request 1 if the planner cannot change repo collaborators.

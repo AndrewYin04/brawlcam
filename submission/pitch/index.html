@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Throw Hands pitch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Inter:wght@400;600;800&display=swap" rel="stylesheet" />
+<style>
+  :root { --bg: #070912; --ink: #eef2ff; --muted: #9aa6c8; --p1: #ff3d6e; --p2: #33b5ff; --gold: #ffc53d; --good: #3dff9a; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font-family: Inter, system-ui, sans-serif; overflow: hidden; }
+  .deck { position: fixed; inset: 0; }
+  section { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; padding: 6vh 8vw; opacity: 0; pointer-events: none; transition: opacity .35s ease, transform .35s ease; transform: translateY(12px);
+    background: radial-gradient(ellipse at 70% 20%, rgba(255,61,110,.18), transparent 55%), radial-gradient(ellipse at 15% 85%, rgba(51,181,255,.14), transparent 55%), var(--bg); }
+  section.on { opacity: 1; pointer-events: auto; transform: none; }
+  h1 { font-family: Bungee, sans-serif; font-size: clamp(48px, 9vw, 150px); line-height: .95; margin: 0; letter-spacing: 2px; text-shadow: 0 0 40px rgba(255,61,110,.45); }
+  h1 span { color: var(--p1); }
+  h2 { font-family: Bungee, sans-serif; font-size: clamp(30px, 4.6vw, 70px); margin: 0 0 3vh; line-height: 1.05; }
+  p.lead { font-size: clamp(20px, 2.4vw, 38px); color: var(--muted); max-width: 70ch; margin: 2vh 0 0; }
+  ul.big { font-size: clamp(20px, 2.3vw, 36px); line-height: 1.5; margin: 0; padding-left: 1.1em; }
+  ul.big li::marker { color: var(--gold); }
+  .kicker { font: 800 clamp(14px, 1.3vw, 20px) Inter, sans-serif; letter-spacing: .3em; text-transform: uppercase; color: var(--gold); margin-bottom: 2vh; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 2.4vw; }
+  .card { background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.12); border-radius: 18px; padding: 2.4vh 1.6vw; }
+  .card b { display: block; font-size: clamp(20px, 2vw, 32px); margin-bottom: 1vh; }
+  .card span { color: var(--muted); font-size: clamp(15px, 1.4vw, 22px); line-height: 1.4; }
+  .stat { font-family: Bungee, sans-serif; font-size: clamp(36px, 5vw, 80px); color: var(--good); line-height: 1; }
+  .live { display: inline-block; background: var(--p1); color: #fff; font: 800 clamp(16px, 1.6vw, 24px) Inter; padding: .4em 1em; border-radius: 999px; letter-spacing: .2em; animation: pulse 1.2s infinite; }
+  @keyframes pulse { 50% { box-shadow: 0 0 0 16px rgba(255,61,110,0); } 0% { box-shadow: 0 0 0 0 rgba(255,61,110,.7); } }
+  .flow { display: flex; align-items: center; gap: 1.2vw; flex-wrap: wrap; font-size: clamp(16px, 1.7vw, 26px); }
+  .flow .n { background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.14); border-radius: 14px; padding: 1.4vh 1.2vw; }
+  .flow .a { color: var(--gold); font-weight: 800; }
+  .url { font-family: Bungee, sans-serif; font-size: clamp(30px, 5vw, 80px); color: var(--gold); }
+  .foot { position: fixed; bottom: 2vh; right: 3vw; color: var(--muted); font-size: 14px; z-index: 5; }
+  .muted { color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="deck">
+
+<section class="on">
+  <div class="kicker">HackTX 2026</div>
+  <h1>THROW<br /><span>HANDS</span></h1>
+  <p class="lead">A fighting game where your body is the controller. Real punches, real blocks, super moves, against friends anywhere, in a browser tab.</p>
+</section>
+
+<section>
+  <div class="kicker">The problem</div>
+  <h2>The best game nights are loud, physical, and together.</h2>
+  <ul class="big">
+    <li>Motion games need a console, an accessory, and everyone in one room.</li>
+    <li>Your friends are on other campuses, in other cities.</li>
+    <li>Everyone already has a webcam and a browser.</li>
+  </ul>
+</section>
+
+<section>
+  <span class="live">LIVE</span>
+  <h2 style="margin-top:3vh">Fight on stage</h2>
+  <ul class="big">
+    <li>Volunteer steps up, fists to chin: 3-second calibration.</li>
+    <li>Jab, block, X-shield, slow-motion super uppercut.</li>
+    <li>Then: a judge joins from their phone with a 4-letter code.</li>
+  </ul>
+  <p class="lead">throwhands.tech</p>
+</section>
+
+<section>
+  <div class="kicker">How it works</div>
+  <h2>Your body in, a fair fight out</h2>
+  <div class="flow">
+    <div class="n">Webcam</div><div class="a">→</div>
+    <div class="n">Pose model<br /><span class="muted">in your browser</span></div><div class="a">→</div>
+    <div class="n">Our gesture engine<br /><span class="muted">jab · hook · uppercut · block · X · palms</span></div><div class="a">→</div>
+    <div class="n">Server simulation<br /><span class="muted">Vultr · decides every hit</span></div><div class="a">→</div>
+    <div class="n">Friends anywhere<br /><span class="muted">laptop · phone · 8 per room</span></div>
+  </div>
+  <p class="lead">No video leaves your device. Only joint positions and actions travel.</p>
+</section>
+
+<section>
+  <div class="kicker">AI is the controller</div>
+  <h2>Four models, one game</h2>
+  <div class="grid">
+    <div class="card"><b>Pose tracking</b><span>MediaPipe in a web worker turns your body into 3D joints 20 to 30 times a second.</span></div>
+    <div class="card"><b>Fighter Forge</b><span>Meta Muse Spark writes your fighter; Muse Image paints the card; your suit takes its colors.</span></div>
+    <div class="card"><b>Live commentator</b><span>Gemini calls the fight every few seconds, spoken with Gemini TTS.</span></div>
+    <div class="card"><b>Rivalry card</b><span>After an online match, an AI card to send the friend you just beat. Rematch?</span></div>
+  </div>
+</section>
+
+<section>
+  <div class="kicker">Built and tested</div>
+  <h2>It works, and we measured it</h2>
+  <div class="grid">
+    <div class="card"><div class="stat" id="s-sync">0</div><span>state mismatches across 1,715 shared ticks when two pro fighters' footage played a full online match</span></div>
+    <div class="card"><div class="stat">6/6</div><span>jabs detected on our labeled jab clip at 30, 15, and 10 fps, zero false alarms</span></div>
+    <div class="card"><div class="stat">8</div><span>fighters per brawl, bots fill empty slots; winner-stays-on rooms for parties</span></div>
+    <div class="card"><div class="stat">13 s</div><span>from a typed idea to a forged fighter with card art</span></div>
+  </div>
+</section>
+
+<section>
+  <div class="kicker">Business</div>
+  <h2>Three ways it makes money</h2>
+  <div class="grid">
+    <div class="card"><b>Cosmetics</b><span>Skins, auras, and AI-forged fighters at $2 to $10, plus a $5/month season pass.</span></div>
+    <div class="card"><b>Ranked play</b><span>Elo matchmaking and seasons drive retention and pass sales.</span></div>
+    <div class="card"><b>Motion data</b><span>Opt-in, anonymized, game-labeled strike and block sequences for humanoid-robotics labs. Coordinates only, never video.</span></div>
+  </div>
+  <p class="lead">Fitness Boxing has sold 3M+ copies on Switch. No browser webcam fighter has real traction yet.</p>
+</section>
+
+<section>
+  <div class="kicker">Throw Hands</div>
+  <h2>Pull up a friend. Throw hands.</h2>
+  <div class="url">throwhands.tech</div>
+  <p class="lead">Built at HackTX 2026 with Claude Code · three.js · MediaPipe · Meta Muse · Gemini · Tiger Data · Vultr</p>
+</section>
+
+</div>
+<div class="foot"><span id="n">1</span> / <span id="t"></span> · ← → or click</div>
+<script>
+  const s = [...document.querySelectorAll('section')];
+  let i = 0;
+  document.getElementById('t').textContent = s.length;
+  function go(k) { i = Math.max(0, Math.min(s.length - 1, k)); s.forEach((x, j) => x.classList.toggle('on', j === i)); document.getElementById('n').textContent = i + 1; location.hash = i + 1; }
+  addEventListener('keydown', (e) => { if (['ArrowRight', 'PageDown', ' '].includes(e.key)) go(i + 1); if (['ArrowLeft', 'PageUp'].includes(e.key)) go(i - 1); });
+  addEventListener('click', (e) => go(e.clientX > innerWidth / 3 ? i + 1 : i - 1));
+  if (location.hash) go(Number(location.hash.slice(1)) - 1);
+</script>
+</body>
+</html>
