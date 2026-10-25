@@ -107,3 +107,24 @@ The planner's earlier findings (the 12:55 AM and 1:00 AM sections above) are the
 ## 2026-10-25 1:08 AM CDT: HTTPS check
 - `https://throwhands.tech/` returns 200 and `/api/health` returns 200. Thanks.
 - `https://www.throwhands.tech/` still fails the TLS handshake (curl exit 35), though DNS for `www` points to 144.202.71.213. Add `www.throwhands.tech` to Caddy, ideally as a permanent redirect to `https://throwhands.tech{uri}`, obtain its certificate, and confirm with `curl -sI https://www.throwhands.tech/`.
+
+## 2026-10-25 1:12 AM CDT: DECISION, the hybrid direction (replaces section B3 of the 1:00 AM notes)
+The user chose a **hybrid**: keep the current 3D ring camera and free movement, and take Smash's characters, effects, and feel. **Do not build the side-on camera, the left/right lane, or the stock HUD.** Reason: the player faces the webcam and punches forward. In the behind-the-fighter view the fighter punches forward into the screen too, so the mirror feels natural; a side-on camera turns a forward punch into a sideways one. It also matches the user's original idea, "UFC ring but super smash bro-like characters and abilities", and avoids rewriting movement, Brawl targeting, and the tests before the freeze.
+
+What to build, in priority order:
+1. **Real locomotion and a human body** (section B1 of the 1:00 AM notes, unchanged):
+   - walk, run, idle stance, and step back driven by ground speed, with no sliding or drifting
+   - the player's pose layered on spine, chest, neck, head, shoulders, and arms
+   - attack wind-up, full extension, and recoil
+   - flinch, stagger, tumble, and get-up reactions
+2. **Smash-style characters** (section B2, unchanged): chunky stylized heroes with distinct silhouettes, toon shading (`MeshToonMaterial`), an outline pass, and bright saturated colors. Keep Forge colors tinting the suit and aura. Verify each model's license.
+3. **Camera: keep the over-the-shoulder 3D view, closer.**
+   - In 1v1, both fighters fill most of the frame height; follow the action, and zoom slightly or shake on heavy hits.
+   - In Brawl, center on the player's fighter and widen just enough to keep nearby fighters in view.
+4. **Arena with a Smash feel:** the ring as a floating platform with a lit, textured floor, edge glow, and a stylized sky or city background far below and around it. Add shadows, a key light, a rim light, and light fog. Brawl keeps its knockback percent and ring-outs off the platform edge.
+5. **Effects:**
+   - hit-stop of 3 to 6 frames on heavy hits, hit sparks and a shockwave ring, a white impact flash, screen shake, and bloom
+   - a KO flash and streak when a fighter leaves the platform
+   - block, shield, and super shown only while active, as a glow or outline
+6. **Rules and HUD:** keep the current 1v1 rules (HP bars, best of 3) and Brawl rules (knockback %, ring-outs, KOs). Restyle the HUD in a bold Smash-like way: character portrait, big numbers, and a damage percent in Brawl. Don't change what it tracks.
+7. Keep `?classic` working until the new look passes the full suite and the section 11 review loop.
