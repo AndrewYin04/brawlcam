@@ -45,6 +45,26 @@ export class PoseTracker {
     });
   }
 
+  /** One-shot detection for offline tools (do not mix with start()). */
+  detect(bitmap: ImageBitmap, ts: number): Promise<PoseFrame> {
+    return new Promise((resolve, reject) => {
+      const prev = this.onFrame;
+      const prevErr = this.onError;
+      this.onFrame = (f) => {
+        this.onFrame = prev;
+        this.onError = prevErr;
+        resolve(f);
+      };
+      this.onError = (m) => {
+        this.onFrame = prev;
+        this.onError = prevErr;
+        reject(new Error(m));
+      };
+      this.busy = true;
+      this.worker.postMessage({ type: 'frame', bitmap, ts }, [bitmap]);
+    });
+  }
+
   setNumPoses(n: number) {
     this.worker.postMessage({ type: 'numPoses', numPoses: n });
   }
@@ -68,22 +88,78 @@ export class PoseTracker {
   start(video: HTMLVideoElement) {
     this.video = video;
     this.running = true;
+    const track = (video.srcObject as MediaStream | null)?.getVideoTracks?.()[0];
+    const MSTP = (globalThis as any).MediaStreamTrackProcessor;
+    if (track && MSTP && !new URLSearchParams(location.search).has('novideoframe')) {
+      this.startProcessor(new MSTP({ track }));
+      return;
+    }
+    // Timer-driven (not requestAnimationFrame), so pose rate is independent of render rate.
+    let lastVideoTime = -1;
     const tick = async () => {
       if (!this.running) return;
       const v = this.video!;
-      if (!this.busy && v.readyState >= 2 && v.videoWidth > 0) {
+      if (!this.busy && v.readyState >= 2 && v.videoWidth > 0 && v.currentTime !== lastVideoTime) {
+        lastVideoTime = v.currentTime;
         this.busy = true;
         try {
           const ts = performance.now();
-          const bitmap = await createImageBitmap(v);
+          const bitmap = await this.grab(v);
           this.worker.postMessage({ type: 'frame', bitmap, ts }, [bitmap]);
         } catch {
           this.busy = false;
         }
       }
-      requestAnimationFrame(tick);
+      setTimeout(tick, this.busy ? 4 : 8);
     };
-    requestAnimationFrame(tick);
+    tick();
+  }
+
+  /** Chrome: read VideoFrames directly from the camera track (independent of page rendering). */
+  private async startProcessor(proc: { readable: ReadableStream<VideoFrame> }) {
+    this.usingProcessor = true;
+    const reader = proc.readable.getReader();
+    while (this.running) {
+      const { done, value: frame } = await reader.read();
+      if (done || !frame) break;
+      if (this.busy) {
+        frame.close();
+        continue;
+      }
+      this.busy = true;
+      try {
+        const ts = performance.now();
+        const w = Math.min(480, frame.displayWidth);
+        const h = Math.round((frame.displayHeight * w) / frame.displayWidth);
+        const bitmap = await createImageBitmap(frame, { resizeWidth: w, resizeHeight: h });
+        this.worker.postMessage({ type: 'frame', bitmap, ts }, [bitmap]);
+      } catch {
+        this.busy = false;
+      } finally {
+        frame.close();
+      }
+    }
+    reader.releaseLock();
+  }
+
+  usingProcessor = false;
+  private canvas: HTMLCanvasElement | null = null;
+  private ctx2d: CanvasRenderingContext2D | null = null;
+  /** CPU-side frame grab (480 px wide max), so capture never waits on a busy GPU process. */
+  private async grab(v: HTMLVideoElement): Promise<ImageBitmap> {
+    const scale = Math.min(1, 480 / v.videoWidth);
+    const w = Math.round(v.videoWidth * scale);
+    const h = Math.round(v.videoHeight * scale);
+    if (!this.canvas) {
+      this.canvas = document.createElement('canvas');
+      this.ctx2d = this.canvas.getContext('2d', { willReadFrequently: true });
+    }
+    if (this.canvas.width !== w || this.canvas.height !== h) {
+      this.canvas.width = w;
+      this.canvas.height = h;
+    }
+    this.ctx2d!.drawImage(v, 0, 0, w, h);
+    return createImageBitmap(this.canvas);
   }
 
   stop() {

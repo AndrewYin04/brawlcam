@@ -1,0 +1,423 @@
+// Rule-based gesture recognition from MediaPipe pose landmarks.
+// Pure TypeScript so it runs in the browser and in Node (offline tuning against labeled clips).
+import { mpWorldToAvatar, J, MP_INDEX, type Joints, type V3 } from './joints';
+import { VecFilter } from './filter';
+import type { Action, ActionKind, Hand } from './sim';
+
+export type LM = [number, number, number, number];
+
+export interface PersonFrame {
+  t: number; // seconds
+  world: LM[]; // 33 MediaPipe world landmarks
+  image: LM[]; // 33 normalized image landmarks
+}
+
+export interface Calibration {
+  shoulderW: number; // meters (world)
+  armLen: number; // meters (world), shoulder->elbow->wrist
+  imgShoulderW: number; // normalized image units
+  imgCenterX: number;
+}
+
+export const DEFAULT_CALIB: Calibration = { shoulderW: 0.34, armLen: 0.52, imgShoulderW: 0.22, imgCenterX: 0.5 };
+
+export const GESTURE_CFG = {
+  window: 0.1, // s, velocity window
+  strokeWindow: 0.2, // s, look-back for stroke direction
+  // jab / straight
+  extRate: 1.5, // arm extension (fraction of arm length) per second
+  extMin: 0.6, // extension reached to count
+  elbowOpenMin: 110, // deg, elbow angle reached
+  jabMinSpeed: 1.2, // m/s wrist speed relative to shoulders
+  // hook
+  hookVel: 1.7, // m/s lateral wrist velocity toward the midline
+  hookElbowMax: 150,
+  // uppercut
+  upVel: 1.7, // m/s upward wrist velocity
+  upStartBelow: 0.12, // wrist must start this far below shoulder line (m)
+  // shared
+  handRefractory: 0.32, // s between strikes of the same hand
+  palmPairWindow: 0.12, // s for both hands to extend together
+  palmMaxGap: 1.2, // wrists within this many shoulder widths
+  // block
+  blockHold: 0.1,
+  blockRelease: 0.18,
+  blockAboveNose: -0.06, // wrist y at least nose y + this (m)
+  blockMaxFromMid: 0.75, // |wrist.x - mid.x| < this * shoulderW
+  // X shield
+  xHold: 0.18,
+  xRelease: 0.2,
+  // kicks
+  legVis: 0.6,
+  kneeUpVel: 1.4,
+  kneeHighAboveHip: -0.22, // knee y > hip y + this
+  ankleKickVel: 2.6,
+  kickRefractory: 0.6,
+  // movement
+  leanDead: 0.035, // m
+  leanFull: 0.1,
+  stepDead: 0.08, // fraction of calibrated shoulder width in image
+  stepFull: 0.2,
+  turnOn: 0.6, // rad torso yaw to switch target
+  turnOff: 0.25,
+  turnHold: 0.25,
+  // presence
+  minShoulderVis: 0.5,
+};
+
+export interface GestureOutput {
+  present: boolean;
+  actions: (Action & { t: number })[];
+  blocking: boolean;
+  xshield: boolean;
+  move: [number, number];
+  turn: number;
+  legs: boolean;
+  joints: Joints | null; // smoothed avatar-space joints for rendering
+  calibrating?: { progress: number; guidance: string | null; done: boolean };
+  debug?: Record<string, number>;
+}
+
+interface Hist {
+  t: number;
+  p: V3[]; // avatar-space joints (lightly filtered)
+}
+
+function sub(a: V3, b: V3): V3 {
+  return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+}
+function len(a: V3) {
+  return Math.hypot(a[0], a[1], a[2]);
+}
+function mid(a: V3, b: V3): V3 {
+  return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2];
+}
+function angleDeg(a: V3, b: V3) {
+  const d = (a[0] * b[0] + a[1] * b[1] + a[2] * b[2]) / ((len(a) || 1) * (len(b) || 1));
+  return (Math.acos(Math.max(-1, Math.min(1, d))) * 180) / Math.PI;
+}
+
+export class GestureRecognizer {
+  cfg = { ...GESTURE_CFG };
+  calib: Calibration = { ...DEFAULT_CALIB };
+  calibrated = false;
+  private hist: Hist[] = [];
+  private renderFilter = new VecFilter(15 * 3, 1.2, 0.6);
+  private gestFilter = new VecFilter(15 * 3, 6, 0.8);
+  private lastStrike: Record<string, number> = { L: -9, R: -9, kickL: -9, kickR: -9 };
+  private pending: { hand: 'L' | 'R'; a: Action; t: number } | null = null;
+  private blockOnAt = -1;
+  private blockOffAt = -1;
+  private blocking = false;
+  private xOnAt = -1;
+  private xOffAt = -1;
+  private xshield = false;
+  private turnSince = -1;
+  private turnLatched = 0;
+  private lastSeen = -9;
+  private calibFrames: { sw: number; arm: number; isw: number; cx: number }[] = [];
+  private calibStart = -1;
+  private standingAnkleY: [number, number] | null = null;
+
+  /** Start (or restart) the 3-second guard calibration. */
+  beginCalibration() {
+    this.calibrated = false;
+    this.calibFrames = [];
+    this.calibStart = -1;
+  }
+
+  skipCalibration(c?: Partial<Calibration>) {
+    this.calib = { ...this.calib, ...c };
+    this.calibrated = true;
+  }
+
+  reset() {
+    this.hist = [];
+    this.renderFilter.reset();
+    this.gestFilter.reset();
+    this.pending = null;
+    this.blocking = false;
+    this.xshield = false;
+  }
+
+  update(frame: PersonFrame | null, now: number): GestureOutput {
+    const out: GestureOutput = { present: false, actions: [], blocking: false, xshield: false, move: [0, 0], turn: 0, legs: false, joints: null };
+    if (!frame || frame.world.length < 33) {
+      if (now - this.lastSeen > 0.4) this.reset();
+      this.flushPending(now, out, true);
+      return out;
+    }
+    const shVis = Math.min(frame.world[11][3], frame.world[12][3]);
+    if (shVis < this.cfg.minShoulderVis) {
+      this.flushPending(now, out, true);
+      return out;
+    }
+    this.lastSeen = now;
+    out.present = true;
+    const t = frame.t;
+
+    // Avatar-space joints
+    const raw: number[] = [];
+    for (const idx of MP_INDEX) {
+      const w = frame.world[idx];
+      const v = mpWorldToAvatar(w[0], w[1], w[2]);
+      raw.push(v[0], v[1], v[2]);
+    }
+    const g = this.gestFilter.filter(raw, t);
+    const r = this.renderFilter.filter(raw, t);
+    const P: V3[] = [];
+    const R: V3[] = [];
+    for (let i = 0; i < 15; i++) {
+      P.push([g[i * 3], g[i * 3 + 1], g[i * 3 + 2]]);
+      R.push([r[i * 3], r[i * 3 + 1], r[i * 3 + 2]]);
+    }
+    const legVis = Math.min(frame.world[25][3], frame.world[26][3], frame.world[27][3], frame.world[28][3]);
+    const ankInFrame = frame.image[27][1] < 0.98 && frame.image[28][1] < 0.98;
+    out.legs = legVis > this.cfg.legVis && ankInFrame;
+    out.joints = { p: R, legs: out.legs };
+
+    this.hist.push({ t, p: P });
+    while (this.hist.length && t - this.hist[0].t > 0.6) this.hist.shift();
+
+    const lS = P[J.lSh];
+    const rS = P[J.rSh];
+    const MS = mid(lS, rS);
+    const SW = Math.max(0.15, len(sub(lS, rS)));
+    const nose = P[J.nose];
+    const imgSW = Math.hypot(frame.image[11][0] - frame.image[12][0], frame.image[11][1] - frame.image[12][1]);
+    const imgCX = (frame.image[11][0] + frame.image[12][0]) / 2;
+
+    // ---- calibration ----
+    if (!this.calibrated) {
+      out.calibrating = this.calibrationStep(P, t, imgSW, imgCX, frame);
+      return out;
+    }
+
+    // ---- per-hand strikes ----
+    const past = this.at(t - this.cfg.window);
+    const strokeStart = this.at(t - this.cfg.strokeWindow);
+    const handInfo = (['L', 'R'] as const).map((h) => {
+      const S = h === 'L' ? lS : rS;
+      const E = h === 'L' ? P[J.lEl] : P[J.rEl];
+      const W = h === 'L' ? P[J.lWr] : P[J.rWr];
+      const elbow = angleDeg(sub(S, E), sub(W, E));
+      const ext = len(sub(W, S)) / this.calib.armLen;
+      let v: V3 = [0, 0, 0];
+      let extRate = 0;
+      let speed = 0;
+      let stroke: V3 = [0, 0, 0];
+      let startY = W[1] - MS[1];
+      if (past) {
+        const pS = h === 'L' ? past.p[J.lSh] : past.p[J.rSh];
+        const pW = h === 'L' ? past.p[J.lWr] : past.p[J.rWr];
+        const pMS = mid(past.p[J.lSh], past.p[J.rSh]);
+        const dt = Math.max(1e-3, t - past.t);
+        const rel = sub(W, MS);
+        const prel = sub(pW, pMS);
+        v = [(rel[0] - prel[0]) / dt, (rel[1] - prel[1]) / dt, (rel[2] - prel[2]) / dt];
+        speed = len(v);
+        extRate = (ext - len(sub(pW, pS)) / this.calib.armLen) / dt;
+      }
+      if (strokeStart) {
+        const sW = h === 'L' ? strokeStart.p[J.lWr] : strokeStart.p[J.rWr];
+        const sMS = mid(strokeStart.p[J.lSh], strokeStart.p[J.rSh]);
+        stroke = sub(sub(W, MS), sub(sW, sMS));
+        startY = sW[1] - sMS[1];
+      }
+      return { h, S, E, W, elbow, ext, v, speed, extRate, stroke, startY };
+    });
+
+    const candidates: { hand: 'L' | 'R'; kind: ActionKind; score: number; speed: number }[] = [];
+    for (const hi of handInfo) {
+      if (t - this.lastStrike[hi.h] < this.cfg.handRefractory) continue;
+      const side = hi.h === 'L' ? 1 : -1; // +X is the person's left
+      const relX = hi.W[0] - MS[0];
+      // Uppercut: fast upward drive from below the shoulder line.
+      if (hi.v[1] > this.cfg.upVel && hi.startY < -this.cfg.upStartBelow && hi.elbow < 150 && hi.stroke[1] > 0.1) {
+        candidates.push({ hand: hi.h, kind: 'uppercut', score: hi.v[1] / this.cfg.upVel, speed: hi.speed });
+      }
+      // Hook: fast lateral swing toward (or across) the midline at about shoulder height.
+      const towardMid = -side * hi.v[0];
+      if (towardMid > this.cfg.hookVel && hi.elbow < this.cfg.hookElbowMax && hi.W[1] > MS[1] - 0.3 && Math.abs(hi.stroke[0]) > 0.08 && -side * hi.stroke[0] > 0) {
+        candidates.push({ hand: hi.h, kind: 'hook', score: towardMid / this.cfg.hookVel, speed: hi.speed });
+      }
+      // Jab / straight: the arm extends quickly.
+      if (hi.extRate > this.cfg.extRate && hi.ext > this.cfg.extMin && hi.elbow > this.cfg.elbowOpenMin && hi.speed > this.cfg.jabMinSpeed) {
+        candidates.push({ hand: hi.h, kind: 'jab', score: hi.extRate / this.cfg.extRate, speed: hi.speed });
+      }
+      void relX;
+    }
+    // Strongest candidate per hand.
+    const byHand = new Map<string, (typeof candidates)[number]>();
+    for (const c of candidates) {
+      const cur = byHand.get(c.hand);
+      if (!cur || c.score > cur.score) byHand.set(c.hand, c);
+    }
+    const lW = P[J.lWr];
+    const rW = P[J.rWr];
+    const wristsGap = len(sub(lW, rW)) / SW;
+    for (const c of byHand.values()) {
+      this.lastStrike[c.hand] = t;
+      const a: Action = { kind: c.kind, hand: c.hand, speed: c.speed };
+      if (c.kind === 'jab') {
+        // Possible palm push: both hands extend together with wrists close.
+        if (this.pending && this.pending.hand !== c.hand && t - this.pending.t <= this.cfg.palmPairWindow && wristsGap < this.cfg.palmMaxGap) {
+          out.actions.push({ kind: 'palm', hand: 'B', speed: Math.max(c.speed, this.pending.a.speed), t });
+          this.pending = null;
+          continue;
+        }
+        const other = handInfo.find((h) => h.h !== c.hand)!;
+        if (wristsGap < this.cfg.palmMaxGap && other.extRate > this.cfg.extRate * 0.4) {
+          this.pending = { hand: c.hand, a, t };
+          continue;
+        }
+      }
+      out.actions.push({ ...a, t });
+    }
+    this.flushPending(t, out, false);
+
+    // ---- block and X shield ----
+    const crossed = lW[0] < rW[0] - 0.02 && P[J.lEl][0] > P[J.rEl][0] && lW[1] > MS[1] - 0.3 && rW[1] > MS[1] - 0.3;
+    const handsSlow = handInfo.every((h) => h.speed < 2.2);
+    const blockPose =
+      !crossed &&
+      handsSlow &&
+      handInfo.every((h) => h.W[1] > nose[1] + this.cfg.blockAboveNose && Math.abs(h.W[0] - MS[0]) < this.cfg.blockMaxFromMid * SW && h.E[1] < h.W[1]);
+    [this.blocking, this.blockOnAt, this.blockOffAt] = hysteresis(blockPose, this.blocking, t, this.blockOnAt, this.blockOffAt, this.cfg.blockHold, this.cfg.blockRelease);
+    const wasX = this.xshield;
+    [this.xshield, this.xOnAt, this.xOffAt] = hysteresis(crossed && handsSlow, this.xshield, t, this.xOnAt, this.xOffAt, this.cfg.xHold, this.cfg.xRelease);
+    if (this.xshield && !wasX) out.actions.push({ kind: 'xshield', hand: 'B', speed: 0, t });
+    out.blocking = this.blocking;
+    out.xshield = this.xshield;
+
+    // ---- kicks ----
+    if (out.legs) {
+      const lHip = P[J.lHip];
+      const rHip = P[J.rHip];
+      const midHip = mid(lHip, rHip);
+      if (!this.standingAnkleY) this.standingAnkleY = [P[J.lAnk][1], P[J.rAnk][1]];
+      else {
+        this.standingAnkleY[0] = Math.min(this.standingAnkleY[0] * 0.995 + P[J.lAnk][1] * 0.005, this.standingAnkleY[0] + 0.001);
+        this.standingAnkleY[1] = Math.min(this.standingAnkleY[1] * 0.995 + P[J.rAnk][1] * 0.005, this.standingAnkleY[1] + 0.001);
+      }
+      if (past) {
+        const dt = Math.max(1e-3, t - past.t);
+        for (const [leg, kneeI, ankI, k] of [
+          ['L', J.lKnee, J.lAnk, 0],
+          ['R', J.rKnee, J.rAnk, 1],
+        ] as const) {
+          const key = 'kick' + leg;
+          if (t - this.lastStrike[key] < this.cfg.kickRefractory) continue;
+          const knee = P[kneeI];
+          const ank = P[ankI];
+          const kneeV = (knee[1] - past.p[kneeI][1]) / dt;
+          const ankV = len(sub(ank, past.p[ankI])) / dt;
+          const kneeHigh = knee[1] > midHip[1] + this.cfg.kneeHighAboveHip;
+          const ankleUp = ank[1] - this.standingAnkleY[k] > 0.3;
+          if ((kneeHigh && kneeV > this.cfg.kneeUpVel) || (ankleUp && ankV > this.cfg.ankleKickVel)) {
+            this.lastStrike[key] = t;
+            out.actions.push({ kind: 'kick', hand: leg as Hand, speed: Math.max(ankV, kneeV), t });
+          }
+        }
+      }
+    }
+
+    // ---- movement ----
+    const midHip = mid(P[J.lHip], P[J.rHip]);
+    const lean = MS[0] - midHip[0]; // + = leaning to the person's left
+    const strafe = deadzone(lean, this.cfg.leanDead, this.cfg.leanFull);
+    const ratio = imgSW / this.calib.imgShoulderW - 1;
+    const fwd = deadzone(ratio, this.cfg.stepDead, this.cfg.stepFull);
+    // While striking or blocking, ignore movement noise from the torso.
+    const busy = out.actions.length > 0 || this.blocking;
+    out.move = busy ? [0, 0] : [strafe, fwd];
+
+    // ---- torso turn (target switching) ----
+    const yaw = Math.atan2(-(lS[2] - rS[2]), lS[0] - rS[0]);
+    if (this.turnLatched === 0) {
+      if (Math.abs(yaw) > this.cfg.turnOn) {
+        if (this.turnSince < 0) this.turnSince = t;
+        if (t - this.turnSince > this.cfg.turnHold) {
+          this.turnLatched = Math.sign(yaw);
+          out.turn = this.turnLatched;
+        }
+      } else this.turnSince = -1;
+    } else if (Math.abs(yaw) < this.cfg.turnOff) {
+      this.turnLatched = 0;
+      this.turnSince = -1;
+    }
+
+    out.debug = { yaw, lean, ratio, lExt: handInfo[0].ext, rExt: handInfo[1].ext, lEl: handInfo[0].elbow, rEl: handInfo[1].elbow, lSp: handInfo[0].speed, rSp: handInfo[1].speed };
+    return out;
+  }
+
+  private flushPending(t: number, out: GestureOutput, force: boolean) {
+    if (this.pending && (force || t - this.pending.t > this.cfg.palmPairWindow)) {
+      out.actions.push({ ...this.pending.a, t: this.pending.t });
+      this.pending = null;
+    }
+  }
+
+  private at(t: number): Hist | null {
+    // Most recent history entry at or before t.
+    for (let i = this.hist.length - 1; i >= 0; i--) if (this.hist[i].t <= t) return this.hist[i];
+    return this.hist.length > 1 ? this.hist[0] : null;
+  }
+
+  private calibrationStep(P: V3[], t: number, imgSW: number, imgCX: number, frame: PersonFrame) {
+    let guidance: string | null = null;
+    const noseVis = frame.image[0][3] > 0.5 && frame.image[0][1] > 0.02;
+    if (imgSW > 0.42) guidance = 'Step back: too close to the camera';
+    else if (imgSW < 0.1) guidance = 'Step closer to the camera';
+    else if (!noseVis) guidance = 'Keep your head in the frame';
+    else if (imgCX < 0.2 || imgCX > 0.8) guidance = 'Move to the center of the frame';
+    const lS = P[J.lSh];
+    const rS = P[J.rSh];
+    const MS = mid(lS, rS);
+    const lW = P[J.lWr];
+    const rW = P[J.rWr];
+    const guard = lW[1] > MS[1] - 0.25 && rW[1] > MS[1] - 0.25 && lW[1] < MS[1] + 0.4 && rW[1] < MS[1] + 0.4;
+    if (!guard && !guidance) guidance = 'Raise both fists to your chin';
+    if (guidance) {
+      // Allow short glitches without restarting.
+      if (this.calibStart >= 0 && t - this.calibStart > 0 && this.calibFrames.length) {
+        this.calibFrames.pop();
+      }
+      if (this.calibFrames.length === 0) this.calibStart = -1;
+      return { progress: this.calibFrames.length ? Math.min(1, (t - this.calibStart) / 3) : 0, guidance, done: false };
+    }
+    if (this.calibStart < 0) this.calibStart = t;
+    const arm = (len(sub(lS, P[J.lEl])) + len(sub(P[J.lEl], lW)) + len(sub(rS, P[J.rEl])) + len(sub(P[J.rEl], rW))) / 2;
+    this.calibFrames.push({ sw: len(sub(lS, rS)), arm, isw: imgSW, cx: imgCX });
+    const progress = Math.min(1, (t - this.calibStart) / 3);
+    if (progress >= 1 && this.calibFrames.length >= 10) {
+      const med = (k: 'sw' | 'arm' | 'isw' | 'cx') => {
+        const a = this.calibFrames.map((f) => f[k]).sort((x, y) => x - y);
+        return a[Math.floor(a.length / 2)];
+      };
+      this.calib = { shoulderW: med('sw'), armLen: Math.max(0.4, med('arm')), imgShoulderW: med('isw'), imgCenterX: med('cx') };
+      this.calibrated = true;
+      return { progress: 1, guidance: null, done: true };
+    }
+    return { progress, guidance: null, done: false };
+  }
+}
+
+function deadzone(v: number, dead: number, full: number) {
+  const a = Math.abs(v);
+  if (a < dead) return 0;
+  return Math.sign(v) * Math.min(1, (a - dead) / (full - dead));
+}
+
+function hysteresis(cond: boolean, state: boolean, t: number, onAt: number, offAt: number, hold: number, release: number): [boolean, number, number] {
+  if (cond) {
+    offAt = -1;
+    if (onAt < 0) onAt = t;
+    if (!state && t - onAt >= hold) state = true;
+  } else {
+    onAt = -1;
+    if (offAt < 0) offAt = t;
+    if (state && t - offAt >= release) state = false;
+  }
+  return [state, onAt, offAt];
+}

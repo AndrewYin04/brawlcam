@@ -12,6 +12,7 @@ export default defineConfig({
       input: {
         main: resolve(__dirname, 'index.html'),
         spike: resolve(__dirname, 'spike.html'),
+        dump: resolve(__dirname, 'dump.html'),
       },
     },
   },

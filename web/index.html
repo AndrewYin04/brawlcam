@@ -1,3 +1,154 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>Brawlcam</title></head>
-<body style="background:#0b0d12;color:#fff;font-family:system-ui"><h1>Brawlcam</h1><p>Game coming soon. <a style="color:#6cf" href="/spike.html">Pose check</a></p><script type="module" src="/src/main.ts"></script></body></html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#070912" />
+<title>Brawlcam</title>
+<meta name="description" content="A browser fighting game where your body is the controller. Punch, block, and throw super moves with your webcam." />
+<link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="fx-layer"></div>
+
+<!-- Loading -->
+<section id="screen-loading" class="screen active">
+  <div class="center-card">
+    <h1 class="logo">BRAWL<span>CAM</span></h1>
+    <p class="muted" id="load-text">Loading fighters…</p>
+    <div class="progress"><div id="load-bar"></div></div>
+  </div>
+</section>
+
+<!-- Menu -->
+<section id="screen-menu" class="screen">
+  <div class="menu">
+    <h1 class="logo big">BRAWL<span>CAM</span></h1>
+    <p class="tagline">Your body is the controller. Real punches. Real blocks. Super moves.</p>
+    <label class="nick">Fighter name <input id="nickname" maxlength="16" autocomplete="off" placeholder="Your name" /></label>
+    <div class="menu-grid">
+      <button class="btn primary" data-action="practice">🥊 Practice vs Bot</button>
+      <button class="btn primary" data-action="local2p">👥 2 Players, 1 Camera</button>
+      <button class="btn" data-action="online-create">🌐 Fight a Friend Online</button>
+      <button class="btn" data-action="online-join">🔑 Join with Code</button>
+      <button class="btn" data-action="brawl">💥 Brawl (up to 8)</button>
+      <button class="btn" data-action="forge">🔥 Fighter Forge</button>
+      <button class="btn ghost" data-action="leaderboard">🏆 Leaderboard</button>
+      <button class="btn ghost" data-action="store">🛒 Store</button>
+    </div>
+    <div class="howto">
+      <div><b>Punch</b> jab, hook, or uppercut for real</div>
+      <div><b>Block</b> forearms up in front of your face</div>
+      <div><b>Shield</b> cross arms in an X (meter full)</div>
+      <div><b>Uppercut super</b> drive a fist up (meter full)</div>
+      <div><b>Energy blast</b> push both palms forward (meter full)</div>
+      <div><b>Move</b> lean left/right, step toward/away</div>
+    </div>
+    <p class="fineprint">No video ever leaves your device. Pose tracking runs in your browser.</p>
+  </div>
+</section>
+
+<!-- Camera problems -->
+<section id="screen-camera" class="screen">
+  <div class="center-card">
+    <h2 id="cam-title">Camera needed</h2>
+    <p id="cam-msg" class="muted"></p>
+    <div class="row">
+      <button class="btn primary" id="cam-retry">Try again</button>
+      <button class="btn" id="cam-demo">Play demo mode (no camera)</button>
+      <button class="btn ghost" data-action="menu">Menu</button>
+    </div>
+  </div>
+</section>
+
+<!-- Join by code -->
+<section id="screen-join" class="screen">
+  <div class="center-card">
+    <h2>Join a room</h2>
+    <p class="muted">Enter the 4-letter code your friend sees.</p>
+    <input id="join-code" class="code-input" maxlength="4" autocomplete="off" autocapitalize="characters" placeholder="ABCD" />
+    <p id="join-error" class="error"></p>
+    <div class="row"><button class="btn primary" id="join-go">Join</button><button class="btn ghost" data-action="menu">Back</button></div>
+  </div>
+</section>
+
+<!-- Lobby (online rooms) -->
+<section id="screen-lobby" class="screen">
+  <div class="center-card wide">
+    <h2>Room <span id="lobby-code" class="code"></span></h2>
+    <p class="muted">Share this link or code with a friend: <a id="lobby-link" href="#"></a></p>
+    <div class="row"><button class="btn" id="lobby-share">Share link</button><button class="btn ghost" id="lobby-copy">Copy link</button></div>
+    <div id="lobby-mode" class="row host-only">
+      <label><input type="radio" name="mode" value="duel" checked /> 1v1 duel</label>
+      <label><input type="radio" name="mode" value="brawl" /> Brawl (bots fill to 6)</label>
+      <label><input type="radio" name="mode" value="wso" /> Winner stays on</label>
+    </div>
+    <ul id="lobby-roster" class="roster"></ul>
+    <p id="lobby-status" class="muted"></p>
+    <div class="row"><button class="btn primary host-only" id="lobby-start">Start fight</button><button class="btn ghost" id="lobby-leave">Leave</button></div>
+  </div>
+</section>
+
+<!-- Calibration overlay -->
+<div id="calib" class="overlay hidden">
+  <div class="calib-card">
+    <div class="calib-ring"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="44" class="bg" /><circle cx="50" cy="50" r="44" id="calib-arc" class="fg" /></svg><div class="calib-icon">🥊</div></div>
+    <h2 id="calib-title">Get in your guard</h2>
+    <p id="calib-msg">Stand back so your upper body is visible, and raise both fists to your chin.</p>
+    <button class="btn ghost small" id="calib-skip">Skip</button>
+  </div>
+</div>
+
+<!-- HUD -->
+<div id="hud" class="hidden">
+  <div class="bars">
+    <div class="side left">
+      <div class="name" id="p1-name">P1</div>
+      <div class="hp"><div class="hp-fill" id="p1-hp"></div><div class="hp-lag" id="p1-hp-lag"></div></div>
+      <div class="meter"><div class="meter-fill" id="p1-meter"></div><span class="meter-label" id="p1-meter-label">SUPER</span></div>
+      <div class="pips" id="p1-pips"></div>
+    </div>
+    <div class="clock"><div id="timer">60</div><div id="round-label">ROUND 1</div></div>
+    <div class="side right">
+      <div class="name" id="p2-name">P2</div>
+      <div class="hp"><div class="hp-fill" id="p2-hp"></div><div class="hp-lag" id="p2-hp-lag"></div></div>
+      <div class="meter"><div class="meter-fill" id="p2-meter"></div><span class="meter-label" id="p2-meter-label">SUPER</span></div>
+      <div class="pips" id="p2-pips"></div>
+    </div>
+  </div>
+  <div id="brawl-board" class="hidden"></div>
+  <div id="kofeed"></div>
+  <div id="banner"></div>
+  <div id="hint"></div>
+  <div id="commentary"></div>
+  <div id="cheers"></div>
+  <div id="preview-wrap"><video id="cam" playsinline muted autoplay></video><canvas id="skeleton"></canvas><div id="pose-fps"></div></div>
+  <div class="hud-buttons">
+    <button class="btn ghost small" id="btn-mute" title="Mute commentator">🔊</button>
+    <button class="btn ghost small" id="btn-quit">Quit</button>
+  </div>
+</div>
+
+<!-- Results -->
+<section id="screen-results" class="screen overlay-screen">
+  <div class="center-card">
+    <h1 id="res-title" class="ko-title">K.O.!</h1>
+    <p id="res-sub" class="muted"></p>
+    <div id="res-stats" class="stats"></div>
+    <div id="res-card" class="hidden"></div>
+    <div class="row">
+      <button class="btn primary" id="res-rematch">Rematch</button>
+      <button class="btn hidden" id="res-share">Share rivalry card</button>
+      <button class="btn ghost" data-action="menu">Menu</button>
+    </div>
+  </div>
+</section>
+
+<!-- Generic pages (Forge, Store, Leaderboard) are rendered into this panel -->
+<section id="screen-page" class="screen"><div class="page" id="page"></div></section>
+
+<div id="toast"></div>
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>
