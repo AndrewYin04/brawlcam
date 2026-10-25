@@ -1,6 +1,7 @@
 // App controller: screens, camera, calibration, game loop.
 import { Arena } from './game/arena';
 import { MatchView, USE_HEROES } from './game/view';
+import { preloadCalls } from './game/announcer';
 import { preloadHeroes } from './game/hero';
 import { preloadModel, FighterAvatar } from './game/avatar';
 import { LocalSession, FIGHTER_COLORS, type Session } from './game/session';
@@ -151,6 +152,9 @@ async function boot() {
     hooks.errors.push('boot: ' + e);
     return;
   }
+  // Sounds only after the fighters and the pose model: on a slow link they would otherwise share it with them.
+  sfx.preloadCrowd();
+  void preloadCalls();
   if (params.has('record')) {
     // Demo-video recording: no live loop; frames are stepped by the recorder.
     await (await import('./record')).initRecord();

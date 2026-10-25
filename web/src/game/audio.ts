@@ -270,7 +270,10 @@ let crowdBed: { src: AudioBufferSourceNode; gain: GainNode } | null = null;
 let chantNode: { src: AudioBufferSourceNode; gain: GainNode } | null = null;
 let duckGain: GainNode | null = null;
 const CROWD = (id: string) => `/crowd/${id}.mp3`;
-for (const id of ['bed', 'roar_0', 'roar_1', 'roar_2', 'ooh_0', 'ooh_1', 'gasp_0', 'chant_0']) void loadBuffer(CROWD(id));
+/** Fetch and decode the crowd recordings (~0.5 MB). Started by boot() after the critical downloads (see preloadCalls). */
+export function preloadCrowd() {
+  for (const id of ['bed', 'roar_0', 'roar_1', 'roar_2', 'ooh_0', 'ooh_1', 'gasp_0', 'chant_0']) void loadBuffer(CROWD(id));
+}
 function duckBus() {
   if (!ctx || !buses()) return null;
   if (!duckGain) {

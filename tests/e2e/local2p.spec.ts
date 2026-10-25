@@ -25,6 +25,33 @@ test('full local 2-player match: both people control their own fighter', async (
   await b.close();
 });
 
+// SPEC P0: the left person controls fighter 1 whoever the camera finds first. Under load the first pose frame can
+// hold only the right-hand person (seen 2026-10-25: they took player 1 for the whole match).
+test('the right-hand person found first still gets player 2; the left person is player 1', async () => {
+  test.setTimeout(120_000);
+  const b = await chromium.launch({ args: GL_ARGS });
+  const { page, consoleErrors } = await openPage(b, `/?mode=local2p&skipcal&${TQ}`, {}, async (ctx) => {
+    await injectCamera(ctx, 'jab_01|shadow_fighterF');
+    // From the first camera frame: only the raw-image LEFT half (the person on the RIGHT of the mirrored preview).
+    await ctx.addInitScript({ content: 'window.__cam.mask("right");' });
+  });
+  await waitScreen(page, 'game');
+  await page.waitForFunction(() => { const f = (window as any).__brawl.snapshot?.f; return f && f[1].pr === 1; }, null, { timeout: 30_000 });
+  let h = await hooks(page);
+  expect(h.snapshot.f[0].pr).toBe(0);
+  // The left person steps in.
+  await page.evaluate(() => (window as any).__cam.mask(null));
+  await page.waitForFunction(() => (window as any).__brawl.snapshot.f.every((f: any) => f.pr === 1), null, { timeout: 15_000 });
+  await page.waitForTimeout(3000);
+  // The left person leaves again: player 1 is the one not in frame.
+  await page.evaluate(() => (window as any).__cam.mask('right'));
+  await page.waitForFunction(() => { const f = (window as any).__brawl.snapshot.f; return f[0].pr === 0 && f[1].pr === 1; }, null, { timeout: 15_000 });
+  h = await hooks(page);
+  expect(realErrors(consoleErrors)).toEqual([]);
+  expect(h.errors).toEqual([]);
+  await b.close();
+});
+
 test('one player leaves the frame mid-round: their fighter idles, no crash; both leave', async () => {
   test.setTimeout(120_000);
   const { b, page, consoleErrors } = await start();

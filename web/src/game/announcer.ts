@@ -5,14 +5,22 @@ import * as sfx from './audio';
 
 type CallMap = Record<string, { id: string; text: string }[]>;
 let calls: CallMap | null = null;
-const loading = fetch('/calls/calls.json')
-  .then((r) => (r.ok ? r.json() : null))
-  .then((j) => {
-    calls = j?.calls ?? null;
-    if (calls) for (const list of Object.values(calls)) for (const c of list) void sfx.loadBuffer(`/calls/${c.id}.mp3`);
-  })
-  .catch(() => null);
-void loading;
+let loading: Promise<void> | null = null;
+/**
+ * Fetch the call list and decode every call (~1.6 MB). Started by boot() once the fighters and the pose model have
+ * downloaded: fetched at import time, these ~70 files shared a slow link with the models and held the loading bar
+ * at 0% for the first 30+ s on Slow 3G.
+ */
+export function preloadCalls(): Promise<void> {
+  loading ??= fetch('/calls/calls.json')
+    .then((r) => (r.ok ? r.json() : null))
+    .then((j) => {
+      calls = j?.calls ?? null;
+      if (calls) for (const list of Object.values(calls)) for (const c of list) void sfx.loadBuffer(`/calls/${c.id}.mp3`);
+    })
+    .catch(() => {});
+  return loading;
+}
 
 const ALWAYS = new Set(['round1', 'round2', 'round3', 'fight', 'ko', 'match_over', 'draw', 'time']);
 // Big moments need only 1 s since the last call (they shouldn't be swallowed by a round-start call).
