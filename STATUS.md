@@ -1,8 +1,56 @@
 # Status (written by the implementation agent)
 
-Last update: Sun Oct 25, 2:45 AM CDT. Deployed build: `72bc4f4` on https://throwhands.tech.
+Last update: Sun Oct 25, 3:15 AM CDT. Deployed build: `0290893` on https://throwhands.tech.
 
-## Since 1:50 AM (all deployed)
+## Since 2:45 AM (all deployed)
+1. **Bug fixed: a big punch moved the player backward** (2:50 AM item A), reproduced first in `tests/unit/punch-no-move.ts` on real clips of people throwing hooks, uppercuts and knees in place.
+   - **Before:** up to 61 cm of input-driven movement around a strike.
+   - **After:** 4.2 cm at worst (target under 5 cm).
+   - **Root cause:** the wind-up, twist and lean-back before a strike is *detected* fed the step and lean signals, so the fighter moved.
+   - **Fix:**
+     - movement is gated from strike onset (a hand moving fast) until 0.35 s after it, and 0.65 s after a detected strike
+     - shoulder width is ignored when the torso twists past 35°
+     - forward/back intent must last 0.2 s
+     - leaning back needs 8.5 cm (leaning in still 5.5 cm)
+   - Lean, step and strafe tests still pass.
+2. **Camera modes** (2:45 AM). Both use cage fading: every post, pad, rail or chain-link panel between the camera and a fighter fades to 8%, and your fighter turns see-through (outline hidden) when it covers the opponent. The posts are now lit steel with colored pads, not flat black.
+
+   | Mode | Scene | Cage in line of sight (faded) | Opponent upper body visible | Camera jumps over 0.3 m |
+   |---|---|---|---|---|
+   | **`?cam=behind` (default)** | idle | 0% | 100% | 0 |
+   | | jab (moving fight) | 68% | 58% | 0 |
+   | | your back to the fence | 93% | 66% | 6 |
+   | | opponent on the far fence | 68% | 66% | 5 |
+   | | corner | 96% | 87% | 5 |
+   | **`?cam=inside`** | idle | 0% | 100% | 0 |
+   | | jab | 0% | 100% | 2 |
+   | | your back to the fence | 0% | 97% | 3 |
+   | | opponent on the far fence | 0.1% | 68% | 3 |
+   | | corner | 0% | 100% | 0 |
+
+   Screenshots: [behind](docs/screens/cam-behind-near-cage.jpg), [inside](docs/screens/cam-inside-near-cage.jpg).
+   - In `behind`, the cage numbers are rays that would hit the cage; those parts fade, so they don't hide the fighters.
+   - **My recommendation is `inside`**: it never looks through the cage and keeps the opponent visible. Behind stays the default until the user picks.
+3. **Commentator** (2:35 AM item 4):
+   - **Stock calls:** 40 pre-rendered, high-energy calls (ElevenLabs `eleven_v3`, voice "Charlie", shouting delivery) play instantly on round start, KO, guard break, cage slam, supers, counters, combos, low HP and the result. Limit: one call per 2.2 s and 8 per minute.
+   - **AI lines:** Gemini lines are captions unless the budget allows. Voiced lines use the full `gemini-3.8-flash-tts` with a director prompt per moment (shouting for a KO, rising disbelief for a guard break).
+   - **No more flat voice:** the browser `speechSynthesis` voice is removed.
+   - **Crowd:** a synthesized crowd bed, roars on big hits, an "ooh" on blocked heavy hits, a chant at low HP, and a round sting.
+   - **Volume:** separate commentator and crowd sliders behind the 🔊 button; the popover closes on click-away or after 3 s.
+   - **e2e** (`tests/e2e/commentary.spec.ts`): 7 calls in 24 s matched the events (round 1, cage slam, KO, round 2, combo, KO, result), with 0 browser-voice calls.
+   - **ElevenLabs quota:** free tier, **1,309 / 10,000 characters used** (8,691 left). The calls used 1,024. The demo-video voiceover will stay inside the 50% rule.
+4. **The user's look preference applied:** fighters are back to plain, with no added hair, headgear, tops or pants.
+5. **HUD:**
+   - arena banners are now low LED boards, no longer behind the HUD bars
+   - hints sit under the timer, apart from the commentary caption
+   - long names truncate inside their bar
+   - checked at 1280×720, 1920×1080 and 844×390
+6. **Opt-in pose streams:** columnar storage (one smallint column per coordinate) compresses 3.4×, to **5.9 MB per player-hour** (19.7 MB uncompressed). That is about 102 player-hours under the 600 MB guard. Plain arrays reached only 1.7×.
+
+## Working on now
+Grab, clinch and Shoulder Throw (2:50 AM item B), behind `?grapple=1` until solid; then review round 6 and demo-video-v2.
+
+## 1:50 AM to 2:45 AM (all deployed)
 1. **Movement you can find** (acd2f05, 5936250). Root cause of "idk how to move forward and backward", reproduced in `tests/unit/move-forward-back.ts`: the 1v1 duel assist overrode any forward/back signal under 0.2 and walked you back to range as soon as you stopped, and a 12 cm lean only produced 0.13. Fixed:
    - **Lean** toward/away from the camera now advances/retreats (works at a laptop). A **rotation-corrected step** still works.
    - **Step sideways to strafe** (2:00 AM item), combined with leaning. Edge warning ("Step back to the center") and clamp within 10% of the frame edge, plus a home marker in the camera preview.
