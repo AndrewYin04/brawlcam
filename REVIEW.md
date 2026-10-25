@@ -451,3 +451,8 @@ Session `ee6f97a0…` (Tiger `research_frames`; the user also has the local `.we
    - **at least 0.6 s from any strike: 254 of 534 frames nonzero, 128 backward, minimum -1.00**
    - 142 strikes in 157 s, about one every 1.1 s, so these frames are the wind-ups and recoveries between punches
    - the planner is confirming with the user that they stood in place the whole time. If so, the drift comes from the between-strike motion (wind-up and recoil), not the strike frames, and the gate needs to cover strike onset and recovery, or the distance cue needs to ignore torso twist, as in the 2:50 AM ideas. Use this session as the repro.
+
+### 3:12 AM correction to the 3:08 AM note
+The user confirmed they **were moving** during session `ee6f97a0` (stepping left, right, forward and back, and strafing). So the "254 of 534 frames nonzero between strikes" figure is mostly real movement, **not** evidence of bug A. Don't use this session as the bug A repro. The only bug-relevant signal in it is the frames within 0.6 s of strikes (20 of 551 nonzero, 9 backward, minimum -1.00), and those may include intentional steps.
+
+**A clean repro still needs the "big punches while standing still" drill.** Ship the minimal drill mode (stand still, big punches standing still, and movement) as the next item, so the user can record it. The 6.9 fps pose-rate finding (item 1 of the 3:08 AM note) still stands and is high priority.
