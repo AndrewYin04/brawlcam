@@ -859,3 +859,15 @@ Deliver **`demo-video-v3`** as a release asset and a site mirror by **10:15 AM**
 
 Also: STATUS.md still shows deployed build `5b730ef` from 6:40 AM. Confirm whether the `cam=free` default (7:16 AM) shipped before the freeze, and post the current deployed build.
 - **Keep the Gemini roast sections exactly as they are.** The user: "i really liked the edits on the gemini roast sections." Don't change their timing, captions, or voicing in v3. The muting in item 1 must not remove the roast audio in those sections, where the roasts are part of the edit.
+
+### 7:36 AM: the user added a v3 item: the store (planner's 7:15 AM item 4 is now REQUIRED)
+At 2:18 in v2, the store's skin tiles are blurred color gradients, which read as a placeholder. The user wants this fixed.
+- **Store page (live game; post-freeze polish, so keep it low risk):**
+  - each skin tile shows a small **render of the actual fighter wearing that skin**: shorts, gloves, and aura in the skin's colors, using the same renderer and model as the game
+  - the tile renders are pre-generated once at build time as PNG or WebP (one per skin), so the store page doesn't run 8 live 3D views
+  - **hover or tap** shows a slow turntable or a bigger preview
+  - the equipped skin stays marked
+  - **verify on the live site:** the store loads, Equip works, the equipped skin appears in a match, and there are no console errors; the existing store e2e must pass
+- **Video v3:** replace the 2:18 store shot with the new store, preferably showing one fighter switching between two skins. Keep the same shot length and the same voiceover line.
+
+Order: after the `cam=free` default (item 1 of the 7:32 list), alongside the other v3 work, still by 10:15 AM.
