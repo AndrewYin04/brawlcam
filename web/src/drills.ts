@@ -167,7 +167,7 @@ export async function runDrills(pose: PoseInput, onDone: () => void) {
   research.frameListener = null;
   removeEventListener('keydown', onKey);
   // Summary table, then save the files.
-  const rows = summary.map((s) => `<tr><td>${s.section}</td><td>${s.asked || '-'}</td><td>${s.asked ? s.hit : '-'}</td><td>${s.asked ? s.extra : '-'}</td><td>${s.drift} cm</td></tr>`).join('');
+  const rows = summary.map((s) => `<tr><td>${s.section}</td><td>${s.asked || '-'}</td><td>${s.asked ? s.hit : '-'}</td><td>${s.asked ? s.extra : '-'}</td><td>${s.section === 'Movement' ? '-' : s.drift + ' cm'}</td></tr>`).join('');
   el.querySelector('.drill-card')!.innerHTML = `<h2>Drills done</h2><table class="lb"><tr><th>Section</th><th>Asked</th><th>Detected</th><th>Extra</th><th>Drift</th></tr>${rows}</table><p class="muted">Saving your files…</p><button class="btn primary" id="drill-close">Back to menu</button>`;
   (window as any).__brawl && ((window as any).__brawl.drills = summary);
   await research.finish();

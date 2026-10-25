@@ -323,7 +323,7 @@ export class MatchView {
         slot.yaw += wrap(f.yaw - slot.yaw) * k;
         slot.avatar.root.position.copy(slot.pos);
         slot.avatar.root.rotation.y = slot.yaw;
-        if (this.opts.camera === 'drill' && f.id !== myId) slot.avatar.root.scale.setScalar(0.0001); // drills: only you
+        if (slot.avatar instanceof HeroFighter) slot.avatar.hidden = this.opts.camera === 'drill' && f.id !== myId; // drills: only you
         let joints: Joints | null = null;
         // Your own fighter mirrors your live pose immediately (also during calibration and the countdown).
         if (this.opts.localIds.includes(f.id)) {
@@ -387,6 +387,7 @@ export class MatchView {
       pos = me.pos.clone().addScaledVector(fwd, 3.6).setY(1.35);
       look = me.pos.clone().setY(0.95);
       this.arena.setCamera(pos, look, dt);
+      this.updateVisibility(dt);
       return;
     }
     if (this.opts.camera === 'side' || !me) {

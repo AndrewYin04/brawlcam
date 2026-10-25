@@ -218,6 +218,8 @@ export class HeroFighter {
   /** true when this fighter's arms follow a live pose (local or networked human). */
   livePose = false;
   edgeDist = 99;
+  /** Not drawn at all (e.g. the drills' stand-in opponent). */
+  hidden = false;
   modelName: HeroModel;
   private look: Look;
   private hairGroup: THREE.Object3D | null = null;
@@ -701,7 +703,7 @@ export class HeroFighter {
       });
     }
     this.shadow.scale.setScalar(THREE.MathUtils.clamp(1 - opts.airborne / 3, 0.25, 1));
-    this.root.visible = opts.alive || this.koTime >= 0;
+    this.root.visible = !this.hidden && (opts.alive || this.koTime >= 0);
   }
 
   private updateStrike(dt: number) {
