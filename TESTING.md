@@ -105,11 +105,30 @@ What changed to get here (each verified on these clips before and after):
 
 Paths not yet run are listed in `STATUS.md` until they have a row here.
 
+## Rules and controls added Sun Oct 25 1:40–3:00 AM (octagon, guard, movement, contact, data)
+
+| Area | Test | Result (latest run) |
+|---|---|---|
+| Movement: lean forward/back, retreat persists (repro of the user's bug) | `npx tsx tests/unit/move-forward-back.ts` | before the fix: a 12 cm lean gave forward input 0.13 and moved 0.09 m; a retreat was partly undone. After: lean in gives 0.94, moves 0.41 m; the retreat stays (1.81 → 1.81 m); standing in guard 0/90 frames of movement input |
+| Movement: step sideways to strafe | `npx tsx tests/unit/side-step.ts` | neutral at the calibrated spot; dead zone holds; full strafe at 0.9 shoulder widths; edge warning and clamp past 90% of the frame; mirroring (stepping to your own left moves your fighter screen-left); real side-to-side footwork (shadow_fighterD): 88% of frames strafe in the stepped direction, 0 wrong-direction frames |
+| Movement tutorial + defend stage (real clips through the real UI) | `npx playwright test calibration` | all 4 directions detected (zoom = step in/out, sideways shift = step, skew = lean), guard (block_01 clip) and Iron Wall X (xshield_01 clip) detected, then the match starts; the HUD indicator lights while moving |
+| Guard meter, break, dizzy, Iron Wall counter | `npx tsx tests/unit/guard-meter.ts` (48 checks), `tests/unit/bot-guard.ts` | drain 20/s, empty in 5 s, refill 25/s after 0.5 s, per-hit drain, break → 2 s dizzy → guard at 30, blocked hits 10%, Iron Wall 0 damage + first-attacker counter |
+| Guard break in the real game | `npx playwright test supers -g guard` | `GUARD {"blockedBefore":[["hook",1,84],["hook",1,35],["jab",1,15]],"break":{...},"dizzyHit":["jab",9,false]}` |
+| Octagon: cage bounce, no ring-outs, HP KOs, Brawl respawn | `npx tsx tests/unit/octagon-cage.ts` (replaces the ring-out tests) | knockback 0.28 / 0.48 / 0.66 m at 0 / 60 / 120 damage taken; super uppercut next to the fence → `cage` event at 9 m/s, stays inside, bounces back, round continues; walking stops at the fence with no slam; 1v1 HP KO ends the round; Brawl 0 HP → KO credited, respawn after 3.07 s with 100 HP |
+| Strikes visibly connect (section 11 metric) | `ROUND=<r> npx tsx video/review-capture.ts` → `contactMeanCm`/`contactMaxCm` | round 4 (deployed): jab 1.9, hook 2.0, uppercut 2.0, ko 1.9, cage_slam 2.0, shield 3.1 / 5.4, getting_hit 6.7 / 22, knockback 9.4, guard_break 4.5 / 16, brawl8 2.5 / 8 cm over 22 hits (target: under 10 cm) |
+| Research recording mode | `npx playwright test research` | consent required (Start disabled until ticked); 2 files downloaded (1.2 MB webm, 283 KB jsonl with 33 world + 33 image points per frame); markers `did:jab`, `missed`, `false_fire` recorded; 131 landmark frames + 3 markers stored server-side; declining records and sends nothing |
+| Opt-in continuous pose streams | `npx playwright test streams` | consent on: 182 frames in 12 s (15.2 fps), 7 batches, stored in `pose_streams`; consent off: 0 requests |
+| Stream storage per player-hour | `npx tsx tests/tools/stream-storage-bench.ts` (throwaway hypertable, 54,000 real frames, dropped after) | real[] arrays: 34.6 → 20.4 MB per player-hour (1.7x); one smallint column per coordinate (shipped): 19.7 → 5.9 MB (3.4x), about 102 player-hours under the 600 MB guard |
+
 ## Bugs found by these tests (reproduced first, fixed, re-run)
 
 | Bug | Repro | Root cause | Fix | Regression test |
 |---|---|---|---|---|
-| Brawl: players walked out of the ring by themselves | `npx tsx tests/unit/brawl-edge.ts`: 4 self ring-outs in 20 s of noisy movement, no hits | Walking was not limited at the edge; only knockback should ring you out | Walking stops 0.25 m inside the edge | `tests/unit/brawl-edge.ts` (now 0) |
+| "idk how to move forward and backward" (user's webcam test) | `npx tsx tests/unit/move-forward-back.ts`: lean in 12 cm → forward input 0.13, 0.09 m moved | The 1v1 duel assist overrode any forward/back input under 0.2 and walked you back to range as soon as you stopped | Lean input, rotation-corrected step, assist only after 1.5 s idle and never pushes you back | same test |
+| KO'd fighter stayed standing, then T-posed (review round 3) | review-capture `ko` scene, frames 13–30 | The hit reaction played on the delayed contact frame after the sim's KO, replaced the death clip, then nothing had weight (bind pose) | KO waits for the contact; death clip can't be replaced; starts at the fall | review-capture `ko` |
+| Bot strikes "connected" from 1.4 m (review round 3) | `DEBUG_CONTACT=1` review-capture: jab contact 1.16–1.39 m on a tumbling target | Tumble rotated the body around the feet, swinging the head 1 m+ from where strikes aimed | Tumble pivots at the hips; strikes on airborne targets aim at the chest | contact metric in review-capture |
+| Camera inside the cage (review round 3) / top-down near the fence (round 4) | review-capture jab/walk/run/knockback frames | No collision with the octagon; then the fix lifted the camera | Clamp inside the walls and swing around the player instead of lifting | review-capture scenes |
+| Brawl: players walked out of the ring by themselves (before the octagon) | `npx tsx tests/unit/brawl-edge.ts`: 4 self ring-outs in 20 s of noisy movement, no hits | Walking was not limited at the edge; only knockback should ring you out | Walking stops 0.25 m inside the edge | `tests/unit/brawl-edge.ts` (now 0) |
 | Late joiner stuck in the lobby while a match runs | `npx tsx tests/unit/late-join.ts`: no `match_start` | Server only sent `match_start` at match start | Send it to people who join mid-match (spectators) | `tests/unit/late-join.ts`, brawl spec |
 | Brawl: a disconnected fighter was not replaced by a bot | brawl spec timed out waiting for `bot=1` | `leave()` removed the client before looking up its slot | Pass the slot explicitly | brawl spec |
 | Chosen color and name ignored in game | features spec: expected `#ffc53d`, got `#ff3d6e` | Game read `brawlcam.*` keys, Store/Forge wrote `throwhands.*` | One key set + migration | features spec (Forge, Store) |
