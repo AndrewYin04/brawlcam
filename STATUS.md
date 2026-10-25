@@ -12,6 +12,12 @@ Last update: Sun Oct 25, 11:08 AM CDT. **Deployed build: `7f3b6a9`** on https://
     - `freezedetect` hits identical to v4's (no new freezes)
     - frames show the grip, the arc over the shoulder and the slam, with the "SHOULDER THROW → 25 DMG" callout and the "GRAPPLING (BETA)" caption
 - **Grappling on by default:** deployed `7f3b6a9` at 11:07 AM. In `web/src/flags.ts`, `?grapple=0`/`false`/`off` turns it off. Smoke checks on the live build are below.
+- **Live smoke checks on `7f3b6a9`, no flag in the URL:**
+  - **Grab registers in a practice match:** `tests/e2e/grab-default.spec.ts`, fed your own grab reps from session 2 (webcam 80.5–94.5 s) as the camera. Output: `GRAB_DEFAULT {"grappleEnabled":[true],"actions":["grab"],"grappleEvents":["grab"]}`, no console errors, `1 passed (11.9s)`.
+  - **Drills load:** `drills.spec.ts` passed (2.4m). It shows 4 sections, including "Grab and Shoulder Throw (beta)".
+  - **Practice match with jab KO + console errors:** running (`practice.spec.ts -g "won by KO"`).
+  - **8-browser online brawl, alone, no video encode running:** queued right after the practice check.
+- **README and devpost:** "Grappling (beta): on by default; add `?grapple=0` to turn it off." devpost.md links demo-video-v5.
 
 ## 10:27 AM: demo-video-v4 published (REVIEW.md 10:05 AM: v3's stitching)
 - **Release:** https://github.com/AndrewYin04/throwhands/releases/tag/demo-video-v4 (`throwhands-demo-v4.mp4`, 2:35, 1080p30, −15.5 LUFS, −1.0 dBTP).
