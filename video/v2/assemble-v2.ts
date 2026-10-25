@@ -117,7 +117,7 @@ if (process.env.PLAN_ONLY) {
 export const V3_REPLACE: Record<number, { src: string; split?: string; ss: number; start: number; d: number }> = {
   7: { src: 'online_p1_free', split: 'online_p2_free', ss: 2.0, start: 18.6, d: 21.533333 - 18.6 },
   8: { src: 'online_p1_free', split: 'online_p2_free', ss: 5.2, start: 21.533333, d: 28.166667 - 21.533333 },
-  20: { src: 'user_s2b_free', ss: 9.0, start: 76.233333, d: 80.6 - 76.233333 },
+  20: { src: 'user_s2b_free2', ss: 8.6, start: 76.233333, d: 80.6 - 76.233333 },
   22: { src: 'online_p1_free', split: 'online_p2_free', ss: 12.0, start: 83.2, d: 88.133333 - 83.2 },
 };
 const V3 = !!process.env.V3;
@@ -191,6 +191,33 @@ fs.writeFileSync(list, segFiles.map((f) => `file '${f}'`).join('\n'));
 const silent = path.join(OUT, 'video-only.mp4');
 if (!V3) ff(['-f', 'concat', '-safe', '0', '-i', list, '-c', 'copy', silent]);
 
+// v3 moves section (REVIEW.md 7:45 AM): after the guard-break shot (plan 50.59 s), a new block with the one new VO line
+// ("moves"); every later audio event and caption shifts by its length. make-v3.ts splices the matching video in.
+let TOTAL_V3 = TOTAL;
+if (V3) {
+  const INSERT_AT = 50.59;
+  const voMoves = voFile('moves');
+  const INS = +(dur(voMoves) + 0.35).toFixed(3);
+  for (const a of audio) if (a.at >= INSERT_AT) a.at += INS;
+  for (const c of caps) if (c.start >= INSERT_AT) (c.start += INS), (c.end += INS);
+  audio.push({ file: voMoves, at: INSERT_AT + 0.1, vol: 1, kind: 'vo' });
+  const wf = path.join(V, 'vo', 'moves.words.json');
+  const words: { text: string; start: number; end: number }[] = JSON.parse(fs.readFileSync(wf, 'utf8'));
+  let chunk: typeof words = [];
+  const flush = () => {
+    if (chunk.length) caps.push({ start: INSERT_AT + 0.1 + chunk[0].start, end: INSERT_AT + 0.1 + chunk[chunk.length - 1].end + 0.25, text: chunk.map((w) => w.text).join(' '), style: 'vo' });
+    chunk = [];
+  };
+  for (const w of words) {
+    chunk.push(w);
+    if ((/[.!?]$/.test(w.text) && chunk.length >= 3) || chunk.length >= 7 || (/[,;:]$/.test(w.text) && chunk.length >= 4)) flush();
+  }
+  flush();
+  caps.sort((a, b) => a.start - b.start);
+  TOTAL_V3 = TOTAL + INS;
+  fs.writeFileSync(path.join(OUT, 'v3-plan.json'), JSON.stringify({ insertAtPlan: INSERT_AT, ins: INS }));
+}
+
 // Captions (ASS): VO in white, Gemini roasts in gold.
 const ts = (s: number) => {
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = (s % 60).toFixed(2).padStart(5, '0');
@@ -211,7 +238,7 @@ fs.writeFileSync(assFile, ass);
 // Audio: music bed (ducked under speech), VO, calls, roasts; loudness -14 LUFS.
 const music = path.join(ROOT, 'video/v2/music/bed.mp3');
 const aIn: string[] = ['-stream_loop', '-1', '-i', music];
-let af = `[0:a]atrim=0:${TOTAL.toFixed(2)},afade=t=in:d=0.3,afade=t=out:st=${(TOTAL - 2.5).toFixed(2)}:d=2.5,volume=0.32[mus];`;
+let af = `[0:a]atrim=0:${TOTAL_V3.toFixed(2)},afade=t=in:d=0.3,afade=t=out:st=${(TOTAL_V3 - 2.5).toFixed(2)}:d=2.5,volume=0.32[mus];`;
 const speech: string[] = [];
 audio.forEach((a, i) => {
   aIn.push('-i', a.file);
@@ -222,7 +249,7 @@ audio.forEach((a, i) => {
 af += `${speech.join('')}amix=inputs=${speech.length}:normalize=0[sp];[sp]asplit=2[sp1][sp2];`;
 af += `[mus][sp1]sidechaincompress=threshold=0.03:ratio=8:attack=20:release=400[duck];[duck][sp2]amix=inputs=2:normalize=0,loudnorm=I=-14:TP=-1.5:LRA=11[aout]`;
 const mixed = path.join(OUT, 'audio.m4a');
-ff([...aIn, '-filter_complex', af, '-map', '[aout]', '-t', TOTAL.toFixed(2), '-c:a', 'aac', '-b:a', '192k', mixed]);
+ff([...aIn, '-filter_complex', af, '-map', '[aout]', '-t', TOTAL_V3.toFixed(2), '-c:a', 'aac', '-b:a', '192k', mixed]);
 
 if (V3) {
   // v3: make-v3.ts builds the video from the published v2 and the re-recorded shots, and muxes this audio.

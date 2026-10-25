@@ -23,11 +23,25 @@ const STORE = path.join(V, 'store_v3.mp4');
 const reps: Rep[] = [
   { start: 18.6, end: 21.533333, src: 'online_p1_free', split: 'online_p2_free', ss: 2.0, what: 'online 1v1 split screen (cam=free)' },
   { start: 21.533333, end: 28.166667, src: 'online_p1_free', split: 'online_p2_free', ss: 5.2, what: 'online 1v1 split screen (cam=free)' },
-  { start: 76.233333, end: 80.6, src: 'user_s2b_free', ss: 9.0, what: "the user's motion driving the pink-shorts fighter, under the second Gemini roast (cam=free)" },
+  { start: 76.233333, end: 80.6, src: 'user_s2b_free2', ss: 8.6, what: "the user's motion driving the pink-shorts fighter, under the second Gemini roast (cam=free)" },
   { start: 83.2, end: 88.133333, src: 'online_p1_free', split: 'online_p2_free', ss: 12.0, what: 'online 1v1 split screen (cam=free)' },
   ...(fs.existsSync(STORE) ? [{ start: 136.366667, end: 143.266667, file: STORE, what: 'store with real skin renders' }] : []),
 ];
+// Moves section (REVIEW.md 7:45 AM) inserted after the guard-break shot (published cut at 50.633 s); its length matches
+// the audio plan's shift (assemble-v2.ts V3=1 writes v3-plan.json).
+const plan = JSON.parse(fs.readFileSync(path.join(V, 'v2/v3-plan.json'), 'utf8')) as { ins: number };
+const INS_AT = 50.633333, INS = plan.ins;
+const GRAPPLE_BETA = !process.env.GRAPPLE_DEFAULT; // caption the grappling shots "Grappling (beta)" unless it ships on by default
+const VO2 = path.join(ROOT, 'video/v2/out');
+const W0 = (n: string) => JSON.parse(fs.readFileSync(path.join(ROOT, 'clips/landmarks', n + '.json'), 'utf8')).sourceVideoStart + 3.2;
+const WEBCAM = path.join(V, 'research-s2/s2.mp4');
+const insert = [
+  { src: 'v3_kick', ss: 0.8, d: 2.4, callout: 'callout_kick.mov', at: 0.2 },
+  { src: 'v3_grab', ss: 0.6, d: 3.2, callout: 'callout_grabknee.mov', at: 0.3, pip: W0('user_grab') },
+  { src: 'v3_throw', ss: 1.2, d: +(INS - 5.6).toFixed(3), callout: 'callout_throw.mov', at: 0.2 },
+];
 const TOTAL = dur(PUB);
+const outT = (pubT: number) => (pubT >= INS_AT - 0.001 ? pubT + INS : pubT); // published time -> v3 time
 const segs: string[] = [];
 let t = 0;
 const cut = (a: number, b: number) => {
@@ -36,7 +50,32 @@ const cut = (a: number, b: number) => {
   ff(['-ss', a.toFixed(3), '-t', (b - a).toFixed(3), '-i', PUB, '-vf', 'fps=30,setsar=1', ...enc(out)]);
   segs.push(out);
 };
+const renderInsert = () => {
+  for (const m of insert) {
+    const out = path.join(OUT, 'seg', `p${segs.length.toString().padStart(2, '0')}.mp4`);
+    const inputs = ['-ss', m.ss.toFixed(3), '-t', (m.d + 0.2).toFixed(3), '-i', path.join(V, m.src + '.mp4')];
+    let f = `[0:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,fps=30,setsar=1[b0];`;
+    let cur = 'b0', n = 1;
+    if (m.pip != null) {
+      inputs.push('-ss', (m.pip + m.ss).toFixed(3), '-t', (m.d + 0.2).toFixed(3), '-i', WEBCAM);
+      f += `[${n}:v]crop=560:560:360:60,scale=420:420,pad=428:428:4:4:color=0xffc53d[pip];[${cur}][pip]overlay=1436:596[pp];`;
+      cur = 'pp';
+      n++;
+    }
+    inputs.push('-itsoffset', m.at.toFixed(3), '-i', path.join(VO2, m.callout));
+    f += `[${cur}][${n}:v]overlay=0:0:eof_action=pass[co];[co]trim=duration=${m.d.toFixed(3)},setpts=PTS-STARTPTS[o]`;
+    ff([...inputs, '-filter_complex', f, '-map', '[o]', ...enc(out)]);
+    segs.push(out);
+  }
+};
+let inserted = false;
 for (const r of reps) {
+  if (!inserted && r.start >= INS_AT) {
+    cut(t, INS_AT);
+    renderInsert();
+    t = INS_AT;
+    inserted = true;
+  }
   cut(t, r.start);
   const d = r.end - r.start;
   const out = path.join(OUT, 'seg', `p${segs.length.toString().padStart(2, '0')}.mp4`);
@@ -71,11 +110,13 @@ for (const line of ass) {
   if (!line.startsWith('Dialogue:')) { out.push(line); continue; }
   const parts = line.split(',');
   const a = sec(parts[1]), b = sec(parts[2]);
-  for (const r of reps) {
-    const s0 = Math.max(a, r.start), s1 = Math.min(b, r.end);
+  const ranges = [...reps.map((r) => [outT(r.start), outT(r.start) + (r.end - r.start)]), [INS_AT, INS_AT + INS]];
+  for (const [ra, rb] of ranges) {
+    const s0 = Math.max(a, ra), s1 = Math.min(b, rb);
     if (s1 - s0 > 0.04) out.push([parts[0], ts(s0), ts(s1), ...parts.slice(3)].join(','));
   }
 }
+if (GRAPPLE_BETA) out.push(`Dialogue: 1,${ts(INS_AT + 2.4)},${ts(INS_AT + INS)},vo,,0,0,0,,{\\an7\\pos(60,60)\\fs40}GRAPPLING (BETA)`);
 const assV3 = path.join(OUT, 'captions-replaced.ass');
 fs.writeFileSync(assV3, out.join('\n'));
 
