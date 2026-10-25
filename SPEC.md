@@ -239,3 +239,49 @@ Testing must be extensive. Every user path in the table below must be exercised 
 - Save screenshots and Playwright traces for failures in `test-results/`, which is not committed.
 - Before each milestone in section 8, run the full suite against the deployed URL and paste the summary into `STATUS.md`.
 - The planner repeats the core paths with a real webcam and a real phone and reports in `REVIEW.md`. A path counts as done only when both agents' runs pass.
+
+## 11. Visual and motion review loop (required on every iteration of graphics, animation, or the video)
+
+Passing tests proves the game works, not that it looks good. The user judged the 12:05 AM build ("awkward", "drifting", "can only move their arms") after every test had passed. So every change to graphics, animation, camera, effects, or the video goes through this loop before it counts as done.
+
+### 11.1 Capture evidence
+- **Frame strips.** Render the same scripted scenes before and after the change: idle, walk, run, jab, hook, uppercut, block, shield, energy blast, getting hit, knockback and landing, KO, and an 8-fighter Brawl. Capture frames at 10 fps (one frame every 100 ms) for 2 s of each scene, saved as numbered PNGs and as one contact sheet per scene.
+- **Short clips.** Record a 5 to 10 s MP4 of each scene, because motion problems such as sliding or popping show up only in playback.
+- **Measurements** (these catch "drifting" automatically):
+  - **foot sliding:** world-space movement of a planted foot per frame; target under 1 cm
+  - **drift:** frames where the root moves faster than 0.2 m/s while the legs play idle; target zero
+  - **frozen limbs:** frames where the torso and head bones do not change while the player's pose does
+  - **hit-stop and shake:** confirm they fire on heavy hits
+
+### 11.2 Self-review
+Review your own evidence against this checklist, and write each item's verdict with the frame numbers that support it in `REVIEW-SELF.md`:
+1. Do fighters walk and run with leg motion matching their speed, with no drifting or sliding?
+2. Do torso, head, and shoulders move like a person: twist into punches, lean, turn the head?
+3. Does each attack show a wind-up, a full extension, and a recoil, with hip rotation?
+4. Do hit reactions flinch and stagger? Does knockback tumble and land, rather than rotating as a rigid plank?
+5. Are block, shield, and super visuals shown only while active, as a glow or outline, with no debug-looking capsules?
+6. Are effects readable, with no screen-filling flat shapes and nothing covering the fighters in the foreground?
+7. Do fighters have shadows and lighting, and stand on a lit stage with a background, not a black void?
+8. Does the camera keep all fighters large in frame (each fighter at least about 35% of frame height in 1v1) and react to big hits?
+9. Do fighters have distinct silhouettes and read as superhuman fighters in a Smash-style presentation?
+10. Video only:
+    - every caption is true of what is on screen
+    - no repeated clips
+    - no bugs visible (for example duplicate leaderboard rows)
+    - the first 10 s show the best moment
+
+### 11.3 Adversarial review by independent agents
+After self-review, launch **at least two independent reviewer subagents** with fresh context. Give each one only the evidence (contact sheets, clips, and measurements), the checklist in 11.2, and the user's own complaints quoted in `REVIEW.md`. Do **not** give them your self-review, your notes, or your opinion of the result. Instruct them to:
+- act as harsh judges at HackTX and as a player comparing the game to Super Smash Bros
+- find every visual and motion problem, cite the exact frame or timestamp for each, and rate its severity: **high** (a judge would notice in 20 seconds), **medium**, or **low**
+- score each checklist item 1 to 5 with a one-line reason
+- not suggest that something is fine without pointing to the frame that shows it
+
+Use different emphases: one reviewer focused on motion and animation, one on visual style and presentation. Add a third, focused on the video, whenever the video changes.
+
+### 11.4 Act on the findings
+- Fix every high-severity finding, then repeat 11.1 to 11.3 on the new build.
+- Medium findings get fixed in priority order as time allows. Log any you skip, with the reason.
+- **Stop condition:** a round in which no reviewer reports a high-severity finding, and every checklist item scores at least 3 from every reviewer.
+- Record each round in `REVIEW-SELF.md`: date and time, build commit, reviewer findings (verbatim summaries), what you fixed, and the before and after scores. Link the contact sheets. Commit the sheets if they are small, otherwise keep them on the server and link them from the live site.
+- Summarize the latest round in `STATUS.md`. The planner and the user make the final call, but the loop must have run and passed before you report a visual change as done.

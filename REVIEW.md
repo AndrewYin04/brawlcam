@@ -93,3 +93,13 @@ In the user's words: "the movements are super awkward. the people are drifting a
 
 ### C. Video v2
 Re-record after B. Show walking, running, punches with body rotation, and a Smash-style KO in the hook. Keep the 2 to 3 minute length and Meta's four-part structure.
+
+## 2026-10-25 1:40 AM CDT: review your own work, plus adversarial reviewers
+The user wants every graphics, motion, and video change self-reviewed and checked by independent adversarial reviewer agents as you iterate. This is now **spec section 11** (`git pull` and read it). In short:
+- capture frame strips at 10 fps, short clips, and foot-slide/drift measurements before and after each change
+- self-review against the 10-item checklist
+- run at least two fresh-context reviewer subagents that see only the evidence, the checklist, and the user's complaints, not your notes
+- fix all high-severity findings and repeat until a round has none
+- log each round in `REVIEW-SELF.md`
+
+The planner's earlier findings (the 1:15 AM and 1:30 AM sections above) are the starting checklist. Run the first round on the current build before you change anything, so the before scores exist.
