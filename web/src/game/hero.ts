@@ -265,7 +265,7 @@ export class HeroFighter {
       (hull as any).__parent = mesh.parent;
     });
     for (const h of outlines) ((h as any).__parent as THREE.Object3D).add(h);
-    for (const n of ['pelvis', 'spine_01', 'spine_02', 'spine_03', 'neck_01', 'Head', 'clavicle_l', 'clavicle_r', 'upperarm_l', 'lowerarm_l', 'hand_l', 'upperarm_r', 'lowerarm_r', 'hand_r', 'thigh_l', 'calf_l', 'foot_l', 'thigh_r', 'calf_r', 'foot_r', 'ball_l', 'ball_r'])
+    for (const n of ['pelvis', 'spine_01', 'spine_02', 'spine_03', 'neck_01', 'Head', 'clavicle_l', 'clavicle_r', 'upperarm_l', 'lowerarm_l', 'hand_l', 'upperarm_r', 'lowerarm_r', 'hand_r', 'thigh_l', 'calf_l', 'foot_l', 'thigh_r', 'calf_r', 'foot_r', 'ball_l', 'ball_r', 'middle_01_l', 'middle_01_r'])
       this.bones[n] = model.getObjectByName(n);
     this.body.add(model);
     model.updateMatrixWorld(true);
@@ -656,6 +656,13 @@ export class HeroFighter {
     // ---- grappling: arms onto the other fighter (clinch), or a two-handed reach (grab/throw startup) ----
     this.applyGrapple(opts.alive && !fullBody);
 
+    // Wrists straight along the forearm (a fist in a glove), not bent back like a claw.
+    if (opts.alive && !fullBody) {
+      for (const sd of ['l', 'r'] as const) {
+        const la = this.bones['lowerarm_' + sd], hd = this.bones['hand_' + sd], mid = this.bones['middle_01_' + sd];
+        if (la && hd && mid) rotateBoneTowards(hd, dirOf(hd, mid), dirOf(la, hd), 0.85);
+      }
+    }
     // ---- body offsets: airborne height, tumble, flinch, lunge ----
     this.flinch = Math.max(0, this.flinch - dt * 3.5);
     const local = this.flinchDir.clone().applyQuaternion(this.root.quaternion.clone().invert());
