@@ -1,0 +1,15 @@
+[Unit]
+Description=Brawlcam relay and API server
+After=network-online.target
+
+[Service]
+EnvironmentFile=/etc/brawlcam.env
+WorkingDirectory=/srv/brawlcam
+ExecStart=/usr/bin/node --enable-source-maps /srv/brawlcam/dist-server/server.mjs
+Restart=always
+RestartSec=1
+User=www-data
+Environment=NODE_ENV=production PORT=8787
+
+[Install]
+WantedBy=multi-user.target

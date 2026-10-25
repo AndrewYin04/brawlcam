@@ -8,3 +8,7 @@ dist/
 clips/
 test-results/
 playwright-report/
+dist-server/
+web/public/mediapipe/
+web/public/models/*.task
+.vite/
