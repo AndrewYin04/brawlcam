@@ -775,6 +775,57 @@ export class HeroFighter {
     }
   }
 
+  private opacity = 1;
+  /** See-through when this (your own) fighter covers the opponent from the camera. */
+  setOpacity(o: number, dt: number) {
+    const next = this.opacity + (o - this.opacity) * Math.min(1, dt / 0.12);
+    if (Math.abs(next - this.opacity) < 0.002) return;
+    this.opacity = next;
+    this.model?.traverse((m) => {
+      const mesh = m as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      // Outline hulls (black back faces) would show through a see-through body as a black silhouette: hide them.
+      if (mesh.name.endsWith('_outline') || (mesh.material as THREE.Material).side === THREE.BackSide) {
+        mesh.visible = next > 0.95;
+        return;
+      }
+      const mat = mesh.material as THREE.Material;
+      mat.transparent = next < 0.99;
+      mat.opacity = next;
+      mat.depthWrite = next > 0.99;
+    });
+  }
+
+  /** Points used for camera occlusion tests: head, chest, hands, feet. */
+  samplePoints(): THREE.Vector3[] {
+    const out: THREE.Vector3[] = [];
+    for (const n of ['Head', 'spine_03', 'hand_l', 'hand_r', 'foot_l', 'foot_r', 'pelvis']) {
+      const b = this.bones[n];
+      if (b) out.push(b.getWorldPosition(new THREE.Vector3()));
+    }
+    return out;
+  }
+
+  /** Rough body volume (capsules) for "does this fighter block the camera's view" tests. */
+  blocksRay(origin: THREE.Vector3, dir: THREE.Vector3, maxDist: number) {
+    const segs: [string, string, number][] = [['pelvis', 'neck_01', 0.19], ['neck_01', 'Head', 0.12], ['upperarm_l', 'hand_l', 0.07], ['upperarm_r', 'hand_r', 0.07]];
+    const ray = new THREE.Ray(origin, dir);
+    const pa = new THREE.Vector3();
+    const pb = new THREE.Vector3();
+    for (const [a, b, r] of segs) {
+      const A = this.bones[a];
+      const B = this.bones[b];
+      if (!A || !B) continue;
+      A.getWorldPosition(pa);
+      B.getWorldPosition(pb);
+      const onRay = new THREE.Vector3();
+      const onSeg = new THREE.Vector3();
+      const d2 = ray.distanceSqToSegment(pa, pb, onRay, onSeg);
+      if (d2 < r * r && onRay.distanceTo(origin) < maxDist) return true;
+    }
+    return false;
+  }
+
   glovePos(side: 'L' | 'R', out = new THREE.Vector3()) {
     const g = side === 'L' ? this.gloveL : this.gloveR;
     if (g) g.getWorldPosition(out);

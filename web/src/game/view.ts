@@ -6,6 +6,8 @@ import { HeroFighter, HERO_MODELS } from './hero';
 import { apothem } from './stage';
 
 /** New Smash-style heroes by default; the original VRM renderer stays behind ?classic (and capsules behind ?lowgfx). */
+/** 1v1 camera: 'behind' (default) or 'inside' (clamped inside the cage), for the user to compare. */
+export const CAM_MODE: 'behind' | 'inside' = typeof location !== 'undefined' && new URLSearchParams(location.search).get('cam') === 'inside' ? 'inside' : 'behind';
 export const USE_HEROES = typeof location !== 'undefined' && !new URLSearchParams(location.search).has('classic') && !FighterAvatar.lowGfx;
 import { VFX, SPRITE_SPARKS } from './vfx';
 import * as sfx from './audio';
@@ -395,8 +397,14 @@ export class MatchView {
         // Closer over-the-shoulder framing: both fighters fill most of the frame height.
         // Higher and further to the side than before so the chibi heroes' big heads never hide the opponent.
         // Over the right shoulder of a 1.8 m fighter: you on the left third, the opponent clear in the middle.
-        // About 35 degrees off the shoulder line, so the gap between the fighters (and the fist landing) is visible.
-        pos = me.pos.clone().addScaledVector(fwd, portrait ? -3.1 : -2.2).addScaledVector(right, portrait ? 1.4 : 2.1).setY(portrait ? 2.1 : 1.85);
+        if (CAM_MODE === 'inside') {
+          // ?cam=inside: about 35 degrees off the shoulder line, kept inside the cage (swings around you at the fence).
+          pos = me.pos.clone().addScaledVector(fwd, portrait ? -3.1 : -2.2).addScaledVector(right, portrait ? 1.4 : 2.1).setY(portrait ? 2.1 : 1.85);
+        } else {
+          // ?cam=behind (default, the user's preferred angle): behind your fighter, slightly over the right shoulder,
+          // not clamped to the cage; occluding cage parts fade and your fighter turns see-through if it covers the opponent.
+          pos = me.pos.clone().addScaledVector(fwd, portrait ? -3.4 : -2.6).addScaledVector(right, portrait ? 0.95 : 1.4).setY(portrait ? 2.1 : 1.85);
+        }
         look = (opp ? opp.pos.clone().lerp(me.pos, 0.1) : me.pos.clone().addScaledVector(fwd, 1.4)).setY(1.2);
       } else {
         pos = me.pos.clone().addScaledVector(fwd, portrait ? -3.6 : -2.7).addScaledVector(right, portrait ? 0.7 : 1.05).setY(portrait ? 2.3 : 2.0);
@@ -417,7 +425,7 @@ export class MatchView {
     }
     // Keep the camera inside the octagon cage (never behind a post, pad or the chain-link). Near the fence, swing the
     // camera around you (keeping its height and distance) instead of pushing it in or lifting it.
-    if (USE_HEROES && this.arena.stage) {
+    if (USE_HEROES && this.arena.stage && (CAM_MODE === 'inside' || this.opts.camera !== 'behind')) {
       const A = apothem(this.arena.stage.radius) - 0.35;
       const outside = (p: THREE.Vector3) => {
         let m = 0;
@@ -454,7 +462,46 @@ export class MatchView {
       }
     }
     this.arena.setCamera(pos, look, dt);
+    this.updateVisibility(dt);
     void s;
+  }
+
+  /** Review metrics (section 11): cage occlusion, opponent visibility, camera jumps. */
+  camStats = { occlusion: 0, oppVisible: 1, jumps: 0, frames: 0, occlusionSum: 0, oppVisibleSum: 0 };
+  private lastCamPos: THREE.Vector3 | null = null;
+
+  /** Fade cage parts that hide a fighter; make your own fighter see-through when it covers the opponent. */
+  private updateVisibility(dt: number) {
+    if (!USE_HEROES || !this.arena.stage) return;
+    const cam = this.arena.camera;
+    const camPos = cam.getWorldPosition(new THREE.Vector3());
+    const pts: THREE.Vector3[] = [];
+    for (const sl of this.slots.values()) if (sl.avatar instanceof HeroFighter && sl.avatar.root.visible) pts.push(...sl.avatar.samplePoints());
+    this.arena.stage.updateOcclusion(cam, pts, dt);
+    const myId = this.opts.localIds[0];
+    const me = this.slots.get(myId);
+    const oppId = me?.snap.tg ?? [...this.slots.keys()].find((k) => k !== myId);
+    const opp = oppId != null ? this.slots.get(oppId) : undefined;
+    let vis = 1;
+    if (me?.avatar instanceof HeroFighter && opp?.avatar instanceof HeroFighter && this.slots.size === 2) {
+      const op = opp.avatar.samplePoints().slice(0, 4); // head, chest, hands: the opponent's upper body
+      let seen = 0;
+      for (const p of op) {
+        const dir = p.clone().sub(camPos);
+        const d = dir.length();
+        if (!me.avatar.blocksRay(camPos, dir.normalize(), d)) seen++;
+      }
+      vis = op.length ? seen / op.length : 1;
+      me.avatar.setOpacity(vis < 0.8 ? 0.4 : 1, dt);
+    }
+    const st = this.camStats;
+    st.frames++;
+    st.occlusion = this.arena.stage.occlusion;
+    st.oppVisible = vis;
+    st.occlusionSum += st.occlusion;
+    st.oppVisibleSum += vis;
+    if (this.lastCamPos && this.lastCamPos.distanceTo(camPos) > 0.3) st.jumps++;
+    this.lastCamPos = camPos;
   }
 
   private updateHud(s: Snapshot) {

@@ -28,17 +28,24 @@ const SCENES: Scene[] = [
   { name: 'hook', seconds: 3, cfg: duel([P('hook_01', 1.4)]) },
   { name: 'uppercut', seconds: 3, cfg: duel([P('guard_02')], { meter: 100 }), cues: [[0.5, 'move', 0, 'uppercut', 'R']] },
   { name: 'block', seconds: 3, cfg: duel([P('block_01', 3.0)]) },
-  { name: 'shield', seconds: 3, cfg: duel([P('guard_02')], { meter: 100, botLevel: 3 }), cues: [[0.3, 'move', 0, 'xshield', 'B']] },
+  // Iron Wall: a real clip of a person crossing their forearms above the face (X at about 1.2 s into the clip).
+  { name: 'shield', seconds: 3, cfg: duel([P('xshield_01', 0.9)], { meter: 100, botLevel: 3 }), cues: [[0.3, 'move', 0, 'xshield', 'B']] },
   { name: 'energy_blast', seconds: 3, cfg: duel([P('guard_02')], { meter: 100 }), cues: [[0.5, 'move', 0, 'palm', 'B']] },
   { name: 'getting_hit', seconds: 3, cfg: duel([P('guard_02')], { botLevel: 3 }) },
   { name: 'knockback', seconds: 3, cfg: duel([P('guard_02')]), cues: [[0.4, 'moveId', 2, 'uppercut', 'R', true]] },
   { name: 'ko', seconds: 4, cfg: duel([P('jab_01', 0.3)]), cues: [[0, 'setHp', 2, 12], [0.6, 'move', 0, 'jab', 'L']] },
-  { name: 'ringout', seconds: 4, cfg: duel([P('guard_02')], { meter: 100 }), cues: [[0, 'place', 2, 0, -2.4, 90], [0, 'place', 1, 0, -1.2], [0.6, 'move', 0, 'uppercut', 'R']] },
-  { name: 'teeter', seconds: 3, cfg: duel([P('guard_02')]), cues: [[0, 'place', 1, 0, 3.0], [0, 'place', 2, 0, 1.8]] },
+  // Cage slam: a super uppercut next to the fence; the opponent hits the cage and bounces off.
+  { name: 'cage_slam', seconds: 4, cfg: duel([P('guard_02')], { meter: 100 }), cues: [[0, 'place', 2, 0, -2.7, 90], [0, 'place', 1, 0, -1.7], [0.6, 'move', 0, 'uppercut', 'R']] },
   // Guard break: the player holds the guard with little meter left while the bot attacks; then dizzy and a clean hit.
   { name: 'guard_break', seconds: 4, cfg: duel([P('block_01', 3.0)], { botLevel: 3 }), cues: [[0, 'setGuard', 1, 25]] },
   // Circling: strafe left then right (step-sideways input).
   { name: 'strafe', seconds: 3, cfg: duel([P('guard_02')]), cues: [[0, 'setMove', 0, [0.8, 0]], [1.5, 'setMove', 0, [-0.8, 0]]] },
+  // Camera near the cage (2:35/2:45 AM): your back to the fence, the opponent against the far fence, in a corner.
+  { name: 'cage_near', seconds: 3, cfg: duel([P('jab_01', 0.3)], { botLevel: 2 }), cues: [[0, 'place', 1, 0, -3.0], [0, 'place', 2, 0, -1.8]] },
+  { name: 'cage_far', seconds: 3, cfg: duel([P('jab_01', 0.3)], { botLevel: 2 }), cues: [[0, 'place', 1, 0, 1.9], [0, 'place', 2, 0, 3.1]] },
+  { name: 'cage_corner', seconds: 3, cfg: duel([P('hook_01', 1.4)], { botLevel: 2 }), cues: [[0, 'place', 1, -2.2, -2.2], [0, 'place', 2, -1.4, -1.4]] },
+  // Big punches while standing still: the fighter must not move (bug fixed 3:10 AM; metric: displacement).
+  { name: 'big_punches', seconds: 4, cfg: duel([P('uppercut_01', 0.0)], { botLevel: -1 }) },
   { name: 'brawl8', seconds: 4, cfg: { mode: 'brawl', camera: 'wide', players: [P('jab_01')], bots: 7, botLevel: 2, meter: 50 }, warmup: 30 * 3.6 },
 ];
 
@@ -48,6 +55,7 @@ async function runScene(page: Page, sc: Scene) {
   fs.mkdirSync(dir, { recursive: true });
   await page.evaluate((cfg) => (window as any).__rec.scene(cfg), sc.cfg);
   await page.evaluate((n) => (window as any).__rec.step(n), sc.warmup ?? 30 * 3.3);
+  await page.evaluate(() => (window as any).__rec.resetCamStats?.());
   const frames = Math.round(sc.seconds * 30);
   const cues = [...(sc.cues ?? [])].sort((a, b) => a[0] - b[0]);
   const probes: any[] = [];
@@ -57,6 +65,7 @@ async function runScene(page: Page, sc: Scene) {
       await page.evaluate(({ method, args }) => (window as any).__rec[method](...args), { method, args });
     }
     await page.evaluate(() => (window as any).__rec.step(1));
+    if (i === 8) await page.evaluate(() => (window as any).__rec.resetCamStats?.()); // ignore the scene-start placement
     probes.push(await page.evaluate(() => (window as any).__rec.probe()));
     await page.screenshot({ path: path.join(dir, `${String(i + 1).padStart(4, '0')}.jpg`), type: 'jpeg', quality: 85 });
   }
@@ -99,7 +108,8 @@ async function runScene(page: Page, sc: Scene) {
   if (process.env.DEBUG_CONTACT) console.log(JSON.stringify(contacts));
   const cd = contacts.map((c) => c.d * 100);
   const contact = cd.length ? { contactHits: cd.length, contactMeanCm: +(cd.reduce((a, b) => a + b, 0) / cd.length).toFixed(1), contactMaxCm: +Math.max(...cd).toFixed(1) } : { contactHits: 0 };
-  const m = { scene: sc.name, ...contact, frames: me.length, footSlideMeanCm: +((slideSum / Math.max(1, slideN)) * 100).toFixed(2), footSlideMaxCm: +(slideMax * 100).toFixed(2), movingFrames: moving, driftFrames: drift, frozenTorsoHeadFrames: frozen };
+  const cam = await page.evaluate(() => (window as any).__rec.camStats?.());
+  const m = { scene: sc.name, ...contact, ...(cam ?? {}), frames: me.length, footSlideMeanCm: +((slideSum / Math.max(1, slideN)) * 100).toFixed(2), footSlideMaxCm: +(slideMax * 100).toFixed(2), movingFrames: moving, driftFrames: drift, frozenTorsoHeadFrames: frozen };
   fs.writeFileSync(path.join(OUT, `${sc.name}_metrics.json`), JSON.stringify(m));
   console.log(JSON.stringify(m));
 }

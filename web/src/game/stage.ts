@@ -24,6 +24,11 @@ export class SkyStage {
   radius = 4.2; // circumradius (center to a corner post), meters
   private cage = new THREE.Group();
   private panels: { mesh: THREE.Mesh; angle: number; shake: number; base: THREE.Vector3 }[] = [];
+  /** Every cage element that can block the camera's view of a fighter (panels, posts, pads, rails). */
+  private parts: THREE.Mesh[] = [];
+  private ray = new THREE.Raycaster();
+  /** Last frame's share of camera-to-fighter rays that hit the cage (before fading), for the review metric. */
+  occlusion = 0;
   private flashes!: THREE.Points;
   private flashMat!: THREE.PointsMaterial;
   private lightsGlow: THREE.Sprite[] = [];
@@ -149,6 +154,7 @@ export class SkyStage {
   private buildOctagon(R: number) {
     this.cage.clear();
     this.panels = [];
+    this.parts = [];
     const corners: THREE.Vector2[] = [];
     for (let k = 0; k < SIDES; k++) {
       const a = (k / SIDES) * Math.PI * 2 + Math.PI / SIDES;
@@ -253,32 +259,67 @@ export class SkyStage {
       tex.needsUpdate = true;
       tex.repeat.set(len / 0.11, CAGE_HEIGHT / 0.11);
       const pm = new THREE.MeshLambertMaterial({ map: tex, transparent: true, alphaTest: 0.35, side: THREE.DoubleSide, depthWrite: true });
+      pm.userData.baseOpacity = 1;
       const panel = new THREE.Mesh(new THREE.PlaneGeometry(len, CAGE_HEIGHT), pm);
       const mid = p0.clone().add(p1).multiplyScalar(0.5);
       panel.position.set(mid.x, top + CAGE_HEIGHT / 2, mid.y);
       panel.lookAt(0, top + CAGE_HEIGHT / 2, 0);
       this.cage.add(panel);
+      this.parts.push(panel);
       this.panels.push({ mesh: panel, angle: Math.atan2(mid.y, mid.x), shake: 0, base: panel.position.clone() });
       // Top rail and bottom padding along the panel.
       for (const [y, r, color] of [
-        [CAGE_HEIGHT, 0.045, 0x1a1d29],
-        [0.12, 0.12, 0x111427],
+        [CAGE_HEIGHT, 0.045, 0x8a92a6],
+        [0.12, 0.12, 0x2a3150],
       ] as const) {
-        const rail = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 10), new THREE.MeshLambertMaterial({ color }));
+        const rail = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 10), new THREE.MeshLambertMaterial({ color, transparent: true }));
         rail.position.set(mid.x, y, mid.y);
         rail.lookAt(p1.x, y, p1.y);
         rail.rotateX(Math.PI / 2);
         this.cage.add(rail);
+        this.parts.push(rail);
       }
     }
     // Padded corner posts (black with a colored band).
     for (const [k, p] of corners.entries()) {
-      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, CAGE_HEIGHT + 0.1, 16), new THREE.MeshLambertMaterial({ color: 0x0d0f18 }));
+      // Lit steel post (it rendered as a flat black shape before) with a padded, colored sleeve.
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, CAGE_HEIGHT + 0.1, 16), new THREE.MeshStandardMaterial({ color: 0x7a8296, metalness: 0.6, roughness: 0.35, transparent: true }));
       post.position.set(p.x, (CAGE_HEIGHT + 0.1) / 2, p.y);
       this.cage.add(post);
-      const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.135, 0.135, 0.9, 16), new THREE.MeshLambertMaterial({ color: k % 2 ? 0x33b5ff : 0xff3d6e }));
-      pad.position.set(p.x, 1.05, p.y);
+      const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 1.2, 16), new THREE.MeshLambertMaterial({ color: k % 2 ? 0x33b5ff : 0xff3d6e, emissive: k % 2 ? 0x0a2236 : 0x360a16, transparent: true }));
+      pad.position.set(p.x, 0.95, p.y);
       this.cage.add(pad);
+      this.parts.push(post, pad);
+    }
+  }
+
+  /**
+   * Fade the cage parts that sit between the camera and any fighter point (head, chest, hands, feet) to ~15% opacity,
+   * smoothly (~150 ms), so the cage never hides the fight; parts return when they stop occluding.
+   */
+  updateOcclusion(camera: THREE.Camera, points: THREE.Vector3[], dt: number) {
+    const camPos = camera.getWorldPosition(new THREE.Vector3());
+    const hit = new Set<THREE.Object3D>();
+    let blocked = 0;
+    for (const p of points) {
+      const dir = p.clone().sub(camPos);
+      const dist = dir.length();
+      this.ray.set(camPos, dir.normalize());
+      this.ray.far = dist - 0.05;
+      const hits = this.ray.intersectObjects(this.parts, false);
+      if (hits.length) {
+        blocked++;
+        for (const h of hits) hit.add(h.object);
+      }
+    }
+    this.occlusion = points.length ? blocked / points.length : 0;
+    const k = Math.min(1, dt / 0.15);
+    for (const m of this.parts) {
+      const mat = m.material as THREE.Material & { opacity: number };
+      const target = hit.has(m) ? 0.08 : 1;
+      mat.opacity += (target - mat.opacity) * k;
+      mat.depthWrite = mat.opacity > 0.9;
+      if (mat.alphaTest > 0) mat.alphaTest = 0.35 * mat.opacity; // chain-link: keep the wire visible but faint
     }
   }
 

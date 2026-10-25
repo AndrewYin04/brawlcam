@@ -158,6 +158,14 @@ export async function initRecord() {
       f.z = z;
       if (kb != null) f.kb = kb;
     },
+    camStats() {
+      const st = (view as any)?.camStats;
+      return st ? { occlusionPct: +((st.occlusionSum / Math.max(1, st.frames)) * 100).toFixed(1), opponentVisiblePct: +((st.oppVisibleSum / Math.max(1, st.frames)) * 100).toFixed(1), cameraJumps: st.jumps, frames: st.frames } : null;
+    },
+    resetCamStats() {
+      const st = (view as any)?.camStats;
+      if (st) Object.assign(st, { jumps: 0, frames: 0, occlusionSum: 0, oppVisibleSum: 0 });
+    },
     setGuard(id: number, v: number) {
       const f = session?.sim.get(id);
       if (f) f.guard = v;
