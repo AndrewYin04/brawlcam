@@ -15,6 +15,8 @@ const loading = fetch('/calls/calls.json')
 void loading;
 
 const ALWAYS = new Set(['round1', 'round2', 'round3', 'fight', 'ko', 'match_over', 'draw', 'time']);
+// Big moments need only 1 s since the last call (they shouldn't be swallowed by a round-start call).
+const BIG = new Set(['guard_break', 'ironwall', 'counter', 'super_uppercut', 'cage', 'blast', 'throw']);
 
 export class Announcer {
   private lastAt = -99;
@@ -41,7 +43,7 @@ export class Announcer {
     if (!this.enabled || !calls?.[key]?.length) return false;
     const now = performance.now() / 1000;
     this.recent = this.recent.filter((t) => now - t < 60);
-    if (!ALWAYS.has(key) && (now - this.lastAt < 2.2 || this.recent.length >= 8)) return false;
+    if (!ALWAYS.has(key) && (now - this.lastAt < (BIG.has(key) ? 1.0 : 2.2) || this.recent.length >= 8)) return false;
     const opts = calls[key].filter((c) => c.id !== this.lastId);
     const pick = (opts.length ? opts : calls[key])[Math.floor(Math.random() * (opts.length || calls[key].length))];
     void sfx.loadBuffer(`/calls/${pick.id}.mp3`).then((buf) => buf && sfx.playVoiceBuffer(buf));

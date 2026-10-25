@@ -44,7 +44,7 @@ const SHOTS: Shot[] = [
     seconds: 7,
     warmup: 30 * 3.2,
     cfg: { mode: 'duel', camera: 'behind', players: [{ name: 'You', color: P1, landmarks: LM('jab_01'), offset: 0.3 }], bots: 1, botLevel: -1, meter: 60 },
-    cues: [[0, C('place', 1, 0, 1.6)], [0, C('place', 2, 0, -1.4)], [0, C('setMove', 0, [0, 0.9])], [1.6, C('setMove', 0, [0, 0])], [2.0, C('move', 0, 'jab', 'L')], [2.6, C('move', 0, 'hook', 'R')], [3.6, C('setMeter', 0, 100)], [4.0, C('move', 0, 'uppercut', 'R')]],
+    cues: [[0, C('place', 1, 0, 1.0)], [0, C('place', 2, 0, -1.6)], [0, C('setMove', 0, [0, 0.9])], [1.6, C('setMove', 0, [0, 0])], [2.0, C('move', 0, 'jab', 'L')], [2.6, C('move', 0, 'hook', 'R')], [3.6, C('setMeter', 0, 100)], [4.0, C('move', 0, 'uppercut', 'R')]],
   },
   {
     name: 'cage_slam',
@@ -67,7 +67,7 @@ const SHOTS: Shot[] = [
     seconds: 6,
     warmup: 30 * 3.2,
     cfg: { mode: 'duel', camera: 'behind', players: [{ name: 'You', color: P1, landmarks: LM('block_01'), offset: 3.0 }], bots: 1, botLevel: 3, meter: 30 },
-    cues: [[0, C('setGuard', 1, 45)]],
+    cues: [[0, C('setGuard', 1, 60)], [0, C('setBlocking', 0, true)], [4.0, C('setBlocking', 0, null)]],
   },
   // Iron Wall: a real person crossing forearms above the face with a full meter; the attacker is countered.
   {
@@ -114,7 +114,7 @@ async function runShot(page: Page, shot: Shot) {
   const cues = [...(shot.cues ?? [])].filter(([t, c]) => !(t === 0 && c.op === 'call' && c.method === 'place')).sort((a, b) => a[0] - b[0]);
   const t0 = Date.now();
   const calls: { t: number; id: string; text: string }[] = [];
-  let seen = (await page.evaluate(() => (window as any).__brawl.announcer?.() ?? [])).length;
+  let seen = (await page.evaluate(() => (window as any).__rec.calls?.() ?? [])).length;
   for (let i = 0; i < frames; i++) {
     while (cues.length && cues[0][0] * 30 <= i) {
       const [, cue] = cues.shift()!;
@@ -127,7 +127,7 @@ async function runShot(page: Page, shot: Shot) {
     }
     await page.evaluate(() => (window as any).__rec.step(1));
     // Announcer calls fired this frame (mixed into the video's audio at this time).
-    const log = await page.evaluate(() => (window as any).__brawl.announcer?.() ?? []);
+    const log = await page.evaluate(() => (window as any).__rec.calls?.() ?? []);
     for (const c of log.slice(seen)) calls.push({ t: +(i / 30).toFixed(3), id: c.id, text: c.text });
     seen = log.length;
     await page.screenshot({ path: path.join(dir, `${String(i + 1).padStart(5, '0')}.jpg`), type: 'jpeg', quality: 92 });

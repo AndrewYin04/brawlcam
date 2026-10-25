@@ -10,4 +10,5 @@ let peak = 0, airborneFrames = 0;
 for (let i = 0; i < 30 * 5; i++) { sim.step(1 / 30); const b = sim.get(2)!; peak = Math.max(peak, b.y); if (b.y > 0.05) airborneFrames++; }
 const ev = sim.drainEvents().filter((e) => e.type === 'hit' || e.type === 'super');
 console.log('events', JSON.stringify(ev.map((e: any) => [e.type, e.kind, e.damage])), 'peak height m', peak.toFixed(2), 'airborne real s', (airborneFrames / 30).toFixed(2));
-process.exitCode = peak > 1 ? 0 : 1;
+// Octagon rules: a low, hard launch (it should slam into the cage at chest height, not sail over the 1.8 m rail).
+process.exitCode = peak > 0.4 && peak < 1.3 ? 0 : 1;

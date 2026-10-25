@@ -409,6 +409,32 @@ export class HeroFighter {
     }
   }
 
+  private marker: THREE.Sprite | null = null;
+  /** "This is you" marker above your fighter (Brawl). */
+  setMarker(on: boolean) {
+    if (on && !this.marker) {
+      const c = document.createElement('canvas');
+      c.width = c.height = 64;
+      const g = c.getContext('2d')!;
+      g.fillStyle = '#ffc53d';
+      g.strokeStyle = '#000';
+      g.lineWidth = 5;
+      g.beginPath();
+      g.moveTo(8, 12);
+      g.lineTo(56, 12);
+      g.lineTo(32, 54);
+      g.closePath();
+      g.stroke();
+      g.fill();
+      this.marker = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false }));
+      this.marker.scale.setScalar(0.28);
+      this.marker.position.y = 2.25;
+      this.marker.renderOrder = 10;
+      this.root.add(this.marker);
+    }
+    if (this.marker) this.marker.visible = on;
+  }
+
   setTargeted(on: boolean) {
     if (this.targetRing) this.targetRing.visible = on;
   }
@@ -509,21 +535,20 @@ export class HeroFighter {
 
     // ---- KO / get-up ----
     if (!opts.alive && this.wasAlive) {
-      this.play('death', 0.05, 1, 1, 1.4);
-      this.actions.get('death')!.time = 1.05; // Death01 staggers for ~1 s before the fall: start at the fall
+      // KO: the knockback tumble (knees buckle, body folds, lands) and stay down on its last frame.
+      this.play('knockback', 0.05, 1, 1, 0.9);
       this.oneShot!.until = Infinity; // stay down (clamped on the last frame) until revived
       this.koTime = time;
     }
     if (opts.alive && !this.wasAlive) {
-      this.actions.get('death')?.fadeOut(0.15);
+      this.actions.get('knockback')?.fadeOut(0.15);
       this.play('getUp', 0.12, 1, 1, 1.4);
       this.koTime = -1;
     }
     this.wasAlive = opts.alive;
     // While knocked out, the death clip (clamped on its last frame) always plays; nothing may replace it.
-    if (!opts.alive && this.oneShot?.name !== 'death') {
-      this.play('death', 0.05, 1, 1, 1.4);
-      this.actions.get('death')!.time = 1.05;
+    if (!opts.alive && this.oneShot?.name !== 'knockback') {
+      this.play('knockback', 0.05, 1, 1, 0.9);
       this.oneShot!.until = Infinity;
     }
 
@@ -631,7 +656,7 @@ export class HeroFighter {
 
     // ---- gear ----
     this.glowBoost = Math.max(0, this.glowBoost - dt * 3);
-    if (this.gloveMat) this.gloveMat.emissiveIntensity = 0.12 + this.glowBoost * 0.8 + (opts.meterFull ? 0.35 + 0.25 * Math.sin(time * 8) : 0);
+    if (this.gloveMat) this.gloveMat.emissiveIntensity = Math.min(0.45, 0.1 + this.glowBoost * 0.4 + (opts.meterFull ? 0.15 + 0.1 * Math.sin(time * 8) : 0));
     if (this.ringMat) {
       this.ringMat.opacity = opts.meterFull ? 0.75 + 0.25 * Math.sin(time * 8) : 0.35;
       this.ring.scale.setScalar(opts.meterFull ? 1.1 + 0.05 * Math.sin(time * 8) : 1);
@@ -646,8 +671,15 @@ export class HeroFighter {
       if (iron) col.set(0xffa800);
       else if (g > 0.5) col.copy(BLUE).lerp(YELLOW, (1 - g) * 2);
       else col.copy(YELLOW).lerp(RED, 1 - g * 2);
-      const sc = iron ? 1.08 : 0.7 + 0.3 * g;
-      this.shield.scale.set(sc, sc * 1.6, sc);
+      // Guard: a compact bubble around the head and arms (not a full-body capsule); Iron Wall covers the body.
+      if (iron) {
+        this.shield.scale.set(1.08, 1.6, 1.08);
+        this.shield.position.y = 0.97;
+      } else {
+        const sc = 0.62 + 0.25 * g;
+        this.shield.scale.set(sc, sc * 0.9, sc);
+        this.shield.position.y = 1.38;
+      }
       this.shieldMat.uniforms.strength.value = iron ? 0.9 : 0.6;
       this.shieldMat.uniforms.time.value = time;
     }
@@ -690,7 +722,12 @@ export class HeroFighter {
           lungeWant = s.lunge * w;
           this.body.position.z = lungeWant;
           this.root.updateMatrixWorld(true);
-          if (s.kind === 'uppercut' || s.kind === 'super_uppercut') goal.y -= (1 - w) * 0.45; // rise from under the chin
+          if (s.kind === 'uppercut' || s.kind === 'super_uppercut') {
+            // Rise from under the chin: dip the hips, then drive up through the hit.
+            goal.y -= (1 - w) * 0.6;
+            this.body.position.y += (w < 1 ? -0.1 * (1 - w) : 0.05);
+            this.root.updateMatrixWorld(true);
+          }
           if (kick) {
             const pole = this.root.localToWorld(new THREE.Vector3(side === 'l' ? 0.2 : -0.2, 1.4, 1.2));
             twoBoneIK(upper, this.bones['calf_' + side]!, this.bones['foot_' + side]!, goal, pole, w, this.len['th' + side], this.len['ca' + side], 0);

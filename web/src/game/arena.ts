@@ -131,7 +131,8 @@ export class Arena {
 
   /** Smoothly move the camera toward a pose; snap if requested. */
   setCamera(pos: THREE.Vector3, look: THREE.Vector3, dt: number, snap = false) {
-    const k = snap ? 1 : 1 - Math.exp(-dt * 5);
+    // Teleports (round start, respawn) cut instead of sweeping the camera across the arena.
+    const k = snap || this.camPos.distanceTo(pos) > 3 ? 1 : 1 - Math.exp(-dt * 5);
     this.camPos.lerp(pos, k);
     this.camLook.lerp(look, k);
     this.camera.position.copy(this.camPos);

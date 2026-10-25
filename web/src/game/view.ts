@@ -8,7 +8,10 @@ import { Announcer } from './announcer';
 
 /** New Smash-style heroes by default; the original VRM renderer stays behind ?classic (and capsules behind ?lowgfx). */
 /** 1v1 camera: 'behind' (default) or 'inside' (clamped inside the cage), for the user to compare. */
-export const CAM_MODE: 'behind' | 'inside' = typeof location !== 'undefined' && new URLSearchParams(location.search).get('cam') === 'inside' ? 'inside' : 'behind';
+export const CAM_MODE: 'behind' | 'inside' | 'free' = (() => {
+  const c = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('cam') : null;
+  return c === 'inside' ? 'inside' : c === 'free' ? 'free' : 'behind';
+})();
 export const USE_HEROES = typeof location !== 'undefined' && !new URLSearchParams(location.search).has('classic') && !FighterAvatar.lowGfx;
 import { VFX, SPRITE_SPARKS } from './vfx';
 import * as sfx from './audio';
@@ -342,11 +345,12 @@ export class MatchView {
           slot.avatar.update(animDt, this.time, { shield: f.iw, meterFull: f.meter >= 100, airborne: f.y, alive: !!f.alive || s.f.length <= 2 });
         }
         slot.avatar.setTargeted(s.f.length > 2 && me?.tg === f.id);
+        if (slot.avatar instanceof HeroFighter) slot.avatar.setMarker(s.f.length > 2 && f.id === myId);
         slot.avatar.setSeeThroughCape(this.opts.camera !== 'side' && f.id === myId);
         if (f.hp < slot.lastHp && f.hp > 0 && f.hp < 30 && slot.lastHp >= 30 && this.opts.localIds.includes(f.id)) this.hint('Low health: block with forearms up!');
         slot.lastHp = f.hp;
         // Punch trails for strikes in progress
-        if (f.atk && f.atk.age < 0.15 && (f.atk.k === 'jab' || f.atk.k === 'hook' || f.atk.k === 'uppercut' || f.atk.k === 'super_uppercut')) {
+        if (!USE_HEROES && f.atk && f.atk.age < 0.15 && (f.atk.k === 'jab' || f.atk.k === 'hook' || f.atk.k === 'uppercut' || f.atk.k === 'super_uppercut')) {
           this.vfx.trail(slot.avatar.glovePos(f.atk.h === 'L' ? 'L' : 'R'), f.color);
         }
       }
@@ -388,8 +392,8 @@ export class MatchView {
         // Brawl: centered on you, widened just enough for the fighters near you.
         let near = 0;
         for (const o of others) if (o.snap.alive) near = Math.max(near, Math.min(5, o.pos.distanceTo(me.pos)));
-        const d = (portrait ? 3.8 : 2.8) + near * 0.4;
-        pos = me.pos.clone().addScaledVector(back, d).addScaledVector(new THREE.Vector3(back.z, 0, -back.x), -1.0).setY((portrait ? 2.4 : 1.9) + near * 0.1);
+        const d = (portrait ? 4.4 : 3.4) + near * 0.4;
+        pos = me.pos.clone().addScaledVector(back, d).addScaledVector(new THREE.Vector3(back.z, 0, -back.x), -1.0).setY((portrait ? 2.9 : 2.5) + near * 0.15);
         look = me.pos.clone().addScaledVector(back, -1.6).setY(1.0);
       } else {
         pos = me.pos.clone().addScaledVector(back, portrait ? 7 : 5).setY(portrait ? 6 : 4.2);
@@ -431,7 +435,9 @@ export class MatchView {
     }
     // Keep the camera inside the octagon cage (never behind a post, pad or the chain-link). Near the fence, swing the
     // camera around you (keeping its height and distance) instead of pushing it in or lifting it.
-    if (USE_HEROES && this.arena.stage && (CAM_MODE === 'inside' || this.opts.camera !== 'behind')) {
+    // Every mode except ?cam=free keeps the camera inside the cage (the behind angle swings around the fight when it
+    // would otherwise back out through the fence).
+    if (USE_HEROES && this.arena.stage && CAM_MODE !== 'free') {
       const A = apothem(this.arena.stage.radius) - 0.35;
       const outside = (p: THREE.Vector3) => {
         let m = 0;
@@ -498,7 +504,9 @@ export class MatchView {
         if (!me.avatar.blocksRay(camPos, dir.normalize(), d)) seen++;
       }
       vis = op.length ? seen / op.length : 1;
-      me.avatar.setOpacity(vis < 0.8 ? 0.4 : 1, dt);
+      // See-through is a fallback only: never during your own strike (you must see your punch), and never below 60%.
+      const striking = me.snap.atk && me.snap.atk.age < 0.5;
+      me.avatar.setOpacity(vis < 0.8 && !striking ? 0.6 : 1, dt);
     }
     const st = this.camStats;
     st.frames++;

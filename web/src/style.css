@@ -108,7 +108,7 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 #banner { position: absolute; top: 38%; left: 0; right: 0; text-align: center; font-family: 'Bungee', sans-serif; font-size: clamp(40px, 11vw, 120px); color: #fff; text-shadow: 0 0 30px rgba(255, 61, 110, 0.9), 0 6px 0 #000; opacity: 0; transform: scale(0.6); transition: opacity 0.15s, transform 0.2s; }
 #banner.show { opacity: 1; transform: scale(1); }
 #banner.gold { color: var(--gold); }
-#hint { position: absolute; top: 96px; left: 50%; transform: translateX(-50%); background: rgba(0, 0, 0, 0.55); border-radius: 999px; padding: 6px 14px; font-size: 14px; opacity: 0; transition: opacity 0.3s; white-space: nowrap; }
+#hint { position: absolute; bottom: 112px; left: 50%; transform: translateX(-50%); background: rgba(0, 0, 0, 0.55); border-radius: 999px; padding: 6px 14px; font-size: 14px; opacity: 0; transition: opacity 0.3s; white-space: nowrap; }
 #hint.show { opacity: 1; }
 #commentary { position: absolute; bottom: 64px; left: 50%; transform: translateX(-50%); max-width: min(720px, 90vw); text-align: center; font: italic 700 18px/1.3 system-ui; color: #fff; text-shadow: 0 2px 6px #000; opacity: 0; transition: opacity 0.3s; }
 #commentary.show { opacity: 1; }

@@ -37,7 +37,7 @@ const SCENES: Scene[] = [
   // Cage slam: a super uppercut next to the fence; the opponent hits the cage and bounces off.
   { name: 'cage_slam', seconds: 4, cfg: duel([P('guard_02')], { meter: 100 }), cues: [[0, 'place', 2, 0, -2.7, 90], [0, 'place', 1, 0, -1.7], [0.6, 'move', 0, 'uppercut', 'R']] },
   // Guard break: the player holds the guard with little meter left while the bot attacks; then dizzy and a clean hit.
-  { name: 'guard_break', seconds: 4, cfg: duel([P('block_01', 3.0)], { botLevel: 3 }), cues: [[0, 'setGuard', 1, 25]] },
+  { name: 'guard_break', seconds: 4, cfg: duel([P('block_01', 3.0)], { botLevel: 3 }), cues: [[0, 'setGuard', 1, 40], [0, 'setBlocking', 0, true], [3.0, 'setBlocking', 0, null]] },
   // Circling: strafe left then right (step-sideways input).
   { name: 'strafe', seconds: 3, cfg: duel([P('guard_02')]), cues: [[0, 'setMove', 0, [0.8, 0]], [1.5, 'setMove', 0, [-0.8, 0]]] },
   // Camera near the cage (2:35/2:45 AM): your back to the fence, the opponent against the far fence, in a corner.

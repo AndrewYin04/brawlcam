@@ -314,12 +314,17 @@ export class SkyStage {
       }
     }
     this.occlusion = points.length ? blocked / points.length : 0;
+    // Parts right next to the camera (a post or pad filling a third of the frame) fade too.
+    const box = new THREE.Box3();
+    for (const m of this.parts) if (!hit.has(m) && box.setFromObject(m).distanceToPoint(camPos) < 1.3) hit.add(m);
     const k = Math.min(1, dt / 0.15);
     for (const m of this.parts) {
       const mat = m.material as THREE.Material & { opacity: number };
-      const target = hit.has(m) ? 0.08 : 1;
+      // Occluding parts fade all the way out (a half-faded fence read as a grey veil) and come back when clear.
+      const target = hit.has(m) ? 0 : 1;
       mat.opacity += (target - mat.opacity) * k;
       mat.depthWrite = mat.opacity > 0.9;
+      m.visible = mat.opacity > 0.03;
       if (mat.alphaTest > 0) mat.alphaTest = 0.35 * mat.opacity; // chain-link: keep the wire visible but faint
     }
   }

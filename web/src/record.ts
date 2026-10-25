@@ -33,6 +33,7 @@ let session: LocalSession | null = null;
 let replays: (Replay | null)[] = [];
 let t = 0;
 const forcedMove = new Map<number, [number, number]>();
+const forcedBlock = new Map<number, boolean>();
 const overrides = new Map<number, { kind: string; until: number; start: number; hand: string }>();
 const lastOut: GestureOutput[] = [];
 
@@ -85,6 +86,7 @@ export async function initRecord() {
       session.start();
       t = 0;
       forcedMove.clear();
+      forcedBlock.clear();
       // Let the avatars load.
       await Promise.all([...view.slots.values()].map((s) => s.avatar.ready));
       return { ids };
@@ -102,6 +104,7 @@ export async function initRecord() {
           const out = r.rec.update(p ? { t: t, world: p.world, image: p.image } : null, t);
           const fm = forcedMove.get(i);
           if (fm) out.move = fm;
+          if (forcedBlock.has(i)) out.blocking = forcedBlock.get(i)!;
           lastOut[i] = out;
           session.input(i, out, out.actions);
         });
@@ -134,6 +137,11 @@ export async function initRecord() {
       if (m) forcedMove.set(i, m);
       else forcedMove.delete(i);
     },
+    /** Force a player's guard (forearms up) on or off (null to release). */
+    setBlocking(i: number, b: boolean | null) {
+      if (b == null) forcedBlock.delete(i);
+      else forcedBlock.set(i, b);
+    },
     /** Make any fighter (e.g. the bot) perform a move. */
     moveId(id: number, kind: Action['kind'], hand: 'L' | 'R' | 'B' = 'R', meter = false) {
       if (!session) return;
@@ -157,6 +165,10 @@ export async function initRecord() {
       f.x = x;
       f.z = z;
       if (kb != null) f.kb = kb;
+    },
+    /** Announcer calls played so far in this record-mode view (for mixing into the video's audio). */
+    calls() {
+      return (view as any)?.announcer?.log ?? [];
     },
     camStats() {
       const st = (view as any)?.camStats;

@@ -148,9 +148,9 @@ export const BRAWL_DEFAULTS: SimConfig = {
 export const TUNING = {
   hpMax: 100,
   moveSpeed: 2.4,
-  engageDist: 1.2, // arm's length plus a step between 1.8 m fighters: strikes have room to extend (and step in)
+  engageDist: 1.25, // arm's length plus a step between 1.8 m fighters: strikes have room to extend (and step in)
   assistIdle: 1.5, // s without forward/back input before the duel assist walks you back into range
-  minDist: 0.85,
+  minDist: 0.95, // bodies (with guards up) never overlap
   reach: { jab: 1.5, hook: 1.4, uppercut: 1.4, kick: 1.7, palm: 0, xshield: 0 } as Record<ActionKind, number>,
   speedMin: 1.5, // m/s, maps to 5 HP
   speedMax: 6.0, // m/s, maps to 15 HP
@@ -179,7 +179,7 @@ export const TUNING = {
   superUppercutDamage: 25,
   superUppercutLunge: 3.2,
   blastDamage: 20,
-  blastSpeed: 6,
+  blastSpeed: 4.2, // slow enough to see it cross the gap at fighting range
   blastHitRadius: 0.4,
   blastSpawn: 0.3,
   stunSeconds: 0.22,
@@ -193,7 +193,7 @@ export const TUNING = {
   strafeScale: 0.6,
   bodyRadius: 0.32,
   cageBounceMin: 1.2, // m/s into the fence before it counts as a slam
-  cageRestitution: 0.45,
+  cageRestitution: 0.15, // the fence absorbs most of a slam: you drop at its base, not bounce back across the cage
 };
 
 const NO_INPUT: FighterInput = { move: [0, 0], blocking: false, xshield: false, turn: 0, present: false };
@@ -536,6 +536,9 @@ export class Sim {
           if (vn > TUNING.cageBounceMin && fighting) {
             f.vx -= nx * vn * (1 + TUNING.cageRestitution);
             f.vz -= nz * vn * (1 + TUNING.cageRestitution);
+            // Sliding along the fence is damped too (the chain-link grabs you).
+            f.vx *= 0.5;
+            f.vz *= 0.5;
             this.emit({ type: 'cage', id: f.id, x: f.x + nx * TUNING.bodyRadius, y: 1.0 + f.y, z: f.z + nz * TUNING.bodyRadius, speed: +vn.toFixed(2) });
           } else {
             f.vx -= nx * vn;
@@ -793,11 +796,12 @@ export class Sim {
       att.comboAt = this.t;
       att.comboTarget = tgt.id;
       const heavy = isSuper || (att.combo >= 3 && !blocked && !shielded);
-      const base = shielded ? 0.4 : blocked ? 0.6 : 1.6;
+      const base = shielded ? 0.4 : blocked ? 0.6 : kind === 'super_uppercut' ? 3.2 : 1.6;
       const push = base * (shielded ? 1 : 1 + tgt.kb / TUNING.duelKbScale) * (heavy ? TUNING.heavyKbMult : 1);
       tgt.vx += (dx / len) * push;
       tgt.vz += (dz / len) * push;
-      if (kind === 'super_uppercut' && !shielded && !blocked) tgt.vy = 6.2;
+      // Lower arc, harder drive: the target slams into the cage at chest height instead of sailing over the rail.
+      if (kind === 'super_uppercut' && !shielded && !blocked) tgt.vy = 4.4;
       else if (heavy && !shielded && !blocked) tgt.vy = Math.max(tgt.vy, 2.5);
       if (heavy) att.combo = 0;
     }
