@@ -871,3 +871,21 @@ At 2:18 in v2, the store's skin tiles are blurred color gradients, which read as
 - **Video v3:** replace the 2:18 store shot with the new store, preferably showing one fighter switching between two skins. Keep the same shot length and the same voiceover line.
 
 Order: after the `cam=free` default (item 1 of the 7:32 list), alongside the other v3 work, still by 10:15 AM.
+
+### 7:45 AM: the user added a v3 item: introduce kicks, grabs, and the Shoulder Throw in the moves section
+The user: "kicks + grabs; grabs actually work pretty well now; throw also works well and gets detected, but the animation is what's lacking. The throw animation needs fixing, but even if it isn't fixed, include it. Adding voiceover on top of these would be good."
+
+**In v3's moves section** (next to the guard-break callout around 0:48; keep the overall length within 2:00 to 2:45):
+- **Kick:** a real gameplay shot with a callout like "KICK → 12–18 DMG".
+- **Grab, clinch, and knees:** grab, clinch, then a knee, with callouts like "GRAB → CLINCH" and "KNEE → 8 DMG". Real game footage with grappling on; drive it from the user's recorded grab reps if possible.
+- **Shoulder Throw:** callout "SHOULDER THROW → 25 DMG". **Fix the throw animation first** (7:05 AM spec: grip, turn-in, arc over the shoulder, slam onto the back, stay down 1 s, one held side camera). If the fixed animation passes the section 11 review by about **9:30 AM**, use it; otherwise use the current animation (the user's call), with the most readable angle.
+- **Voiceover:** **one or two short new VO lines** for this section in the **same ElevenLabs voice as the existing VO**, about 150 to 250 characters total, for example "Kick when your legs are in frame. Close the distance, grab, and drive knees in the clinch, or load up the Shoulder Throw." Transcript-check them (0 extra words) and match the existing loudness. This is the only new ElevenLabs use; log the characters in STATUS.md.
+
+**Turn grappling on by default** (the user reports grabs and throws work for them), so what the video shows works at the judging table. Do it **only if all of these hold**, and post the evidence:
+1. `eval-gestures` strike results are identical, or better, with grappling on
+2. the user's drill sessions show no new strike misreads
+3. the full e2e suite passes on the live default build
+
+If any fails, keep `?grapple=1` and have the video caption say "Grappling (beta)".
+
+Update `submission/devpost.md` and the README so their move lists match what ships.
