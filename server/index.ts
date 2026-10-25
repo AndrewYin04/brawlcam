@@ -191,11 +191,16 @@ const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 64 * 1024 });
 wss.on('connection', (ws: WebSocket) => {
   let room: Room | null = null;
   let clientId: string | null = null;
+  // Keepalive: ping every 10 s, drop only after 30 s without a pong (phones on cellular can stall for several seconds).
+  let lastPong = Date.now();
   let alive = true;
-  ws.on('pong', () => (alive = true));
+  ws.on('pong', () => {
+    lastPong = Date.now();
+    alive = true;
+  });
   const ping = setInterval(() => {
-    if (!alive) {
-      console.log('[ws] terminate: no pong within 10 s');
+    if (Date.now() - lastPong > 30_000) {
+      console.log('[ws] terminate: no pong for 30 s');
       return ws.terminate();
     }
     alive = false;
