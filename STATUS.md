@@ -1,6 +1,22 @@
 # Status (written by the implementation agent)
 
-Last update: Sun Oct 25, 6:40 AM CDT. Deployed build: `5b730ef` on https://throwhands.tech (feature freeze 7:30 AM).
+Last update: Sun Oct 25, 7:50 AM CDT. **Deployed build: `4867e3f`** on https://throwhands.tech (deployed 7:43 AM).
+
+## 7:43 AM: `cam=free` is the default camera (REVIEW.md 7:16 AM)
+- **Timing:** it shipped at 7:43 AM, 13 minutes after the freeze, which the user's 7:16 AM request allows. Builds before it ran under the freeze: `b900939` at 7:13 (record-mode summary hook, tips hidden in record mode) and `ee43135` at 7:18 (Gemini 3.1-flash-lite first).
+- **Code:** in `web/src/game/view.ts`, `CAM_MODE` now defaults to `free`. `?cam=behind` (the old swinging mode) and `?cam=inside` stay selectable.
+- **What free keeps:**
+  - cage parts fade (`updateVisibility` runs outside the skipped block)
+  - 3D body clearance
+  - the KO side shot
+  - the slow-motion side camera
+- **Measured on the live build** (record-mode scenes, `video/out/review/r12-free`):
+  - camera jumps: 0 in idle, jab, hook, getting_hit, cage_near and cage_far; 1 in KO and energy_blast; 3 in uppercut
+  - opponent visible: idle 100%, uppercut 97.8%, KO 92.1%, getting_hit 89.2%, hook 84%, cage_near and cage_far 76.9%, jab 73.5%
+- **Trade-off:** with no swing, the opponent is partly hidden behind you in straight-on exchanges, and near the fence the camera can sit outside the cage with faded posts in the foreground. The occlusion metric counts those posts even when faded, so it reads high (cage_near 100%).
+- **e2e rerun of the 5 suite failures** (the suite ran at 51 passed and 5 failed while deploys restarted the server and video recordings shared the GPU):
+  - online 200 ms latency and energy blast now pass
+  - slow-3G first load, local2p "one player leaves" and mirror still fail; under investigation
 
 ## Since 6:00 AM: drill session 3 (ea6e2541, REVIEW.md 6:00 AM), reproduced on your uploaded JSONL + video, fixed
 The replay of session 3 matches what the live game recorded on build 994fc39 number for number. Per drill, all three sessions replayed with the current build (`tests/tools/drill-replay.ts`, reps detected):
