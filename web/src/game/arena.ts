@@ -1,5 +1,10 @@
 // The 3D stage: renderer, ring, lights, sky, and camera rigs.
 import * as THREE from 'three';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { SkyStage } from './stage';
 
 export class Arena {
   renderer: THREE.WebGLRenderer;
@@ -13,15 +18,27 @@ export class Arena {
   private camPos = new THREE.Vector3(0, 2, 5);
   private camLook = new THREE.Vector3(0, 1.2, 0);
 
-  constructor(canvas: HTMLCanvasElement, radius = 4.2, lowPower = false, private lowGfx = false) {
+  stage: SkyStage | null = null;
+  private composer: EffectComposer | null = null;
+
+  constructor(canvas: HTMLCanvasElement, radius = 4.2, lowPower = false, private lowGfx = false, private sky = false) {
     this.radius = radius;
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: !lowPower, powerPreference: 'high-performance', preserveDrawingBuffer: false });
     this.renderer.setPixelRatio(lowGfx ? 0.5 : Math.min(window.devicePixelRatio, lowPower ? 1 : 1.75));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.1;
-    this.camera = new THREE.PerspectiveCamera(55, 16 / 9, 0.05, 200);
-    this.build();
+    this.camera = new THREE.PerspectiveCamera(55, 16 / 9, 0.05, 700);
+    if (sky) {
+      this.stage = new SkyStage(this.scene);
+      if (!lowPower) {
+        // Bloom on emissive glows (gloves, edge, effects); high threshold keeps the scene itself crisp.
+        this.composer = new EffectComposer(this.renderer);
+        this.composer.addPass(new RenderPass(this.scene, this.camera));
+        this.composer.addPass(new UnrealBloomPass(new THREE.Vector2(512, 512), 0.45, 0.35, 0.96));
+        this.composer.addPass(new OutputPass());
+      }
+    } else this.build();
     this.resize();
   }
 
@@ -106,6 +123,7 @@ export class Arena {
     const w = c.clientWidth || window.innerWidth;
     const h = c.clientHeight || window.innerHeight;
     this.renderer.setSize(w, h, false);
+    this.composer?.setSize(w, h);
     this.camera.aspect = w / h;
     this.camera.fov = w / h < 1 ? 72 : 55;
     this.camera.updateProjectionMatrix();
@@ -127,6 +145,10 @@ export class Arena {
   }
 
   update(time: number) {
+    if (this.stage) {
+      this.stage.update(time);
+      return;
+    }
     this.floorMat.uniforms.time.value = time;
     const pulse = 0.6 + 0.4 * Math.sin(time * 3);
     (this.ringEdge.material as THREE.MeshBasicMaterial).color.setRGB(1, 0.25 * pulse, 0.55 * pulse);
@@ -136,7 +158,8 @@ export class Arena {
   renderMs = 0;
   render() {
     const t0 = performance.now();
-    this.renderer.render(this.scene, this.camera);
+    if (this.composer) this.composer.render();
+    else this.renderer.render(this.scene, this.camera);
     this.renderMs = this.renderMs * 0.9 + (performance.now() - t0) * 0.1;
   }
 }

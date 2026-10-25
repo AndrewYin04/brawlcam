@@ -1,6 +1,7 @@
 // App controller: screens, camera, calibration, game loop.
 import { Arena } from './game/arena';
-import { MatchView } from './game/view';
+import { MatchView, USE_HEROES } from './game/view';
+import { preloadHeroes } from './game/hero';
 import { preloadModel, FighterAvatar } from './game/avatar';
 import { LocalSession, FIGHTER_COLORS, type Session } from './game/session';
 import { PoseInput } from './input/players';
@@ -58,7 +59,7 @@ try {
 FighterAvatar.lowGfx = params.has('lowgfx');
 function createArena(): Arena {
   try {
-    return new Arena($<HTMLCanvasElement>('game'), 4.2, isMobile, params.has('lowgfx'));
+    return new Arena($<HTMLCanvasElement>('game'), 4.2, isMobile, params.has('lowgfx'), !params.has('classic') && !params.has('lowgfx'));
   } catch (e) {
     // No WebGL (old browser, blocked GPU, some headless setups): explain instead of failing silently.
     hooks.errors.push('webgl: ' + (e as Error).message);
@@ -127,7 +128,7 @@ async function boot() {
     }
   })();
   try {
-    await Promise.all([preloadModel((f) => ((modelFrac = f), upd())), poseModel]);
+    await Promise.all([USE_HEROES ? preloadHeroes((f) => ((modelFrac = f), upd())) : preloadModel((f) => ((modelFrac = f), upd())), poseModel]);
   } catch (e) {
     $('load-text').textContent = 'Loading failed. Check your connection and reload.';
     hooks.errors.push('boot: ' + e);

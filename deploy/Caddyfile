@@ -30,3 +30,7 @@
 		X-Content-Type-Options nosniff
 	}
 }
+
+www.throwhands.tech {
+	redir https://throwhands.tech{uri} permanent
+}

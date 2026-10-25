@@ -64,6 +64,9 @@ export interface Fighter extends FighterInit {
   input: FighterInput;
   damageDealt: number;
   fastestPunch: number;
+  combo: number;
+  comboAt: number;
+  comboTarget: number | null;
 }
 
 export interface Projectile {
@@ -108,7 +111,7 @@ export const DUEL_DEFAULTS: SimConfig = {
   maxRounds: 5,
   meterStart: 50,
   countdownSeconds: 3,
-  arenaRadius: 4.2,
+  arenaRadius: 3.2,
   respawnSeconds: 3,
 };
 
@@ -149,6 +152,8 @@ export const TUNING = {
   slowmoSuper: 1.2,
   slowmoKO: 1.6,
   slowmoScale: 0.25,
+  duelKbScale: 60, // 1v1 knockback multiplier = 1 + damage taken / this
+  heavyKbMult: 2.2,
   roundEndPause: 3.5,
   gravity: 18,
 };
@@ -222,6 +227,9 @@ export class Sim {
       input: { ...NO_INPUT },
       damageDealt: 0,
       fastestPunch: 0,
+      combo: 0,
+      comboAt: -9,
+      comboTarget: null,
     };
     this.fighters.push(f);
     this.placeAll();
@@ -437,8 +445,8 @@ export class Sim {
 
     // Arena bounds
     const R = this.cfg.arenaRadius;
-    if (this.cfg.mode === 'brawl') {
-      // Walking alone never takes you out of the ring: only knockback can (ring-outs must be earned).
+    {
+      // Walking alone never takes you off the platform: only knockback can (ring-outs must be earned).
       const before = Math.hypot(walkFromX, walkFromZ);
       const after = Math.hypot(f.x, f.z);
       const edge = R - 0.25;
@@ -449,12 +457,7 @@ export class Sim {
       }
     }
     const r = Math.hypot(f.x, f.z);
-    if (this.cfg.mode === 'duel') {
-      if (r > R) {
-        f.x *= R / r;
-        f.z *= R / r;
-      }
-    } else if (r > R + 0.3 && fighting) {
+    if (r > R + 0.3 && fighting) {
       this.kill(f, f.lastHitBy != null && this.t - f.lastHitAt < 6 ? f.lastHitBy : null, 'ringout', true);
     }
   }
@@ -681,10 +684,19 @@ export class Sim {
       if (kind === 'super_uppercut' && !shielded) tgt.vy = 7 + tgt.kb / 30;
       else if (!blocked && !shielded && tgt.kb > 60) tgt.vy = Math.max(tgt.vy, 2 + tgt.kb / 60);
     } else {
-      const push = shielded ? 0.4 : blocked ? 0.6 : 1.6;
+      // 1v1: knockback grows with damage taken this round (Smash-style percent); heavy hits fling much farther.
+      if (!shielded) tgt.kb += dmg;
+      att.combo = this.t - att.comboAt < 1.2 && att.comboTarget === tgt.id ? att.combo + 1 : 1;
+      att.comboAt = this.t;
+      att.comboTarget = tgt.id;
+      const heavy = isSuper || (att.combo >= 3 && !blocked && !shielded);
+      const base = shielded ? 0.4 : blocked ? 0.6 : 1.6;
+      const push = base * (shielded ? 1 : 1 + tgt.kb / TUNING.duelKbScale) * (heavy ? TUNING.heavyKbMult : 1);
       tgt.vx += (dx / len) * push;
       tgt.vz += (dz / len) * push;
       if (kind === 'super_uppercut' && !shielded) tgt.vy = 7.5;
+      else if (heavy && !shielded) tgt.vy = Math.max(tgt.vy, 2.5);
+      if (heavy) att.combo = 0;
     }
 
     this.emit({
@@ -814,6 +826,7 @@ export class Sim {
       round: this.round,
       timer: +this.roundTimer.toFixed(2),
       slow: this.timeScale < 1 ? 1 : 0,
+      R: this.cfg.arenaRadius,
       winner: this.winner,
       f: this.fighters.map((f) => ({
         id: f.id,

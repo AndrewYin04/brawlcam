@@ -9,6 +9,29 @@ interface Particle {
   grow: number;
 }
 
+let starTex: THREE.Texture | null = null;
+function star() {
+  if (!starTex) {
+    const c = document.createElement('canvas');
+    c.width = c.height = 64;
+    const g = c.getContext('2d')!;
+    const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gr.addColorStop(0, 'rgba(255,255,255,1)');
+    gr.addColorStop(0.25, 'rgba(255,255,255,0.8)');
+    gr.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = gr;
+    g.fillRect(0, 0, 64, 64);
+    g.fillStyle = 'rgba(255,255,255,0.9)';
+    g.fillRect(30, 2, 4, 60);
+    g.fillRect(2, 30, 60, 4);
+    starTex = new THREE.CanvasTexture(c);
+  }
+  return starTex;
+}
+
+/** Smash-style sprite sparks instead of low-poly blobs (hero renderer). */
+export const SPRITE_SPARKS = { on: false };
+
 export class VFX {
   private group = new THREE.Group();
   private particles: Particle[] = [];
@@ -30,6 +53,16 @@ export class VFX {
   }
 
   burst(pos: THREE.Vector3, color: THREE.ColorRepresentation, count = 18, speed = 4, size = 0.05) {
+    if (SPRITE_SPARKS.on) {
+      for (let i = 0; i < count; i++) {
+        const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: star(), color, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+        sp.scale.setScalar(size * (3 + Math.random() * 4));
+        sp.position.copy(pos);
+        const v = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.2, Math.random() - 0.5).normalize().multiplyScalar(speed * (0.5 + Math.random()));
+        this.add(sp as unknown as THREE.Mesh, v, 0.22 + Math.random() * 0.2);
+      }
+      return;
+    }
     for (let i = 0; i < count; i++) {
       const m = new THREE.Mesh(this.sparkGeo, new THREE.MeshBasicMaterial({ color, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
       m.scale.setScalar(size * (0.5 + Math.random()));
@@ -60,6 +93,30 @@ export class VFX {
     const m = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.6, 6, 24, 1, true), new THREE.MeshBasicMaterial({ color, transparent: true, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.6 }));
     m.position.copy(pos).setY(3);
     this.add(m, new THREE.Vector3(0, 0, 0), 0.8, 0.6);
+  }
+
+  /** Heavy-hit white flash (2-3 frames). */
+  flash() {
+    const el = document.createElement('div');
+    el.className = 'impact-flash';
+    this.labelLayer.appendChild(el);
+    setTimeout(() => el.remove(), 120);
+  }
+
+  /** Ring-out KO streak: a bright beam shooting up where the fighter left the stage. */
+  koStreak(pos: THREE.Vector3, color: THREE.ColorRepresentation) {
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.6, 14, 16, 1, true), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    m.position.copy(pos).setY(pos.y + 5);
+    this.add(m, new THREE.Vector3(0, 6, 0), 0.7, 0.4);
+    this.burst(pos, color, 40, 9, 0.08);
+  }
+
+  /** Super move: radial speed lines over the screen (DOM overlay, short). */
+  speedLines() {
+    const el = document.createElement('div');
+    el.className = 'speed-lines';
+    this.labelLayer.appendChild(el);
+    setTimeout(() => el.remove(), 900);
   }
 
   /** Floating text at a world position (damage numbers, "BLOCK", "KO"). */
@@ -127,6 +184,15 @@ export class VFX {
     m.position.copy(from);
     m.scale.setScalar(0.09);
     this.add(m, new THREE.Vector3(), 0.25, -0.2);
+  }
+
+  /** Remove every effect (match teardown, rematch, record-mode scene change). */
+  dispose() {
+    for (const p of this.particles) (p.mesh.material as THREE.Material).dispose();
+    this.particles = [];
+    this.projectiles.clear();
+    this.group.removeFromParent();
+    this.labelLayer.innerHTML = '';
   }
 
   update(dt: number) {

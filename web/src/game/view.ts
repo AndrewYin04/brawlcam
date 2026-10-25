@@ -2,7 +2,11 @@
 import * as THREE from 'three';
 import { Arena } from './arena';
 import { FighterAvatar } from './avatar';
-import { VFX } from './vfx';
+import { HeroFighter, HERO_MODELS } from './hero';
+
+/** New Smash-style heroes by default; the original VRM renderer stays behind ?classic (and capsules behind ?lowgfx). */
+export const USE_HEROES = typeof location !== 'undefined' && !new URLSearchParams(location.search).has('classic') && !FighterAvatar.lowGfx;
+import { VFX, SPRITE_SPARKS } from './vfx';
 import * as sfx from './audio';
 import { unpackJoints, type Joints } from '../../../shared/joints';
 import { proceduralJoints } from '../../../shared/animate';
@@ -18,7 +22,7 @@ export interface ViewOptions {
 }
 
 interface Slot {
-  avatar: FighterAvatar;
+  avatar: FighterAvatar | HeroFighter;
   pos: THREE.Vector3;
   yaw: number;
   lastHp: number;
@@ -38,6 +42,9 @@ export class MatchView {
   private lastCountdown = -1;
   private hintTimer: number | undefined;
   private slowmoUntil = 0;
+  private hitStopUntil = 0;
+  private fallCamUntil = 0;
+  private fallTarget: number | null = null;
   private koFeed: HTMLElement;
   onEvent: ((e: SimEvent) => void) | null = null;
 
@@ -45,6 +52,8 @@ export class MatchView {
     this.arena = arena;
     this.opts = opts;
     this.vfx = new VFX(arena.scene, arena.camera, $('fx-layer'));
+    SPRITE_SPARKS.on = USE_HEROES;
+    document.body.classList.toggle('heroes', USE_HEROES);
     this.koFeed = $('kofeed');
   }
 
@@ -67,7 +76,7 @@ export class MatchView {
     for (const f of s.f) {
       let slot = this.slots.get(f.id);
       if (!slot) {
-        const avatar = new FighterAvatar({ color: f.color });
+        const avatar = USE_HEROES && !FighterAvatar.lowGfx ? new HeroFighter({ color: f.color }, HERO_MODELS[(f.id - 1) % HERO_MODELS.length]) : new FighterAvatar({ color: f.color });
         this.arena.scene.add(avatar.root);
         slot = { avatar, pos: new THREE.Vector3(f.x, 0, f.z), yaw: f.yaw, lastHp: f.hp, snap: f };
         this.slots.set(f.id, slot);
@@ -99,6 +108,11 @@ export class MatchView {
           }
           const mine = this.opts.localIds.includes(e.attacker) || this.opts.localIds.includes(e.target);
           this.arena.shake = Math.min(1.5, this.arena.shake + (e.isSuper ? 1.4 : e.blocked ? 0.15 : 0.35 + e.damage / 40) * (mine ? 1 : 0.5));
+          if (USE_HEROES && !e.blocked && !e.shielded && (e.isSuper || e.damage >= 12)) {
+            // Heavy hit: hit-stop (freeze the animation a few frames) and a white flash.
+            this.hitStopUntil = this.time + (e.isSuper ? 0.12 : 0.07);
+            this.vfx.flash();
+          }
           if (e.blocked || e.shielded) sfx.sfxBlock();
           else if (e.isSuper) sfx.sfxSuper();
           else sfx.sfxPunch(e.damage / 15);
@@ -115,7 +129,8 @@ export class MatchView {
             this.vfx.shockwave(s.pos.clone().setY(1), 0x66ccff, 2);
             this.showBanner('SHIELD!', 700, true);
           } else if (e.kind === 'uppercut') {
-            this.vfx.pillar(s.pos, col);
+            if (!USE_HEROES) this.vfx.pillar(s.pos, col);
+            else this.vfx.speedLines();
             this.vfx.groundRing(s.pos, col, 2);
             this.showBanner('SUPER UPPERCUT!', 1200, true);
             this.slowmoUntil = this.time + 1.2;
@@ -132,6 +147,12 @@ export class MatchView {
           break;
         case 'ko': {
           const tgt = this.slots.get(e.target);
+          if (tgt && USE_HEROES && e.ringout) {
+            this.vfx.koStreak(tgt.pos.clone(), tgt.snap.color);
+            this.vfx.flash();
+            this.fallCamUntil = this.time + 0.6;
+            this.fallTarget = e.target;
+          }
           if (tgt) {
             this.vfx.burst(tgt.pos.clone().setY(1.2), tgt.snap.color, 60, 8, 0.08);
             this.vfx.groundRing(tgt.pos, 0xffc53d, 3);
@@ -197,7 +218,7 @@ export class MatchView {
   frame(dt: number) {
     this.time += dt;
     const s = this.snap;
-    const animDt = this.slowmo ? dt * 0.3 : dt;
+    const animDt = this.time < this.hitStopUntil ? 0 : this.slowmo ? dt * 0.3 : dt;
     if (s) {
       const myId = this.opts.localIds[0];
       const me = s.f.find((f) => f.id === myId);
@@ -221,8 +242,18 @@ export class MatchView {
           // Idle guard (or the procedural strike) when no live pose: absent players, bots without data.
           joints = proceduralJoints({ atk: f.atk ? { k: f.atk.k, h: f.atk.h, age: f.atk.age } : null, blocking: !!f.b, shield: f.sh > 0, t: this.time, seed: f.id });
         }
-        slot.avatar.setJoints(joints);
-        slot.avatar.update(animDt, this.time, { shield: f.sh, meterFull: f.meter >= 100, airborne: f.y, alive: !!f.alive || s.f.length <= 2 });
+        if (slot.avatar instanceof HeroFighter) {
+          // Heroes: humans' torso/arms follow their live pose; bots use authored clips.
+          const live = !f.bot && !!f.pr && (this.opts.localIds.includes(f.id) ? !!this.opts.localJoints(f.id) : !!f.j);
+          slot.avatar.livePose = live;
+          slot.avatar.setJoints(live ? joints : null);
+          if (f.atk && f.atk.age < 0.3) slot.avatar.attack(f.atk.k, f.atk.h, `${f.atk.k}${f.atk.h}${(s.t - f.atk.age).toFixed(2)}`);
+          slot.avatar.edgeDist = ((s as any).R ?? 99) - Math.hypot(f.x, f.z);
+          slot.avatar.update(animDt, this.time, { shield: f.sh, meterFull: f.meter >= 100, airborne: f.y, alive: !!f.alive, blocking: !!f.b });
+        } else {
+          slot.avatar.setJoints(joints);
+          slot.avatar.update(animDt, this.time, { shield: f.sh, meterFull: f.meter >= 100, airborne: f.y, alive: !!f.alive || s.f.length <= 2 });
+        }
         slot.avatar.setTargeted(s.f.length > 2 && me?.tg === f.id);
         slot.avatar.setSeeThroughCape(this.opts.camera !== 'side' && f.id === myId);
         if (f.hp < slot.lastHp && f.hp > 0 && f.hp < 30 && slot.lastHp >= 30 && this.opts.localIds.includes(f.id)) this.hint('Low health: block with forearms up!');
@@ -231,6 +262,14 @@ export class MatchView {
         if (f.atk && f.atk.age < 0.15 && (f.atk.k === 'jab' || f.atk.k === 'hook' || f.atk.k === 'uppercut' || f.atk.k === 'super_uppercut')) {
           this.vfx.trail(slot.avatar.glovePos(f.atk.h === 'L' ? 'L' : 'R'), f.color);
         }
+      }
+      // Floating stage: size follows the mode; the edge warns when a fighter is close to the drop.
+      if (this.arena.stage) {
+        const R = (s as any).R ?? this.arena.stage.radius;
+        this.arena.stage.setRadius(R);
+        let warn = 0;
+        for (const f of s.f) if (f.alive) warn = Math.max(warn, THREE.MathUtils.clamp(1 - (R - Math.hypot(f.x, f.z)) / 1.0, 0, 1));
+        this.arena.stage.setEdgeWarning(warn);
       }
       const owners = new Map<number, number>(s.p.map((p) => [p.id, p.o]));
       this.vfx.setProjectiles(s.p, (id) => this.color(id), owners);
@@ -264,20 +303,41 @@ export class MatchView {
       look = center.clone().setY(1.15);
     } else if (this.opts.camera === 'wide') {
       const back = new THREE.Vector3(-Math.sin(me.yaw), 0, -Math.cos(me.yaw));
-      pos = me.pos.clone().addScaledVector(back, portrait ? 7 : 5).setY(portrait ? 6 : 4.2);
-      look = me.pos.clone().addScaledVector(back, -2).setY(0.9);
+      if (USE_HEROES) {
+        // Brawl: centered on you, widened just enough for the fighters near you.
+        let near = 0;
+        for (const o of others) if (o.snap.alive) near = Math.max(near, Math.min(5, o.pos.distanceTo(me.pos)));
+        const d = (portrait ? 4.2 : 2.8) + near * 0.45;
+        pos = me.pos.clone().addScaledVector(back, d).setY((portrait ? 2.8 : 1.9) + near * 0.25);
+        look = me.pos.clone().addScaledVector(back, -1.6).setY(0.7);
+      } else {
+        pos = me.pos.clone().addScaledVector(back, portrait ? 7 : 5).setY(portrait ? 6 : 4.2);
+        look = me.pos.clone().addScaledVector(back, -2).setY(0.9);
+      }
     } else {
       // Over the shoulder, slightly to the right so the opponent is in clear view.
       const fwd = new THREE.Vector3(Math.sin(me.yaw), 0, Math.cos(me.yaw));
       const right = new THREE.Vector3(-fwd.z, 0, fwd.x);
-      pos = me.pos.clone().addScaledVector(fwd, portrait ? -3.6 : -2.7).addScaledVector(right, portrait ? 0.7 : 1.05).setY(portrait ? 2.3 : 2.0);
-      look = (opp ? opp.pos.clone() : me.pos.clone().addScaledVector(fwd, 1.5)).setY(1.2);
+      if (USE_HEROES) {
+        // Closer over-the-shoulder framing: both fighters fill most of the frame height.
+        // Higher and further to the side than before so the chibi heroes' big heads never hide the opponent.
+        pos = me.pos.clone().addScaledVector(fwd, portrait ? -3.0 : -2.15).addScaledVector(right, portrait ? 0.95 : 1.25).setY(portrait ? 2.2 : 1.95);
+        look = (opp ? opp.pos.clone().lerp(me.pos, 0.35) : me.pos.clone().addScaledVector(fwd, 1.2)).setY(0.7);
+      } else {
+        pos = me.pos.clone().addScaledVector(fwd, portrait ? -3.6 : -2.7).addScaledVector(right, portrait ? 0.7 : 1.05).setY(portrait ? 2.3 : 2.0);
+        look = (opp ? opp.pos.clone() : me.pos.clone().addScaledVector(fwd, 1.5)).setY(1.2);
+      }
       if (this.slowmo && opp) {
         // Dramatic side angle during slow motion, framing both fighters and the launch.
         const mid = me.pos.clone().add(opp.pos).multiplyScalar(0.5);
         pos = mid.clone().addScaledVector(right, 3.4).setY(1.6);
         look = opp.pos.clone().setY(1.3 + (opp.snap.y ?? 0) * 0.6);
       }
+    }
+    // Ring-out: the camera follows the falling fighter for a moment.
+    if (this.time < this.fallCamUntil && this.fallTarget != null) {
+      const ft = this.slots.get(this.fallTarget);
+      if (ft) look = look.clone().lerp(ft.avatar.root.getWorldPosition(new THREE.Vector3()).setY(ft.snap.y ?? 0), 0.6);
     }
     this.arena.setCamera(pos, look, dt);
     void s;
@@ -336,6 +396,7 @@ export class MatchView {
   dispose() {
     for (const s of this.slots.values()) s.avatar.dispose();
     this.slots.clear();
+    this.vfx.dispose();
     this.koFeed.innerHTML = '';
   }
 }

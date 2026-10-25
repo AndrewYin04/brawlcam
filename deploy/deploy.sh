@@ -12,7 +12,7 @@ rsync -az deploy/brawlcam.service "$HOST:/etc/systemd/system/brawlcam.service"
 # Only ask for certificates for throwhands.tech once its DNS points here (failed ACME attempts get rate-limited).
 IP=144.202.71.213
 # throwhands.tech has a certificate since Oct 25 1:05 AM; always serve it (Caddy renews and retries www on its own).
-HOSTS="throwhands.tech, www.throwhands.tech, 144-202-71-213.sslip.io"
+HOSTS="throwhands.tech, 144-202-71-213.sslip.io"
 void_ip=$IP
 echo "caddy hosts: $HOSTS"
 ssh "$HOST" "echo 'BRAWL_HOSTS=$HOSTS' > /etc/default/caddy"
