@@ -655,3 +655,15 @@ The user: "there should be real gameplay with the roasts too ... we need to be a
 The user's own research videos (`throwhands-research-…-09-25-59.webm` and others, on the user's laptop) are timestamp-synced with the JSONL. If the user approves, a picture-in-picture of the user's real punch beside the fighter's punch fixes the v1 hook ("This is a real punch"). Do not use them until STATUS shows the user's approval; the planner will relay it.
 
 Timeline: freeze 7:30 AM; v2 render, release asset, and final text by **10:15 AM**.
+
+### 5:20 AM: the user APPROVED use of their research webcam footage
+The user said yes to using their own research recordings, both for debugging **and** as picture-in-picture in the public demo video (YouTube; it stays public after the event). This applies only to the user's own `throwhands-research-*.webm` files, which they are copying to `~/hacktx26/research/` on this server:
+- `…09-25-59` (drill session 2, with `.jsonl`)
+- `…09-13-15` (drill session 1, with `.jsonl`)
+- `…08-00-59` (free play; the server has its landmarks under session `ee6f97a0`, but there is no local `.jsonl`)
+
+Guidance for the video:
+- Use the PiP mainly for the hook ("a real punch") and a few walkthrough moments. Sync it to the fighter using the JSONL timestamps; the drift must be under about 2 frames.
+- Crop to the user's upper body. Don't show anything else in the room that identifies where they live.
+- The `.webm` files stay out of the repo, as with all research data.
+- If the user records a fresh, better-lit session after the latest fixes, prefer that for the PiP.
