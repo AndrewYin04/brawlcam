@@ -7,6 +7,8 @@ Booth setup: laptop on a table, webcam at chest height, 2 to 3 m of floor in fro
 **0:00 to 0:40: live demo (judge plays).**
 "Stand here, raise your fists to your chin." (Calibration ring fills in 3 seconds, then a short movement tutorial.) "That's you. Step or lean toward the camera to walk in." The fighter walks in. "Throw a real jab." The fist lands, the announcer and crowd react. "Both forearms up in front of your face is your guard, but it drains: hold it too long and it breaks and you're dizzy. When your meter glows, cross your forearms in an X above your face." Gold Iron Wall. "Now drive your fist up from your hip." Super uppercut, slow motion, slammed into the cage. "That's the whole controller: your body."
 
+(If they step in close:) "Reach out with both arms and pull in: that's a grab into the clinch. Lift a knee for knees, or with a full meter turn your back and bend for a Shoulder Throw." Grappling is a beta, on by default; if it misfires for a judge, reload with `?grapple=0` and keep striking.
+
 **0:40 to 1:00: human connection.**
 "It's built for friends. Two of you can stand side by side on one camera, or I send you a link and you fight me from your phone." (Show the phone joining the room.) "After the match you get a rivalry card to send to the friend you beat, and the rematch is one button."
 
@@ -39,7 +41,7 @@ Punch detection that feels fair. A jab straight at the camera barely changes the
 WebKit (Safari's engine) passes our automated gameplay test after we fixed three Safari-specific problems; we also added a fallback that runs pose tracking on the main thread when Safari cannot run it in a worker. Real iPhone testing is listed in STATUS.md.
 
 **What is real and what is mocked?**
-Real: pose tracking, gestures, the game, bots, online rooms on our Vultr server, Gemini commentary and speech, the announcer's ElevenLabs calls (generated once, played instantly), Muse Spark and Muse Image fighter generation, the rivalry card, the Elo leaderboard and stats in Tiger Data, and opt-in motion data storage. Mocked: purchases in the store (labeled "Demo: no charge"). The motion-data business is a consented collection pipeline and dashboard; no data has been sold.
+Real: pose tracking, gestures, the game, bots, online rooms on our Vultr server, Gemini commentary and speech, the announcer's ElevenLabs calls (generated once, played instantly), Muse Spark and Muse Image fighter generation, the rivalry card, the Elo leaderboard and stats in Tiger Data, and opt-in motion data storage. Beta: grappling (grab, clinch knees, Shoulder Throw) is real and on by default, but its detection was tuned on one player's recorded drills, so it is labeled beta (`?grapple=0` turns it off). Mocked: purchases in the store (labeled "Demo: no charge"). The motion-data business is a consented collection pipeline and dashboard; no data has been sold.
 
 **How does it make money?**
 Three lines: cosmetics (skins, auras, and AI-forged fighters at $2 to $10, plus a $5/month season pass); ranked play with Elo, which drives retention and pass sales; and licensing opt-in, anonymized motion sequences (landmark coordinates labeled by the game, never video) to humanoid-robotics labs that need human motion data. Fitness Boxing has sold 3M+ copies on Switch, and no browser webcam fighter has real traction yet.
