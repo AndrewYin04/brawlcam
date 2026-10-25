@@ -468,9 +468,9 @@ export class MatchView {
   /** Clinch side camera in use: [holder id, held id, side], so the side is chosen once per clinch. */
   private clinchCam: [number, number, number] | null = null;
 
-  /** Unit vector across the throw toward the held camera's side. */
+  /** Unit vector across the throw away from the held camera's side (the arc passes behind the thrower's head). */
   private throwSide(ts: NonNullable<MatchView['throwSeq']>) {
-    return new THREE.Vector3(ts.u.z, 0, -ts.u.x).multiplyScalar(ts.sign);
+    return new THREE.Vector3(ts.u.z, 0, -ts.u.x).multiplyScalar(-ts.sign);
   }
 
   private endThrow() {
@@ -542,7 +542,7 @@ export class MatchView {
           // already moved it there). The thrown fighter keeps its facing until it is back on its feet.
           const arcS = THREE.MathUtils.clamp((ts.t - THROW_T.arc) / (THROW_T.slam - THROW_T.arc), 0, 1);
           const arc = ts.t >= THROW_T.arc && ts.t < THROW_T.slam ? throwArc(ts.t - THROW_T.arc, ts.landU) : null;
-          const ur = ts.t < THROW_T.arc ? THREE.MathUtils.lerp(ts.d0, 0.34, sm(ts.t / THROW_T.arc)) : arc ? arc.u - 0.24 * arcS : ts.landU;
+          const ur = ts.t < THROW_T.arc ? THREE.MathUtils.lerp(ts.d0, 0.3, sm(ts.t / THROW_T.arc)) : arc ? arc.u - 0.24 * arcS : ts.landU;
           slot.pos.copy(ts.a0).addScaledVector(ts.u, ur).addScaledVector(ts.lat, sm(arcS)).addScaledVector(this.throwSide(ts), arc ? arc.lat : 0);
           slot.yaw = ts.yawT;
         } else if (slot.pos.distanceTo(target) > 1.0) {

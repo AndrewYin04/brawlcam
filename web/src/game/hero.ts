@@ -175,11 +175,12 @@ type Strike = { kind: string; hand: 'L' | 'R'; t0: number; contactT: number; tar
 export const THROW_T = { grip: 0.12, arc: 0.3, slam: 0.8, getUp: 1.95, getUpRate: 1.15, release: 2.0, end: 3.4 };
 /** Thrown fighter's hip path over the thrower, as [time, u (m along the thrower-to-target line from the thrower's
  *  start), hip height (m), forward pitch (deg: 0 standing, 270 flat on the back, head toward the thrower), sideways
- *  offset (m, toward the gripping shoulder on the camera side: the head goes down beside the thrower's body, not
+ *  offset (m, toward the gripping shoulder on the far side from the camera, so the thrown body never hides the
+ *  thrower's head; its head goes down beside the thrower's body, not
  *  through it)]. */
 const ARC_KEYS: [number, number, number, number, number][] = [
-  [0.0, 0.34, 0.95, 28, 0],
-  [0.15, 0.08, 1.35, 100, 0.12],
+  [0.0, 0.3, 1.05, 60, 0],
+  [0.15, 0.06, 1.38, 112, 0.14],
   [0.27, -0.3, 1.38, 180, 0.3],
   [0.39, -0.72, 0.9, 240, 0.22],
   [0.5, -1.06, 0.1, 270, 0],
@@ -933,9 +934,12 @@ export class HeroFighter {
     const c = new THREE.Vector3();
     if (ts.t < THROW_T.arc) {
       const s = smooth(ts.t / THROW_T.arc);
-      u = THREE.MathUtils.lerp(ts.d0, 0.34, s);
-      y = THREE.MathUtils.lerp(0.9, 0.95, s);
-      a = (28 * Math.PI) / 180 * s;
+      // Loaded onto the thrower's back: leaning 60 deg over it, hips lifted (feet leave the floor), matching the arc's
+      // first key so the switch to the held lying clip does not snap the torso.
+      const ls = smooth((ts.t - 0.08) / (THROW_T.arc - 0.08));
+      u = THREE.MathUtils.lerp(ts.d0, 0.3, s);
+      y = THREE.MathUtils.lerp(0.9, 1.05, ls);
+      a = ((60 * Math.PI) / 180) * ls;
       c.set(0, 0.9, 0); // standing hips
     } else {
       const k = throwArc(ts.t - THROW_T.arc, ts.landU);
