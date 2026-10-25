@@ -484,3 +484,16 @@ The user confirmed they **were moving** during session `ee6f97a0` (stepping left
    - **Fallback:** CC0 recordings from Freesound, verifying each license and crediting it in the README.
    - **Mix:** duck the crowd under the commentator's voice, about -8 dB while a line plays, so it never covers a call. Keep the separate volume sliders.
    - **Review:** add a review-loop audio check: record 60 s of match audio, and have reviewers rate "crowd sounds like people" and "commentary audible over crowd" from 1 to 5.
+
+### 3:20 AM: the voice reads its own directions aloud
+The user: "the eleven labs api speaks out the prompt too, like 'speak excitedly like a commentator in a big fight' is also spoken. otherwise the voice is a lot better."
+
+Two places put a delivery instruction inside the text to be spoken:
+1. **Stock calls** (`video/stock-calls.ts:16`): `text = "[shouting excitedly] " + line`, with `stability: 0.0`. eleven_v3 audio tags are meant not to be spoken, but at stability 0.0 (most variable) they can be.
+2. **Live AI lines** (`server/ai.ts:196`): Gemini TTS receives `"You are a live fight commentator in a packed arena. Say this <mood>: <line>"`. TTS models can read such instructions aloud.
+
+**Fix and verify:**
+- **Transcribe every audio clip** (all 40 stock calls, plus about 30 sampled live Gemini TTS lines across the moods) with a speech-to-text model, as you did for the video narration. Compare each transcript to the intended line. Any clip with extra words ("shouting", "excitedly", "commentator", "say this", and so on) fails. Report the leak rate before and after in STATUS.md; the target is 0.
+- **Stock calls:** regenerate only the failing ones. Options to test against the transcript check: drop the tag and rely on `style` plus capitals and punctuation; raise `stability` to about 0.35 to 0.5; or check the current ElevenLabs docs for how v3 audio tags are meant to be used. Keep the delivery as energetic as now; the user likes it.
+- **Live lines:** test which Gemini TTS request format never leaks: for example, the style only in a system instruction if TTS supports one (check the docs), a shorter "Excitedly:" prefix, or no instruction with a more energetic prebuilt voice. If none reaches 0 leaks, voice live lines with ElevenLabs instead (a low-latency model; spend at most 50% of the remaining quota), or keep them caption-only.
+- Add the transcript check as a test that runs whenever calls are regenerated.
