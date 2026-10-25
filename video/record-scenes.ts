@@ -40,6 +40,25 @@ const P2 = '#33b5ff';
 
 const C = (method: string, ...args: unknown[]): Cue => ({ op: 'call', method, args });
 const SHOTS: Shot[] = [
+  // demo-video-v3 moves section (REVIEW.md 7:45 AM): kick, grab -> clinch -> knees (the user's own grab rep), Shoulder Throw.
+  { name: 'v3_kick', seconds: 7, warmup: 30 * 3.2, cfg: { mode: 'duel', camera: 'behind', players: [{ name: 'You', color: P1, landmarks: LM('kickknee_01') }], bots: 1, botLevel: -1, meter: 0 } },
+  { name: 'v3_grab', seconds: 7, warmup: 30 * 3.2, cfg: { mode: 'duel', camera: 'behind', grapple: true, players: [{ name: 'You', color: P1, landmarks: LM('user_grab') }], bots: 1, botLevel: -1, meter: 0 }, cues: [[2.2, { op: 'call', method: 'moveId', args: [1, 'kick', 'R'] }], [3.1, { op: 'call', method: 'moveId', args: [1, 'kick', 'L'] }]] },
+  { name: 'v3_throw', seconds: 6, warmup: 30 * 3.2, cfg: { mode: 'duel', camera: 'behind', grapple: true, players: [{ name: 'You', color: P1, landmarks: LM('guard_02') }], bots: 1, botLevel: -1, meter: 100 }, cues: [[0.5, { op: 'call', method: 'moveId', args: [1, 'grab', 'B'] }], [1.6, { op: 'call', method: 'moveId', args: [1, 'throw', 'B', true] }]] },
+  { name: 'user_s2b_free2', seconds: 20, warmup: 30 * 3.2, cfg: { mode: 'duel', camera: 'behind', players: [{ name: 'You', color: P1, landmarks: LM('user_s2b') }], bots: 1, botLevel: 0, meter: 0 } },
+  // demo-video-v3: the user's shaky shots re-recorded with the cam=free default (REVIEW.md 7:30 AM)
+  {
+    name: 'online_p1_free',
+    seconds: 20,
+    warmup: 30 * 3.2,
+    cfg: { mode: 'duel', camera: 'behind', follow: 0, players: [{ name: 'Maya', color: P1, landmarks: LM('jab_01') }, { name: 'Leo', color: P2, landmarks: LM('hook_01') }] },
+  },
+  {
+    name: 'online_p2_free',
+    seconds: 20,
+    warmup: 30 * 3.2,
+    cfg: { mode: 'duel', camera: 'behind', follow: 1, players: [{ name: 'Maya', color: P1, landmarks: LM('jab_01') }, { name: 'Leo', color: P2, landmarks: LM('hook_01') }] },
+  },
+  { name: 'user_s2b_free', seconds: 20, warmup: 30 * 3.2, cfg: { mode: 'duel', camera: 'behind', players: [{ name: 'You', color: P1, landmarks: LM('user_s2b') }], bots: 1, botLevel: 1, meter: 100 } },
   // demo-video-v2: the user's own drill-session motion (session 2dd3adbd, resampled to 30 fps by research-slice.ts);
   // the picture-in-picture uses the same session's webcam video, synced from the clip's sourceVideoStart.
   { name: 'user_step', seconds: 8, warmup: 30 * 3.2, cfg: { mode: 'duel', camera: 'behind', players: [{ name: 'You', color: P1, landmarks: LM('user_step') }], bots: 1, botLevel: -1, meter: 0 } },

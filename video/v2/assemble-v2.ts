@@ -106,23 +106,40 @@ for (const b of blocks) {
 }
 const TOTAL = T;
 console.log(`timeline ${TOTAL.toFixed(1)} s, ${placed.length} shots`);
+if (process.env.PLAN_ONLY) {
+  for (const p of placed) console.log(p.start.toFixed(2).padStart(7), p.d.toFixed(2).padStart(5), p.v.kind.padEnd(5), 'src' in p.v ? p.v.src : '', p.v.kind === 'clip' ? `ss ${p.v.ss}${p.v.pip != null ? ' pip ' + p.v.pip.toFixed(2) : ''}${p.v.split ? ' split' : ''}` : '');
+  process.exit(0);
+}
 
 // Announcer calls from each gameplay shot's log, at the moment they fired (skipped under VO? no: they are short shouts).
-for (const p of placed) {
+// demo-video-v3 (REVIEW.md 7:30 AM, the user's list): the shots at these published ranges are re-recorded with cam=free
+// (their calls come from the new recordings), and the game's calls are muted from 0:40 to 1:09.
+export const V3_REPLACE: Record<number, { src: string; split?: string; ss: number; start: number; d: number }> = {
+  7: { src: 'online_p1_free', split: 'online_p2_free', ss: 2.0, start: 18.6, d: 21.533333 - 18.6 },
+  8: { src: 'online_p1_free', split: 'online_p2_free', ss: 5.2, start: 21.533333, d: 28.166667 - 21.533333 },
+  20: { src: 'user_s2b_free', ss: 9.0, start: 76.233333, d: 80.6 - 76.233333 },
+  22: { src: 'online_p1_free', split: 'online_p2_free', ss: 12.0, start: 83.2, d: 88.133333 - 83.2 },
+};
+const V3 = !!process.env.V3;
+for (const [pi, p0] of placed.entries()) {
+  const rep = V3 ? V3_REPLACE[pi] : undefined;
+  const p = rep ? { ...p0, start: rep.start, d: rep.d, v: { ...(p0.v as any), src: rep.src, ss: rep.ss } } : p0;
   if (p.v.kind !== 'clip' || !p.v.calls) continue;
   const f = path.join(V, p.v.src + '.calls.json');
   if (!fs.existsSync(f)) continue;
-  const ssE = Math.max(0, Math.min(p.v.ss, dur(path.join(V, p.v.src + '.mp4')) - p.d - 0.05));
+  const ssE = rep ? rep.ss : Math.max(0, Math.min(p.v.ss, dur(path.join(V, p.v.src + '.mp4')) - p.d - 0.05));
   for (const c of JSON.parse(fs.readFileSync(f, 'utf8')) as { t: number; id: string }[]) {
     if (c.t < ssE || c.t > ssE + p.d - 0.4) continue;
     if (c.id.startsWith('filler') || c.id.startsWith('meter')) continue;
-    audio.push({ file: path.join(ROOT, 'web/public/calls', c.id + '.mp3'), at: p.start + c.t - ssE, vol: 0.55, kind: 'call' });
+    const at = p.start + c.t - ssE;
+    if (V3 && at >= 40 && at <= 69) continue; // v3: no game voice under the voiceover from 0:40 to 1:09
+    audio.push({ file: path.join(ROOT, 'web/public/calls', c.id + '.mp3'), at, vol: 0.55, kind: 'call' });
   }
 }
 
 // Render each shot to a 1080p30 intermediate (video only).
 const segFiles: string[] = [];
-placed.forEach((p, i) => {
+if (!V3) placed.forEach((p, i) => {
   const out = path.join(OUT, 'seg', `s${String(i).padStart(2, '0')}.mp4`);
   segFiles.push(out);
   const enc = ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-pix_fmt', 'yuv420p', '-r', String(FPS), '-an', out];
@@ -172,7 +189,7 @@ placed.forEach((p, i) => {
 const list = path.join(OUT, 'list.txt');
 fs.writeFileSync(list, segFiles.map((f) => `file '${f}'`).join('\n'));
 const silent = path.join(OUT, 'video-only.mp4');
-ff(['-f', 'concat', '-safe', '0', '-i', list, '-c', 'copy', silent]);
+if (!V3) ff(['-f', 'concat', '-safe', '0', '-i', list, '-c', 'copy', silent]);
 
 // Captions (ASS): VO in white, Gemini roasts in gold.
 const ts = (s: number) => {
@@ -207,6 +224,13 @@ af += `[mus][sp1]sidechaincompress=threshold=0.03:ratio=8:attack=20:release=400[
 const mixed = path.join(OUT, 'audio.m4a');
 ff([...aIn, '-filter_complex', af, '-map', '[aout]', '-t', TOTAL.toFixed(2), '-c:a', 'aac', '-b:a', '192k', mixed]);
 
+if (V3) {
+  // v3: make-v3.ts builds the video from the published v2 and the re-recorded shots, and muxes this audio.
+  fs.copyFileSync(mixed, path.join(OUT, 'audio-v3.m4a'));
+  fs.copyFileSync(assFile, path.join(OUT, 'captions-v3.ass'));
+  console.log('v3 audio and captions written');
+  process.exit(0);
+}
 const final = path.join(OUT, 'throwhands-demo-v2.mp4');
 ff(['-i', silent, '-i', mixed, '-vf', `subtitles=${assFile}`, '-map', '0:v', '-map', '1:a', '-c:v', 'libx264', '-preset', 'medium', '-crf', '19', '-pix_fmt', 'yuv420p', '-c:a', 'copy', '-movflags', '+faststart', '-shortest', final]);
 fs.writeFileSync(path.join(OUT, 'timeline.json'), JSON.stringify({ total: TOTAL, shots: placed.map((p) => ({ start: +p.start.toFixed(2), d: +p.d.toFixed(2), kind: p.v.kind, src: 'src' in p.v ? p.v.src : '' })), audio: audio.map((a) => ({ at: +a.at.toFixed(2), kind: a.kind, file: path.basename(a.file) })), captions: caps }, null, 1));
