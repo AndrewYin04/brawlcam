@@ -16,6 +16,7 @@ interface Replay {
 }
 
 interface SceneCfg {
+  grapple?: boolean;
   mode: 'duel' | 'brawl';
   camera: 'behind' | 'side' | 'wide';
   players: { name: string; color: string; landmarks?: string; offset?: number }[];
@@ -66,6 +67,7 @@ export async function initRecord() {
       session = new LocalSession(cfg.mode, cfg.players.map((p) => ({ name: p.name, color: p.color })), cfg.bots ?? 0, cfg.botLevel ?? 1, [], {
         ...(cfg.meter != null ? { meterStart: cfg.meter } : {}),
         ...(cfg.roundSeconds ? { roundSeconds: cfg.roundSeconds } : {}),
+        ...(cfg.grapple ? { grapple: true } : {}),
       });
       replays = await Promise.all(cfg.players.map((p) => (p.landmarks ? loadReplay(p.landmarks, p.offset ?? 0) : Promise.resolve(null))));
       const ids = session.localIds;

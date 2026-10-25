@@ -46,6 +46,9 @@ const SCENES: Scene[] = [
   { name: 'cage_corner', seconds: 3, cfg: duel([P('hook_01', 1.4)], { botLevel: 2 }), cues: [[0, 'place', 1, -2.2, -2.2], [0, 'place', 2, -1.4, -1.4]] },
   // Big punches while standing still: the fighter must not move (bug fixed 3:10 AM; metric: displacement).
   { name: 'big_punches', seconds: 4, cfg: duel([P('uppercut_01', 0.0)], { botLevel: -1 }) },
+  // Grappling (beta, ?grapple=1): the bot grabs you into a clinch and knees; then a Shoulder Throw.
+  { name: 'clinch', seconds: 6, cfg: duel([P('guard_02')], { botLevel: -1, grapple: true }), cues: [[0.5, 'moveId', 2, 'grab', 'B'], [2.0, 'moveId', 2, 'kick', 'R'], [2.8, 'moveId', 2, 'kick', 'L']] },
+  { name: 'throw', seconds: 6, cfg: duel([P('guard_02')], { botLevel: -1, grapple: true, meter: 100 }), cues: [[0.5, 'moveId', 2, 'grab', 'B'], [1.6, 'moveId', 2, 'throw', 'B', true]] },
   { name: 'brawl8', seconds: 4, cfg: { mode: 'brawl', camera: 'wide', players: [P('jab_01')], bots: 7, botLevel: 2, meter: 50 }, warmup: 30 * 3.6 },
 ];
 

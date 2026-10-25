@@ -236,3 +236,4 @@ body.drill-mode #hud .bars, body.drill-mode #move-ind, body.drill-mode #commenta
 .drill-bar { height: 8px; border-radius: 4px; background: rgba(255, 255, 255, 0.12); overflow: hidden; margin: 6px 0; }
 .drill-bar i { display: block; height: 100%; width: 0; background: var(--good); transition: width 0.3s; }
 .drill-meta { font-size: 14px; color: var(--muted); margin-bottom: 8px; }
+#debug-overlay { position: fixed; right: 8px; top: 120px; z-index: 50; background: rgba(0,0,0,0.72); color: #cfe; font: 12px/1.35 ui-monospace, Menlo, monospace; padding: 8px 10px; border-radius: 8px; white-space: pre; pointer-events: none; max-width: 46vw; }

@@ -99,7 +99,9 @@ class Research {
         console.warn('[research] MediaRecorder failed', e);
       }
     }
+    const prevRaw = pose.onRaw;
     pose.onRaw = (t, people, outs) => {
+      prevRaw?.(t, people, outs);
       const p = people[0];
       const o = outs[0];
       const mk = this.pendingMarker;

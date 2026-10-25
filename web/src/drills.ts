@@ -30,6 +30,18 @@ export function drillScript(): Section[] {
         ...times(3, { label: 'uppercut_big', text: 'THROW AN UPPERCUT', expect: { kind: 'uppercut' } }),
       ]),
     },
+    ...(new URLSearchParams(location.search).has('grapple')
+      ? [
+          {
+            name: 'Grab and Shoulder Throw (beta)',
+            note: 'Grab: reach both arms forward, then pull them in to your chest. Throw: reach, then twist and bend forward.',
+            reps: shuffle([
+              ...times(4, { label: 'grab', text: 'GRAB: REACH BOTH ARMS, PULL IN', expect: { kind: 'grab' } }),
+              ...times(4, { label: 'throw', text: 'SHOULDER THROW: REACH, TWIST, BEND', expect: { kind: 'throw' } }),
+            ]),
+          } as Section,
+        ]
+      : []),
     {
       name: 'Movement',
       note: 'Step or lean as asked, then come back to your spot.',

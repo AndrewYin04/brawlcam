@@ -212,6 +212,7 @@ async function ensureCamera(players: number): Promise<boolean> {
     }
     pose.tracker.onError = (m) => ((hooks as any).poseError = m);
     pose.start(video);
+    if (params.has('debug')) void import('./debug-overlay').then(({ startDebugOverlay }) => startDebugOverlay(pose!, () => hooks.events as any));
     if (research.active) research.start(video, pose);
   } else if (pose.players !== players) pose.setPlayers(players);
   return true;
