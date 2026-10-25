@@ -145,6 +145,26 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 .card { background: rgba(255, 255, 255, 0.04); border: 1px solid var(--line); border-radius: 14px; padding: 12px; }
 .card .swatch { height: 90px; border-radius: 10px; margin-bottom: 8px; }
 .card .price { color: var(--gold); font-weight: 700; }
+/* Store: pre-rendered fighter previews (web/public/skins, made by scripts/render-skins.ts). */
+.skin-stage { display: flex; gap: 16px; align-items: center; margin-bottom: 12px; padding: 10px; border-color: color-mix(in srgb, var(--skin, #fff) 45%, transparent); }
+.skin-stage img { width: 240px; height: auto; aspect-ratio: 4 / 5; border-radius: 10px; display: block; flex: none; background: #0a0c15; }
+.skin-stage .kicker { font-size: 12px; letter-spacing: 2px; color: var(--muted); text-transform: uppercase; }
+.skin-stage .skin-name { font-family: 'Bungee', system-ui, sans-serif; font-size: 28px; line-height: 1.15; color: var(--skin, #fff); margin: 4px 0 6px; }
+.skin-grid { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
+.skin-grid .card { position: relative; display: flex; flex-direction: column; gap: 4px; transition: border-color 0.15s, transform 0.15s; }
+.skin-grid .card:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--skin) 60%, transparent); }
+.skin-grid .card.equipped { border: 2px solid var(--skin); box-shadow: 0 0 0 1px var(--skin), 0 0 22px color-mix(in srgb, var(--skin) 40%, transparent); }
+.skin-art { width: 100%; height: auto; aspect-ratio: 4 / 5; object-fit: cover; border-radius: 10px; display: block; background: #0a0c15; cursor: pointer; margin-bottom: 4px; }
+.skin-badge { position: absolute; top: 18px; left: 18px; background: var(--skin); color: #0a0c15; font-weight: 800; font-size: 11px; letter-spacing: 1px; padding: 3px 8px; border-radius: 999px; pointer-events: none; }
+.skin-grid .card .btn { margin-top: auto; }
+@media (max-width: 640px) {
+  .skin-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .skin-grid .card { padding: 8px; }
+  .skin-grid .card .btn { font-size: 12px; padding: 7px 8px; }
+  .skin-badge { top: 12px; left: 12px; }
+  .skin-stage img { width: 130px; }
+  .skin-stage .skin-name { font-size: 20px; }
+}
 table.lb { width: 100%; border-collapse: collapse; }
 table.lb td, table.lb th { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: left; }
 .clean #preview-wrap, .clean .hud-buttons, .clean #hint { display: none !important; }
