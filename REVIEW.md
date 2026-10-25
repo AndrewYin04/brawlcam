@@ -439,3 +439,15 @@ Make the drills **prompt-by-prompt** instead of reps on a beat:
   - make the button large, and add a toast after saving: "Saved to your Downloads folder: throwhands-research-….webm and .jsonl"
   - for long sessions, also offer saving every 2 minutes while recording, so a crash loses at most 2 minutes
   - in drill mode, save automatically when the script finishes
+
+### 3:08 AM: the user's second research session (files saved), and two findings
+Session `ee6f97a0…` (Tiger `research_frames`; the user also has the local `.webm` and `.jsonl`), 157.5 s. Planner analysis of the JSONL:
+1. **The pose rate on the user's laptop is 6.9 fps** (1,085 frames over 157.5 s; the earlier session was about 8.4 fps). The game assumes 20 or more. **High priority:**
+   - find whether the GPU delegate is actually in use on the user's laptop Chrome (the preview showed a "GPU" label), and whether the worker, the new hero renderer and bloom, or the research recorder (MediaRecorder at 1.5 Mbps) is starving the pose loop
+   - measure pose fps with research mode on and off, `?classic` on and off, and bloom on and off
+   - the target is 20+ fps on a laptop. If the renderer is the cause, add an automatic quality step-down (no bloom or outlines, a lower pixel ratio) whenever the pose rate drops below 15 fps.
+2. **Bug A data:**
+   - forward/back input within 0.6 s of a detected strike: 20 of 551 frames nonzero (9 backward); the gate mostly works
+   - **at least 0.6 s from any strike: 254 of 534 frames nonzero, 128 backward, minimum -1.00**
+   - 142 strikes in 157 s, about one every 1.1 s, so these frames are the wind-ups and recoveries between punches
+   - the planner is confirming with the user that they stood in place the whole time. If so, the drift comes from the between-strike motion (wind-up and recoil), not the strike frames, and the gate needs to cover strike onset and recovery, or the distance cue needs to ignore torso twist, as in the 2:50 AM ideas. Use this session as the repro.
