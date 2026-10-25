@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { Arena } from './arena';
 import { FighterAvatar } from './avatar';
 import { HeroFighter, HERO_MODELS } from './hero';
+import { apothem } from './stage';
 
 /** New Smash-style heroes by default; the original VRM renderer stays behind ?classic (and capsules behind ?lowgfx). */
 export const USE_HEROES = typeof location !== 'undefined' && !new URLSearchParams(location.search).has('classic') && !FighterAvatar.lowGfx;
@@ -163,7 +164,7 @@ export class MatchView {
           } else if (e.kind === 'uppercut') {
             if (!USE_HEROES) this.vfx.pillar(s.pos, col);
             else this.vfx.speedLines();
-            this.vfx.groundRing(s.pos, col, 2);
+            this.vfx.groundRing(s.pos, col, 1.2);
             this.showBanner('SUPER UPPERCUT!', 1200, true);
             this.slowmoUntil = this.time + 1.2;
           } else {
@@ -200,6 +201,12 @@ export class MatchView {
           if (this.opts.localIds.includes(e.id)) this.hint(e.reason === 'meter' ? 'Fill your SUPER meter first: land hits!' : 'Super on cooldown');
           break;
         case 'ko': {
+          // The KO lands with the punch: wait for a pending contact on this fighter.
+          const pend = this.pendingHits.find((p) => (p.e as any).target === e.target && p.e.type === 'hit');
+          if (pend && !(e as any).__delayed) {
+            this.pendingHits.push({ at: pend.at + 0.001, e: { ...e, __delayed: true } as SimEvent });
+            break;
+          }
           const tgt = this.slots.get(e.target);
           if (tgt && USE_HEROES && e.ringout) {
             this.vfx.koStreak(tgt.pos.clone(), tgt.snap.color);
@@ -208,8 +215,8 @@ export class MatchView {
             this.fallTarget = e.target;
           }
           if (tgt) {
-            this.vfx.burst(tgt.pos.clone().setY(1.2), tgt.snap.color, 60, 8, 0.08);
-            this.vfx.groundRing(tgt.pos, 0xffc53d, 3);
+            this.vfx.burst(tgt.pos.clone().setY(1.2), tgt.snap.color, 16, 4, 0.05);
+            this.vfx.groundRing(tgt.pos, 0xffc53d, 1.6);
           }
           if (this.snap && this.snap.f.length > 2) {
             this.addKoFeed(e.attacker != null ? `${this.name(e.attacker)} ${verb(e.kind, e.ringout)} ${this.name(e.target)}` : `${this.name(e.target)} was knocked out`);
@@ -318,7 +325,7 @@ export class MatchView {
             slot.avatar.attack(f.atk.k, f.atk.h, `${f.atk.k}${f.atk.h}${(s.t - f.atk.age).toFixed(2)}`, null);
           }
           const fa = f as any;
-          slot.avatar.update(animDt, this.time, { shield: 0, meterFull: f.meter >= 100, airborne: f.y, alive: !!f.alive, blocking: !!f.b, guard: fa.gd ?? 100, dizzy: (fa.dz ?? 0) > 0, ironWall: (fa.iw ?? 0) > 0 });
+          slot.avatar.update(animDt, this.time, { shield: 0, meterFull: f.meter >= 100, airborne: f.y, alive: !!f.alive || awaitingHit, blocking: !!f.b, guard: fa.gd ?? 100, dizzy: (fa.dz ?? 0) > 0, ironWall: (fa.iw ?? 0) > 0 });
         } else {
           slot.avatar.setJoints(joints);
           slot.avatar.update(animDt, this.time, { shield: f.iw, meterFull: f.meter >= 100, airborne: f.y, alive: !!f.alive || s.f.length <= 2 });
@@ -370,8 +377,8 @@ export class MatchView {
         // Brawl: centered on you, widened just enough for the fighters near you.
         let near = 0;
         for (const o of others) if (o.snap.alive) near = Math.max(near, Math.min(5, o.pos.distanceTo(me.pos)));
-        const d = (portrait ? 4.2 : 2.8) + near * 0.45;
-        pos = me.pos.clone().addScaledVector(back, d).setY((portrait ? 2.8 : 1.9) + near * 0.25);
+        const d = (portrait ? 3.6 : 2.4) + near * 0.35;
+        pos = me.pos.clone().addScaledVector(back, d).addScaledVector(new THREE.Vector3(back.z, 0, -back.x), -0.9).setY((portrait ? 2.6 : 2.0) + near * 0.2);
         look = me.pos.clone().addScaledVector(back, -1.6).setY(0.7);
       } else {
         pos = me.pos.clone().addScaledVector(back, portrait ? 7 : 5).setY(portrait ? 6 : 4.2);
@@ -385,7 +392,8 @@ export class MatchView {
         // Closer over-the-shoulder framing: both fighters fill most of the frame height.
         // Higher and further to the side than before so the chibi heroes' big heads never hide the opponent.
         // Over the right shoulder of a 1.8 m fighter: you on the left third, the opponent clear in the middle.
-        pos = me.pos.clone().addScaledVector(fwd, portrait ? -3.4 : -2.6).addScaledVector(right, portrait ? 0.95 : 1.4).setY(portrait ? 2.1 : 1.85);
+        // About 35 degrees off the shoulder line, so the gap between the fighters (and the fist landing) is visible.
+        pos = me.pos.clone().addScaledVector(fwd, portrait ? -3.2 : -2.3).addScaledVector(right, portrait ? 1.2 : 1.65).setY(portrait ? 2.1 : 1.9);
         look = (opp ? opp.pos.clone().lerp(me.pos, 0.1) : me.pos.clone().addScaledVector(fwd, 1.4)).setY(1.2);
       } else {
         pos = me.pos.clone().addScaledVector(fwd, portrait ? -3.6 : -2.7).addScaledVector(right, portrait ? 0.7 : 1.05).setY(portrait ? 2.3 : 2.0);
@@ -402,6 +410,23 @@ export class MatchView {
     if (this.time < this.fallCamUntil && this.fallTarget != null) {
       const ft = this.slots.get(this.fallTarget);
       if (ft) look = look.clone().lerp(ft.avatar.root.getWorldPosition(new THREE.Vector3()).setY(ft.snap.y ?? 0), 0.6);
+    }
+    // Keep the camera inside the octagon cage (never behind a post, pad or the chain-link).
+    if (USE_HEROES && this.arena.stage) {
+      const A = apothem(this.arena.stage.radius) - 0.3;
+      for (let k = 0; k < 8; k++) {
+        const ang = ((k + 0.5) / 8) * Math.PI * 2 + Math.PI / 8;
+        const over = pos.x * Math.cos(ang) + pos.z * Math.sin(ang) - A;
+        if (over > 0) {
+          pos.x -= Math.cos(ang) * over;
+          pos.z -= Math.sin(ang) * over;
+        }
+      }
+      // Pushed in close to your back by the fence: rise and look down over the shoulder instead.
+      if (me) {
+        const d = Math.hypot(pos.x - me.pos.x, pos.z - me.pos.z);
+        if (d < 1.9) pos.y += (1.9 - d) * 0.9;
+      }
     }
     this.arena.setCamera(pos, look, dt);
     void s;

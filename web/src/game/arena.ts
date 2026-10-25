@@ -35,7 +35,7 @@ export class Arena {
         // Bloom on emissive glows (gloves, edge, effects); high threshold keeps the scene itself crisp.
         this.composer = new EffectComposer(this.renderer);
         this.composer.addPass(new RenderPass(this.scene, this.camera));
-        this.composer.addPass(new UnrealBloomPass(new THREE.Vector2(512, 512), 0.45, 0.35, 0.96));
+        this.composer.addPass(new UnrealBloomPass(new THREE.Vector2(512, 512), 0.3, 0.35, 0.96));
         this.composer.addPass(new OutputPass());
       }
     } else this.build();

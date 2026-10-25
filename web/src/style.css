@@ -120,7 +120,7 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 #kofeed { position: absolute; right: 12px; top: 90px; display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
 #kofeed div { background: rgba(0, 0, 0, 0.6); border-left: 3px solid var(--p1); padding: 4px 10px; font-size: 13px; border-radius: 4px; animation: slidein 0.25s; }
 @keyframes slidein { from { transform: translateX(40px); opacity: 0; } }
-#brawl-board { position: absolute; left: 12px; top: 12px; background: rgba(0, 0, 0, 0.55); border-radius: 10px; padding: 8px 12px; font-size: 13px; min-width: 170px; }
+#brawl-board { position: absolute; left: 12px; top: 112px; background: rgba(0, 0, 0, 0.55); border-radius: 10px; padding: 8px 12px; font-size: 13px; min-width: 170px; }
 #brawl-board .r { display: flex; gap: 8px; align-items: center; }
 #brawl-board .r .n { flex: 1; }
 #brawl-board .me { color: var(--gold); font-weight: 700; }
@@ -198,7 +198,7 @@ body.heroes #banner { top: 12%; font-size: clamp(30px, 7vw, 76px); }
 .tut-live { grid-area: c; position: relative; border-radius: 50%; border: 2px dashed var(--line); aspect-ratio: 1; max-width: 110px; justify-self: center; width: 100%; }
 .tut-dot { position: absolute; left: 50%; top: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%; background: #ff3d6e; box-shadow: 0 0 12px #ff3d6e; transition: transform 0.08s; }
 /* In-match movement indicator */
-#move-ind { position: absolute; left: 50%; bottom: 52px; transform: translateX(-50%); display: grid; grid-template-columns: repeat(3, 22px); grid-template-rows: repeat(3, 22px); grid-template-areas: '. f .' 'l . r' '. b .'; pointer-events: none; opacity: 0.85; }
+#move-ind { position: absolute; right: 14px; bottom: 64px; display: grid; grid-template-columns: repeat(3, 22px); grid-template-rows: repeat(3, 22px); grid-template-areas: '. f .' 'l . r' '. b .'; pointer-events: none; opacity: 0.85; }
 #move-ind i { font-style: normal; font-size: 16px; display: flex; align-items: center; justify-content: center; color: rgba(255, 255, 255, 0.28); text-shadow: 0 1px 2px #000; transition: color 0.08s, transform 0.08s; }
 #move-ind i[data-d='fwd'] { grid-area: f; } #move-ind i[data-d='left'] { grid-area: l; } #move-ind i[data-d='right'] { grid-area: r; } #move-ind i[data-d='back'] { grid-area: b; }
 #move-ind i.on { color: #33b5ff; transform: scale(1.3); }

@@ -15,6 +15,18 @@ import type { FighterStyle } from './avatar';
 export const HERO_MODELS = ['male_light', 'female_dark', 'male_dark:heavy', 'female_light', 'male_light:heavy', 'female_dark:lean', 'male_dark', 'female_light:lean'] as const;
 export type HeroModel = (typeof HERO_MODELS)[number];
 const BODIES = ['male_light', 'male_dark', 'female_light', 'female_dark'];
+/** Per-slot look so every fighter reads differently even at Brawl scale: top, leg wear, hair or headgear. */
+type Look = { top: 0 | 1 | 2; pants: boolean; head: 'short' | 'bun' | 'headgear' | 'mohawk' | 'long' | 'none'; hair: number };
+const LOOKS: Look[] = [
+  { top: 0, pants: false, head: 'short', hair: 0x1b120c },
+  { top: 1, pants: false, head: 'bun', hair: 0x120c08 },
+  { top: 0, pants: true, head: 'headgear', hair: 0 },
+  { top: 2, pants: false, head: 'long', hair: 0xd8b25a },
+  { top: 1, pants: false, head: 'mohawk', hair: 0xd83a2a },
+  { top: 2, pants: true, head: 'headgear', hair: 0 },
+  { top: 2, pants: false, head: 'short', hair: 0x2a1a10 },
+  { top: 1, pants: true, head: 'long', hair: 0x8a2a1a },
+];
 const BUILD: Record<string, [number, number]> = { '': [1, 1], heavy: [1.03, 1.12], lean: [0.98, 0.94] }; // [height, width]
 
 const loader = new GLTFLoader();
@@ -95,7 +107,7 @@ function buildClips(): Promise<Map<string, THREE.AnimationClip>> {
     m.set('land', get('Jump_Land'));
     m.set('cheer', get('Dance_Loop'));
     m.set('cast', get('Spell_Simple_Shoot'));
-    m.set('dizzy', get('Zombie_Idle_Loop'));
+    m.set('dizzy', get('Idle_No_Loop')); // upright, head shaking; a sway is layered on top
     m.set('blockHit', get('Hit_Chest'));
     return m;
   });
@@ -129,18 +141,31 @@ function outlineMaterial(color = 0x05060c, width = 0.012) {
   return m;
 }
 
-/** Toon skin material; grey/white cloth in the texture (shorts, sports top) takes the fighter's color. */
-function bodyMaterial(map: THREE.Texture | null, tint: THREE.Color) {
+/** Toon skin material; grey/white cloth in the texture (shorts, sports top) takes the fighter's color. A tank top or
+ *  rash guard and fight pants are painted by bind-pose position (metres: y up, arms along x in the T-pose). */
+function bodyMaterial(map: THREE.Texture | null, tint: THREE.Color, look: Look) {
   const m = new THREE.MeshToonMaterial({ map, gradientMap: ramp(), color: 0xffffff });
   m.userData.tint = { value: tint.clone() };
+  const dark = { value: tint.clone().multiplyScalar(0.35) };
+  m.userData.dark = dark;
   m.onBeforeCompile = (sh) => {
     sh.uniforms.uTint = m.userData.tint;
-    sh.fragmentShader = sh.fragmentShader.replace('void main() {', 'uniform vec3 uTint;\nvoid main() {').replace(
+    sh.uniforms.uDark = dark;
+    sh.uniforms.uTop = { value: look.top };
+    sh.uniforms.uPants = { value: look.pants ? 1 : 0 };
+    sh.vertexShader = sh.vertexShader.replace('void main() {', 'varying vec3 vObj;\nvoid main() {').replace('#include <begin_vertex>', '#include <begin_vertex>\nvObj = position;');
+    sh.fragmentShader = sh.fragmentShader.replace('void main() {', 'uniform vec3 uTint; uniform vec3 uDark; uniform float uTop; uniform float uPants; varying vec3 vObj;\nvoid main() {').replace(
       '#include <map_fragment>',
       `#include <map_fragment>
         { vec3 c = diffuseColor.rgb; float mx = max(c.r, max(c.g, c.b)); float mn = min(c.r, min(c.g, c.b));
           float sat = mx > 0.001 ? (mx - mn) / mx : 0.; float cloth = 1. - smoothstep(0.10, 0.2, sat);
-          diffuseColor.rgb = mix(c, uTint * (0.45 + 0.75 * mx), cloth); }`,
+          c = mix(c, uTint * (0.45 + 0.75 * mx), cloth);
+          float top = 0.;
+          if (uTop > 0.5) { float xw = uTop > 1.5 ? 0.66 : 0.19; top = (1. - step(xw, abs(vObj.x))) * step(0.97, vObj.y) * (1. - step(1.47, vObj.y)); }
+          float pants = uPants > 0.5 ? (1. - step(0.97, vObj.y)) * step(0.1, vObj.y) : 0.;
+          c = mix(c, uTint * 0.95, top);
+          c = mix(c, uDark, pants * (1. - cloth));
+          diffuseColor.rgb = c; }`,
     );
   };
   return m;
@@ -202,10 +227,13 @@ export class HeroFighter {
   livePose = false;
   edgeDist = 99;
   modelName: HeroModel;
+  private look: Look;
+  private hairGroup: THREE.Object3D | null = null;
 
   constructor(style: FighterStyle, modelName: HeroModel) {
     this.style = style;
     this.modelName = modelName;
+    this.look = LOOKS[Math.max(0, HERO_MODELS.indexOf(modelName)) % LOOKS.length];
     this.root.add(this.body);
     this.ready = this.load();
   }
@@ -226,7 +254,7 @@ export class HeroFighter {
       mesh.frustumCulled = false;
       const src = mesh.material as THREE.MeshStandardMaterial;
       const isBody = /Superhero/.test(src.name ?? '');
-      const toon = isBody ? bodyMaterial(src.map ?? null, tint) : new THREE.MeshToonMaterial({ map: src.map ?? null, gradientMap: ramp(), color: 0xffffff });
+      const toon = isBody ? bodyMaterial(src.map ?? null, tint, this.look) : new THREE.MeshToonMaterial({ map: src.map ?? null, gradientMap: ramp(), color: 0xffffff });
       toon.userData.isBody = isBody;
       this.materials.push(toon);
       mesh.material = toon;
@@ -303,17 +331,19 @@ export class HeroFighter {
       if (s === 'l') this.gloveL = g;
       else this.gloveR = g;
     }
+    this.addHead(glow);
     // Guard bubble: fresnel rim, visible only while guarding or during Iron Wall
     this.shieldMat = new THREE.ShaderMaterial({
       uniforms: { color: { value: new THREE.Color(0x66ccff) }, time: { value: 0 }, strength: { value: 1 } },
       vertexShader: `varying vec3 vN; varying vec3 vV; void main(){ vec4 wp = modelMatrix*vec4(position,1.); vN = normalize(mat3(modelMatrix)*normal); vV = normalize(cameraPosition-wp.xyz); gl_Position = projectionMatrix*viewMatrix*wp; }`,
-      fragmentShader: `uniform vec3 color; uniform float time; uniform float strength; varying vec3 vN; varying vec3 vV; void main(){ float f = pow(1.-abs(dot(vN,vV)),2.5); float hex = 0.8+0.2*sin(time*6.); gl_FragColor = vec4(color*(f*1.3+0.1)*hex*strength, (f*0.75+0.08)*strength); }`,
+      fragmentShader: `uniform vec3 color; uniform float time; uniform float strength; varying vec3 vN; varying vec3 vV; void main(){ float f = pow(1.-abs(dot(vN,vV)),2.2); float hex = 0.85+0.15*sin(time*6.); gl_FragColor = vec4(color*(0.75+f*0.6)*hex, clamp((f*0.85+0.07)*strength, 0., 1.)); }`,
       transparent: true,
-      blending: THREE.AdditiveBlending,
       depthWrite: false,
     });
-    this.shield = new THREE.Mesh(new THREE.SphereGeometry(0.95, 32, 20), this.shieldMat);
-    this.shield.position.y = 1.0;
+    // Tight around the defender only (not a big sphere around both fighters).
+    this.shield = new THREE.Mesh(new THREE.SphereGeometry(0.62, 32, 20), this.shieldMat);
+    this.shield.scale.set(1, 1.35, 1);
+    this.shield.position.y = 1.1;
     this.shield.visible = false;
     this.body.add(this.shield);
     // Dizzy stars circling over the head (guard broken)
@@ -331,6 +361,47 @@ export class HeroFighter {
     this.targetRing.position.y = 0.02;
     this.targetRing.visible = false;
     this.root.add(this.targetRing);
+  }
+
+  /** Hair or headgear, attached to the head bone (built in the bind pose, upright in world space). */
+  private addHead(glow: THREE.Color) {
+    const head = this.bones.Head;
+    const L = this.look;
+    if (!head || L.head === 'none') return;
+    const g = new THREE.Group();
+    const hairMat = new THREE.MeshToonMaterial({ color: L.hair, gradientMap: ramp() });
+    const ol = outlineMaterial(0x05060c, 0.008);
+    const add = (geo: THREE.BufferGeometry, mat: THREE.Material, pos: [number, number, number], scale: [number, number, number] = [1, 1, 1]) => {
+      const m = new THREE.Mesh(geo, mat);
+      m.position.set(...pos);
+      m.scale.set(...scale);
+      m.add(new THREE.Mesh(geo, ol));
+      g.add(m);
+    };
+    const cap = new THREE.SphereGeometry(0.108, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.55);
+    if (L.head === 'short') add(cap, hairMat, [0, 0.095, -0.01], [1, 0.95, 1.08]);
+    else if (L.head === 'bun') {
+      add(cap, hairMat, [0, 0.095, -0.01], [1.03, 1, 1.1]);
+      add(new THREE.SphereGeometry(0.055, 12, 10), hairMat, [0, 0.16, -0.1]);
+    } else if (L.head === 'long') {
+      add(cap, hairMat, [0, 0.095, -0.01], [1.06, 1, 1.12]);
+      add(new THREE.CapsuleGeometry(0.06, 0.16, 4, 10), hairMat, [0, 0.0, -0.09], [1.6, 1, 0.8]);
+    } else if (L.head === 'mohawk') add(new THREE.BoxGeometry(0.03, 0.06, 0.2), hairMat, [0, 0.215, -0.01]);
+    else if (L.head === 'headgear') {
+      const gear = new THREE.MeshToonMaterial({ color: glow, gradientMap: ramp() });
+      add(new THREE.SphereGeometry(0.118, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.62), gear, [0, 0.085, -0.01], [1.02, 1, 1.1]);
+      add(new THREE.TorusGeometry(0.1, 0.022, 8, 20, Math.PI * 1.1), gear, [0, 0.07, 0.035]);
+    }
+    // Head bone origin is near the jaw: place relative to it in world space at bind, then parent to the bone.
+    this.root.updateMatrixWorld(true);
+    const hp = head.getWorldPosition(new THREE.Vector3());
+    const ws = head.getWorldScale(new THREE.Vector3());
+    this.body.add(g);
+    g.position.copy(this.body.worldToLocal(hp.clone())); // upright in the fighter's frame, at the head bone
+    g.updateMatrixWorld(true);
+    head.attach(g);
+    void ws;
+    this.hairGroup = g;
   }
 
   applyStyle(style: FighterStyle) {
@@ -355,6 +426,7 @@ export class HeroFighter {
   }
 
   flinchFrom(dirWorld: THREE.Vector3, amount: number) {
+    if (!this.wasAlive) return; // knocked out: the death clip keeps playing
     this.flinch = Math.min(1, this.flinch + amount);
     this.flinchDir.copy(dirWorld).setY(0).normalize();
     if (amount >= 0.6) this.play(amount >= 0.95 ? 'knockback' : Math.random() < 0.5 ? 'hitHead' : 'hitChest', 0.05, this.livePose ? 0.6 : 1);
@@ -411,7 +483,9 @@ export class HeroFighter {
   /** World point the current strike aims at on the target (head for punches, chest for kicks). */
   private aimPoint(s: Strike, out: THREE.Vector3) {
     const t = s.target!;
-    const bone = s.kind === 'kick' ? t.bones.spine_02 : t.bones.Head;
+    // Airborne/tumbling targets: aim at the chest (the head swings far around the body during a tumble).
+    const airborne = t.body.position.y > 0.05 || Math.abs(t.body.rotation.x) > 0.3;
+    const bone = s.kind === 'kick' || airborne ? t.bones.spine_02 : t.bones.Head;
     if (!bone) return null;
     bone.getWorldPosition(out);
     if (s.kind !== 'kick') out.y += 0.04;
@@ -442,7 +516,7 @@ export class HeroFighter {
 
     // ---- KO / get-up ----
     if (!opts.alive && this.wasAlive) {
-      this.play('death', 0.08, 1);
+      this.play('death', 0.05, 1, 1, 1.8); // Death01 staggers for ~1 s before the fall; speed it up
       this.oneShot!.until = Infinity; // stay down (clamped on the last frame) until revived
       this.koTime = time;
     }
@@ -452,6 +526,11 @@ export class HeroFighter {
       this.koTime = -1;
     }
     this.wasAlive = opts.alive;
+    // While knocked out, the death clip (clamped on its last frame) always plays; nothing may replace it.
+    if (!opts.alive && this.oneShot?.name !== 'death') {
+      this.play('death', 0.05, 1, 1, 1.8);
+      this.oneShot!.until = Infinity;
+    }
 
     // ---- airborne: tumble in the air, land, get up ----
     if (airborne && !this.wasAirborne) this.play('airborne', 0.08, 1);
@@ -507,6 +586,14 @@ export class HeroFighter {
     this.body.position.set(0, opts.airborne, this.lungeNow);
     this.root.updateMatrixWorld(true);
 
+    // Dizzy: wobbly sway over the dizzy loop (stars are drawn above the head).
+    if (opts.dizzy && opts.alive) {
+      const fwdW = new THREE.Vector3(0, 0, 1).applyQuaternion(this.root.quaternion);
+      const sideW = new THREE.Vector3(1, 0, 0).applyQuaternion(this.root.quaternion);
+      rotateWorld(this.bones.spine_01, fwdW, Math.sin(time * 3.2) * 0.14);
+      rotateWorld(this.bones.spine_03, sideW, 0.12 + Math.sin(time * 2.1) * 0.06);
+      rotateWorld(this.bones.Head, fwdW, Math.sin(time * 4.3) * 0.2);
+    }
     // Hips toward the travel direction, chest counter-rotated so the fighter keeps facing the opponent.
     if (Math.abs(this.lowerYaw) > 0.01 && !fullBody) {
       rotateWorld(this.bones.pelvis, UP, this.lowerYaw);
@@ -531,8 +618,11 @@ export class HeroFighter {
     const local = this.flinchDir.clone().applyQuaternion(this.root.quaternion.clone().invert());
     this.body.position.x = local.x * this.flinch * 0.12;
     this.body.position.z = this.lungeNow + local.z * this.flinch * 0.12;
-    this.body.position.y = opts.airborne;
-    this.body.rotation.x = airborne ? -Math.min(this.tumble, Math.PI * 1.6) : 0;
+    // Tumble pivots around the hips (1 m up), not the feet.
+    const th = airborne ? Math.min(this.tumble, Math.PI * 1.6) : 0;
+    this.body.rotation.x = -th;
+    this.body.position.y = opts.airborne + 1.0 * (1 - Math.cos(th));
+    this.body.position.z += 1.0 * Math.sin(th);
 
     // ---- gear ----
     this.glowBoost = Math.max(0, this.glowBoost - dt * 3);
@@ -548,11 +638,12 @@ export class HeroFighter {
       this.shield.visible = iron || guarding;
       const g = THREE.MathUtils.clamp((opts.guard ?? 100) / 100, 0, 1);
       const col = this.shieldMat.uniforms.color.value as THREE.Color;
-      if (iron) col.set(0xffc53d);
+      if (iron) col.set(0xffa800);
       else if (g > 0.5) col.copy(BLUE).lerp(YELLOW, (1 - g) * 2);
       else col.copy(YELLOW).lerp(RED, 1 - g * 2);
-      this.shield.scale.setScalar(iron ? 1.05 : 0.6 + 0.4 * g);
-      this.shieldMat.uniforms.strength.value = iron ? 1.2 : 0.9;
+      const sc = iron ? 1.08 : 0.7 + 0.3 * g;
+      this.shield.scale.set(sc, sc * 1.35, sc);
+      this.shieldMat.uniforms.strength.value = iron ? 1.3 : 0.85;
       this.shieldMat.uniforms.time.value = time;
     }
     this.stars.visible = !!opts.dizzy && opts.alive;
@@ -603,7 +694,7 @@ export class HeroFighter {
           if (!s.recorded && t >= s.contactT) {
             s.recorded = true;
             const hit = kick ? this.bones['foot_' + side]!.getWorldPosition(new THREE.Vector3()) : this.glovePos(s.hand);
-            this.contacts.push({ kind: s.kind, d: +hit.distanceTo(goal).toFixed(3), t: +this.time.toFixed(2), lunge: +s.lunge.toFixed(2), gap: +gap.toFixed(2), w: +w.toFixed(2), live: this.livePose } as any);
+            this.contacts.push({ kind: s.kind, d: +hit.distanceTo(goal).toFixed(3), t: +this.time.toFixed(2), lunge: +s.lunge.toFixed(2), gap: +gap.toFixed(2), w: +w.toFixed(2), live: this.livePose, rootDist: +this.root.position.distanceTo(s.target!.root.position).toFixed(2), tgtAlive: s.target!.wasAlive, tgtAir: +s.target!.body.position.y.toFixed(2) } as any);
             if (this.contacts.length > 50) this.contacts.shift();
           }
         }
@@ -686,7 +777,7 @@ export class HeroFighter {
   probe() {
     const w = (o: THREE.Object3D | null | undefined) => (o ? o.getWorldPosition(new THREE.Vector3()).toArray() : null);
     const q = (o: THREE.Object3D | null | undefined) => (o ? o.getWorldQuaternion(new THREE.Quaternion()).toArray() : null);
-    return { root: w(this.root), lFoot: w(this.bones.foot_l), rFoot: w(this.bones.foot_r), chest: q(this.bones.spine_03), head: q(this.bones.Head), contacts: this.contacts.slice(-10) };
+    return { root: w(this.root), lFoot: w(this.bones.foot_l), rFoot: w(this.bones.foot_r), chest: q(this.bones.spine_03), head: q(this.bones.Head), contacts: this.contacts.slice(-10), headPos: w(this.bones.Head), hairPos: w(this.hairGroup), hairScale: this.hairGroup ? this.hairGroup.getWorldScale(new THREE.Vector3()).toArray() : null };
   }
 
   dispose() {

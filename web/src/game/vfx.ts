@@ -54,9 +54,11 @@ export class VFX {
 
   burst(pos: THREE.Vector3, color: THREE.ColorRepresentation, count = 18, speed = 4, size = 0.05) {
     if (SPRITE_SPARKS.on) {
-      for (let i = 0; i < count; i++) {
-        const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: star(), color, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
-        sp.scale.setScalar(size * (3 + Math.random() * 4));
+      // Small, colored, few: sparks must never wash out the fighters (bloom amplifies them).
+      const n = Math.min(count, 16);
+      for (let i = 0; i < n; i++) {
+        const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: star(), color, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false }));
+        sp.scale.setScalar(Math.min(0.16, size * (1.4 + Math.random() * 1.6)));
         sp.position.copy(pos);
         const v = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.2, Math.random() - 0.5).normalize().multiplyScalar(speed * (0.5 + Math.random()));
         this.add(sp as unknown as THREE.Mesh, v, 0.22 + Math.random() * 0.2);
